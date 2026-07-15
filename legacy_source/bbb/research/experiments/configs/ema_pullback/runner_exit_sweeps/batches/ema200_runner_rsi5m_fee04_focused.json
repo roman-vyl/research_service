@@ -1,0 +1,238 @@
+{
+  "experiment_id": "ema200_runner_rsi5m_fee04_focused",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Focused re-run of EMA200 runner RSI5m candidates with fees=0.0004 one-way. Includes initial controls, RSI85/90 controls, and strict/relaxed ADX40/45 -> runner + disable_initial_tp + RSI85/90 variants.",
+  "fee_model": {
+    "fees": 0.0004,
+    "meaning": "0.04% one-way, conservative mixed Bybit maker/taker research mode",
+    "reason": "Less pessimistic than old 0.0006 stress mode, but not as optimistic as 0.0003."
+  },
+  "candidates": [
+    {
+      "candidate_id": "strict_continuation_sl6_tp14_initial_control_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/fee04_focused/ema200_strict_continuation_sl6_tp14_initial_control_fee04.json",
+      "metadata": {
+        "profile": "strict_continuation",
+        "mode": "initial_control",
+        "rsi_timeframe": null,
+        "rsi_period": null,
+        "rsi_threshold": null,
+        "runner_adx": null,
+        "note": "Clean strict EMA200 naked-edge branch: w12/r14/wlb20 + SL6/TP14. Re-run with fees=0.0004 one-way.",
+        "fee_rate": 0.0004,
+        "fee_model": "fee04_conservative_mixed_bybit",
+        "source_candidate_id": "strict_continuation_sl6_tp14_initial_control"
+      }
+    },
+    {
+      "candidate_id": "relaxed_medium_sl4_tp10_initial_control_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/fee04_focused/ema200_relaxed_medium_sl4_tp10_initial_control_fee04.json",
+      "metadata": {
+        "profile": "relaxed_medium",
+        "mode": "initial_control",
+        "rsi_timeframe": null,
+        "rsi_period": null,
+        "rsi_threshold": null,
+        "runner_adx": null,
+        "note": "Relaxed EMA200 medium/bounce branch: w9/r10/wlb20 + SL4/TP10. Re-run with fees=0.0004 one-way.",
+        "fee_rate": 0.0004,
+        "fee_model": "fee04_conservative_mixed_bybit",
+        "source_candidate_id": "relaxed_medium_sl4_tp10_initial_control"
+      }
+    },
+    {
+      "candidate_id": "strict_continuation_sl6_tp14_rsi5m_p14_85_15_control_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/fee04_focused/ema200_strict_continuation_sl6_tp14_rsi5m_p14_85_15_control_fee04.json",
+      "metadata": {
+        "profile": "strict_continuation",
+        "mode": "rsi_signal_exit_control_no_runner",
+        "rsi_timeframe": "base_5m",
+        "rsi_period": 14,
+        "rsi_threshold": "85/15",
+        "runner_adx": null,
+        "note": "RSI signal exit active from entry; control for RSI-before-runner contamination. Re-run with fees=0.0004 one-way.",
+        "fee_rate": 0.0004,
+        "fee_model": "fee04_conservative_mixed_bybit",
+        "source_candidate_id": "strict_continuation_sl6_tp14_rsi5m_p14_85_15_control"
+      }
+    },
+    {
+      "candidate_id": "strict_continuation_sl6_tp14_rsi5m_p14_90_10_control_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/fee04_focused/ema200_strict_continuation_sl6_tp14_rsi5m_p14_90_10_control_fee04.json",
+      "metadata": {
+        "profile": "strict_continuation",
+        "mode": "rsi_signal_exit_control_no_runner",
+        "rsi_timeframe": "base_5m",
+        "rsi_period": 14,
+        "rsi_threshold": "90/10",
+        "runner_adx": null,
+        "note": "RSI signal exit active from entry; control for RSI-before-runner contamination. Re-run with fees=0.0004 one-way.",
+        "fee_rate": 0.0004,
+        "fee_model": "fee04_conservative_mixed_bybit",
+        "source_candidate_id": "strict_continuation_sl6_tp14_rsi5m_p14_90_10_control"
+      }
+    },
+    {
+      "candidate_id": "relaxed_medium_sl4_tp10_rsi5m_p14_85_15_control_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/fee04_focused/ema200_relaxed_medium_sl4_tp10_rsi5m_p14_85_15_control_fee04.json",
+      "metadata": {
+        "profile": "relaxed_medium",
+        "mode": "rsi_signal_exit_control_no_runner",
+        "rsi_timeframe": "base_5m",
+        "rsi_period": 14,
+        "rsi_threshold": "85/15",
+        "runner_adx": null,
+        "note": "RSI signal exit active from entry; control for RSI-before-runner contamination. Re-run with fees=0.0004 one-way.",
+        "fee_rate": 0.0004,
+        "fee_model": "fee04_conservative_mixed_bybit",
+        "source_candidate_id": "relaxed_medium_sl4_tp10_rsi5m_p14_85_15_control"
+      }
+    },
+    {
+      "candidate_id": "relaxed_medium_sl4_tp10_rsi5m_p14_90_10_control_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/fee04_focused/ema200_relaxed_medium_sl4_tp10_rsi5m_p14_90_10_control_fee04.json",
+      "metadata": {
+        "profile": "relaxed_medium",
+        "mode": "rsi_signal_exit_control_no_runner",
+        "rsi_timeframe": "base_5m",
+        "rsi_period": 14,
+        "rsi_threshold": "90/10",
+        "runner_adx": null,
+        "note": "RSI signal exit active from entry; control for RSI-before-runner contamination. Re-run with fees=0.0004 one-way.",
+        "fee_rate": 0.0004,
+        "fee_model": "fee04_conservative_mixed_bybit",
+        "source_candidate_id": "relaxed_medium_sl4_tp10_rsi5m_p14_90_10_control"
+      }
+    },
+    {
+      "candidate_id": "strict_continuation_sl6_tp14_adx40_runner_disable_tp_rsi5m_p14_85_15_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/fee04_focused/ema200_strict_continuation_sl6_tp14_adx40_runner_disable_tp_rsi5m_p14_85_15_fee04.json",
+      "metadata": {
+        "profile": "strict_continuation",
+        "mode": "adx_runner_disable_initial_tp_plus_rsi_signal_exit",
+        "rsi_timeframe": "base_5m",
+        "rsi_period": 14,
+        "rsi_threshold": "85/15",
+        "runner_adx": 40,
+        "note": "ADX/DI base 5m moves trade to runner; take_profile_switch disables initial TP from runner; RSI signal exit remains exit_policy signal exit. Re-run with fees=0.0004 one-way.",
+        "fee_rate": 0.0004,
+        "fee_model": "fee04_conservative_mixed_bybit",
+        "source_candidate_id": "strict_continuation_sl6_tp14_adx40_runner_disable_tp_rsi5m_p14_85_15"
+      }
+    },
+    {
+      "candidate_id": "strict_continuation_sl6_tp14_adx40_runner_disable_tp_rsi5m_p14_90_10_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/fee04_focused/ema200_strict_continuation_sl6_tp14_adx40_runner_disable_tp_rsi5m_p14_90_10_fee04.json",
+      "metadata": {
+        "profile": "strict_continuation",
+        "mode": "adx_runner_disable_initial_tp_plus_rsi_signal_exit",
+        "rsi_timeframe": "base_5m",
+        "rsi_period": 14,
+        "rsi_threshold": "90/10",
+        "runner_adx": 40,
+        "note": "ADX/DI base 5m moves trade to runner; take_profile_switch disables initial TP from runner; RSI signal exit remains exit_policy signal exit. Re-run with fees=0.0004 one-way.",
+        "fee_rate": 0.0004,
+        "fee_model": "fee04_conservative_mixed_bybit",
+        "source_candidate_id": "strict_continuation_sl6_tp14_adx40_runner_disable_tp_rsi5m_p14_90_10"
+      }
+    },
+    {
+      "candidate_id": "strict_continuation_sl6_tp14_adx45_runner_disable_tp_rsi5m_p14_85_15_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/fee04_focused/ema200_strict_continuation_sl6_tp14_adx45_runner_disable_tp_rsi5m_p14_85_15_fee04.json",
+      "metadata": {
+        "profile": "strict_continuation",
+        "mode": "adx_runner_disable_initial_tp_plus_rsi_signal_exit",
+        "rsi_timeframe": "base_5m",
+        "rsi_period": 14,
+        "rsi_threshold": "85/15",
+        "runner_adx": 45,
+        "note": "ADX/DI base 5m moves trade to runner; take_profile_switch disables initial TP from runner; RSI signal exit remains exit_policy signal exit. Re-run with fees=0.0004 one-way.",
+        "fee_rate": 0.0004,
+        "fee_model": "fee04_conservative_mixed_bybit",
+        "source_candidate_id": "strict_continuation_sl6_tp14_adx45_runner_disable_tp_rsi5m_p14_85_15"
+      }
+    },
+    {
+      "candidate_id": "strict_continuation_sl6_tp14_adx45_runner_disable_tp_rsi5m_p14_90_10_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/fee04_focused/ema200_strict_continuation_sl6_tp14_adx45_runner_disable_tp_rsi5m_p14_90_10_fee04.json",
+      "metadata": {
+        "profile": "strict_continuation",
+        "mode": "adx_runner_disable_initial_tp_plus_rsi_signal_exit",
+        "rsi_timeframe": "base_5m",
+        "rsi_period": 14,
+        "rsi_threshold": "90/10",
+        "runner_adx": 45,
+        "note": "ADX/DI base 5m moves trade to runner; take_profile_switch disables initial TP from runner; RSI signal exit remains exit_policy signal exit. Re-run with fees=0.0004 one-way.",
+        "fee_rate": 0.0004,
+        "fee_model": "fee04_conservative_mixed_bybit",
+        "source_candidate_id": "strict_continuation_sl6_tp14_adx45_runner_disable_tp_rsi5m_p14_90_10"
+      }
+    },
+    {
+      "candidate_id": "relaxed_medium_sl4_tp10_adx40_runner_disable_tp_rsi5m_p14_85_15_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/fee04_focused/ema200_relaxed_medium_sl4_tp10_adx40_runner_disable_tp_rsi5m_p14_85_15_fee04.json",
+      "metadata": {
+        "profile": "relaxed_medium",
+        "mode": "adx_runner_disable_initial_tp_plus_rsi_signal_exit",
+        "rsi_timeframe": "base_5m",
+        "rsi_period": 14,
+        "rsi_threshold": "85/15",
+        "runner_adx": 40,
+        "note": "ADX/DI base 5m moves trade to runner; take_profile_switch disables initial TP from runner; RSI signal exit remains exit_policy signal exit. Re-run with fees=0.0004 one-way.",
+        "fee_rate": 0.0004,
+        "fee_model": "fee04_conservative_mixed_bybit",
+        "source_candidate_id": "relaxed_medium_sl4_tp10_adx40_runner_disable_tp_rsi5m_p14_85_15"
+      }
+    },
+    {
+      "candidate_id": "relaxed_medium_sl4_tp10_adx40_runner_disable_tp_rsi5m_p14_90_10_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/fee04_focused/ema200_relaxed_medium_sl4_tp10_adx40_runner_disable_tp_rsi5m_p14_90_10_fee04.json",
+      "metadata": {
+        "profile": "relaxed_medium",
+        "mode": "adx_runner_disable_initial_tp_plus_rsi_signal_exit",
+        "rsi_timeframe": "base_5m",
+        "rsi_period": 14,
+        "rsi_threshold": "90/10",
+        "runner_adx": 40,
+        "note": "ADX/DI base 5m moves trade to runner; take_profile_switch disables initial TP from runner; RSI signal exit remains exit_policy signal exit. Re-run with fees=0.0004 one-way.",
+        "fee_rate": 0.0004,
+        "fee_model": "fee04_conservative_mixed_bybit",
+        "source_candidate_id": "relaxed_medium_sl4_tp10_adx40_runner_disable_tp_rsi5m_p14_90_10"
+      }
+    },
+    {
+      "candidate_id": "relaxed_medium_sl4_tp10_adx45_runner_disable_tp_rsi5m_p14_85_15_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/fee04_focused/ema200_relaxed_medium_sl4_tp10_adx45_runner_disable_tp_rsi5m_p14_85_15_fee04.json",
+      "metadata": {
+        "profile": "relaxed_medium",
+        "mode": "adx_runner_disable_initial_tp_plus_rsi_signal_exit",
+        "rsi_timeframe": "base_5m",
+        "rsi_period": 14,
+        "rsi_threshold": "85/15",
+        "runner_adx": 45,
+        "note": "ADX/DI base 5m moves trade to runner; take_profile_switch disables initial TP from runner; RSI signal exit remains exit_policy signal exit. Re-run with fees=0.0004 one-way.",
+        "fee_rate": 0.0004,
+        "fee_model": "fee04_conservative_mixed_bybit",
+        "source_candidate_id": "relaxed_medium_sl4_tp10_adx45_runner_disable_tp_rsi5m_p14_85_15"
+      }
+    },
+    {
+      "candidate_id": "relaxed_medium_sl4_tp10_adx45_runner_disable_tp_rsi5m_p14_90_10_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/fee04_focused/ema200_relaxed_medium_sl4_tp10_adx45_runner_disable_tp_rsi5m_p14_90_10_fee04.json",
+      "metadata": {
+        "profile": "relaxed_medium",
+        "mode": "adx_runner_disable_initial_tp_plus_rsi_signal_exit",
+        "rsi_timeframe": "base_5m",
+        "rsi_period": 14,
+        "rsi_threshold": "90/10",
+        "runner_adx": 45,
+        "note": "ADX/DI base 5m moves trade to runner; take_profile_switch disables initial TP from runner; RSI signal exit remains exit_policy signal exit. Re-run with fees=0.0004 one-way.",
+        "fee_rate": 0.0004,
+        "fee_model": "fee04_conservative_mixed_bybit",
+        "source_candidate_id": "relaxed_medium_sl4_tp10_adx45_runner_disable_tp_rsi5m_p14_90_10"
+      }
+    }
+  ]
+}

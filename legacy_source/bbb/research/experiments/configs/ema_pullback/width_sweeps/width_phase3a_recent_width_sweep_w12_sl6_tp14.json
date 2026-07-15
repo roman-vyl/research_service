@@ -1,0 +1,49 @@
+{
+  "experiment_id": "width_phase3a_recent_width_sweep_w12_sl6_tp14",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Phase 3A: enable recent-width requirement on top of current width w12. Exit policy fixed to the Phase 2 quality baseline SL6/TP14. Lookback fixed at 35 bars.",
+  "candidates": [
+    {
+      "candidate_id": "p3a_w12_r1_lb35_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3a_w12_r1_lb35_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3a_w12_r8_lb35_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3a_w12_r8_lb35_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3a_w12_r10_lb35_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3a_w12_r10_lb35_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3a_w12_r12_lb35_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3a_w12_r12_lb35_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3a_w12_r14_lb35_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3a_w12_r14_lb35_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3a_w12_r16_lb35_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3a_w12_r16_lb35_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3a_w12_r18_lb35_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3a_w12_r18_lb35_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3a_w12_r20_lb35_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3a_w12_r20_lb35_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3a_w12_r24_lb35_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3a_w12_r24_lb35_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3a_w12_r28_lb35_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3a_w12_r28_lb35_sl6_tp14.json"
+    }
+  ]
+}

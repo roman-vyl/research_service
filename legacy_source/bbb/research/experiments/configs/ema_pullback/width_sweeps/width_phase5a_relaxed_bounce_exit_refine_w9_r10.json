@@ -1,0 +1,81 @@
+{
+  "experiment_id": "width_phase5a_relaxed_bounce_exit_refine_w9_r10",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Phase 5A: targeted SL/TP refine around the first viable relaxed/bounce candidate w9/r10/wlb20. Keeps untouched75/active8.",
+  "candidates": [
+    {
+      "candidate_id": "p5a_w9_r10_wlb20_ulb75_ab8_sl3p5_tp8_both",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p5a_w9_r10_wlb20_ulb75_ab8_sl3p5_tp8_both.json"
+    },
+    {
+      "candidate_id": "p5a_w9_r10_wlb20_ulb75_ab8_sl3p5_tp9_both",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p5a_w9_r10_wlb20_ulb75_ab8_sl3p5_tp9_both.json"
+    },
+    {
+      "candidate_id": "p5a_w9_r10_wlb20_ulb75_ab8_sl3p5_tp10_both",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p5a_w9_r10_wlb20_ulb75_ab8_sl3p5_tp10_both.json"
+    },
+    {
+      "candidate_id": "p5a_w9_r10_wlb20_ulb75_ab8_sl3p5_tp11_both",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p5a_w9_r10_wlb20_ulb75_ab8_sl3p5_tp11_both.json"
+    },
+    {
+      "candidate_id": "p5a_w9_r10_wlb20_ulb75_ab8_sl4_tp8_both",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p5a_w9_r10_wlb20_ulb75_ab8_sl4_tp8_both.json"
+    },
+    {
+      "candidate_id": "p5a_w9_r10_wlb20_ulb75_ab8_sl4_tp9_both",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p5a_w9_r10_wlb20_ulb75_ab8_sl4_tp9_both.json"
+    },
+    {
+      "candidate_id": "p5a_w9_r10_wlb20_ulb75_ab8_sl4_tp10_both",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p5a_w9_r10_wlb20_ulb75_ab8_sl4_tp10_both.json"
+    },
+    {
+      "candidate_id": "p5a_w9_r10_wlb20_ulb75_ab8_sl4_tp11_both",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p5a_w9_r10_wlb20_ulb75_ab8_sl4_tp11_both.json"
+    },
+    {
+      "candidate_id": "p5a_w9_r10_wlb20_ulb75_ab8_sl4_tp12_both",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p5a_w9_r10_wlb20_ulb75_ab8_sl4_tp12_both.json"
+    },
+    {
+      "candidate_id": "p5a_w9_r10_wlb20_ulb75_ab8_sl4p5_tp9_both",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p5a_w9_r10_wlb20_ulb75_ab8_sl4p5_tp9_both.json"
+    },
+    {
+      "candidate_id": "p5a_w9_r10_wlb20_ulb75_ab8_sl4p5_tp10_both",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p5a_w9_r10_wlb20_ulb75_ab8_sl4p5_tp10_both.json"
+    },
+    {
+      "candidate_id": "p5a_w9_r10_wlb20_ulb75_ab8_sl4p5_tp11_both",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p5a_w9_r10_wlb20_ulb75_ab8_sl4p5_tp11_both.json"
+    },
+    {
+      "candidate_id": "p5a_w9_r10_wlb20_ulb75_ab8_sl4p5_tp12_both",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p5a_w9_r10_wlb20_ulb75_ab8_sl4p5_tp12_both.json"
+    },
+    {
+      "candidate_id": "p5a_w9_r10_wlb20_ulb75_ab8_sl5_tp10_both",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p5a_w9_r10_wlb20_ulb75_ab8_sl5_tp10_both.json"
+    },
+    {
+      "candidate_id": "p5a_w9_r10_wlb20_ulb75_ab8_sl5_tp11_both",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p5a_w9_r10_wlb20_ulb75_ab8_sl5_tp11_both.json"
+    },
+    {
+      "candidate_id": "p5a_w9_r10_wlb20_ulb75_ab8_sl5_tp12_both",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p5a_w9_r10_wlb20_ulb75_ab8_sl5_tp12_both.json"
+    },
+    {
+      "candidate_id": "p5a_w9_r10_wlb20_ulb75_ab8_sl5_tp14_both",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p5a_w9_r10_wlb20_ulb75_ab8_sl5_tp14_both.json"
+    },
+    {
+      "candidate_id": "p5a_w9_r10_wlb20_ulb75_ab8_sl6_tp14_both",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p5a_w9_r10_wlb20_ulb75_ab8_sl6_tp14_both.json"
+    }
+  ]
+}

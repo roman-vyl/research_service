@@ -1,0 +1,65 @@
+{
+  "experiment_id": "ema200_phase_gated_runner_exit_v1_fee04_continuation_safe",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Safe continuation after first 6 reports. Excludes EMA50/200 probe because EMA50 is not in anchor stack and may require feature-planner fix.",
+  "candidates": [
+    {
+      "candidate_id": "strict_adx40_runner_rsi90_plus_ema100_200_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04_continuation/strict_adx40_runner_rsi90_plus_ema100_200_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "scope": "phase-gated runtime exits, safe EMA100/200 only"
+      }
+    },
+    {
+      "candidate_id": "strict_adx40_runner_rsi85_plus_ema100_200_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04_continuation/strict_adx40_runner_rsi85_plus_ema100_200_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "scope": "phase-gated runtime exits, safe EMA100/200 only"
+      }
+    },
+    {
+      "candidate_id": "strict_adx45_runner_only_rsi90_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04_continuation/strict_adx45_runner_only_rsi90_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "scope": "phase-gated runtime exits, safe EMA100/200 only"
+      }
+    },
+    {
+      "candidate_id": "strict_adx45_runner_only_rsi85_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04_continuation/strict_adx45_runner_only_rsi85_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "scope": "phase-gated runtime exits, safe EMA100/200 only"
+      }
+    },
+    {
+      "candidate_id": "strict_adx45_runner_only_ema100_200_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04_continuation/strict_adx45_runner_only_ema100_200_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "scope": "phase-gated runtime exits, safe EMA100/200 only"
+      }
+    },
+    {
+      "candidate_id": "strict_adx45_runner_rsi90_plus_ema100_200_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04_continuation/strict_adx45_runner_rsi90_plus_ema100_200_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "scope": "phase-gated runtime exits, safe EMA100/200 only"
+      }
+    },
+    {
+      "candidate_id": "strict_adx45_runner_rsi85_plus_ema100_200_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04_continuation/strict_adx45_runner_rsi85_plus_ema100_200_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "scope": "phase-gated runtime exits, safe EMA100/200 only"
+      }
+    }
+  ]
+}

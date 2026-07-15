@@ -1,0 +1,174 @@
+{
+  "experiment_id": "ema200_step0_setup_universe_runner_exit_fee04",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Step 0 setup universe comparison: strict vs relaxed vs loose_probe using same ADX40 phase-gated runner exits.",
+  "candidates": [
+    {
+      "candidate_id": "strict_initial_control_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/step0_setup_universe_fee04/strict_initial_control_fee04.json",
+      "metadata": {
+        "setup_profile": "strict",
+        "exit_mode": "initial_control",
+        "fees": 0.0004,
+        "setup_description": "current best strict setup from previous runner research",
+        "exit_description": "no exit_management; baseline SL/TP only"
+      }
+    },
+    {
+      "candidate_id": "strict_adx40_runner_rsi90_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/step0_setup_universe_fee04/strict_adx40_runner_rsi90_fee04.json",
+      "metadata": {
+        "setup_profile": "strict",
+        "exit_mode": "rsi90",
+        "fees": 0.0004,
+        "setup_description": "current best strict setup from previous runner research",
+        "exit_description": "ADX40 runner disables initial TP, exits by RSI90/10 or emergency SL"
+      }
+    },
+    {
+      "candidate_id": "strict_adx40_runner_rsi88_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/step0_setup_universe_fee04/strict_adx40_runner_rsi88_fee04.json",
+      "metadata": {
+        "setup_profile": "strict",
+        "exit_mode": "rsi88",
+        "fees": 0.0004,
+        "setup_description": "current best strict setup from previous runner research",
+        "exit_description": "ADX40 runner disables initial TP, exits by RSI88/12 or emergency SL"
+      }
+    },
+    {
+      "candidate_id": "strict_adx40_runner_ema100_200_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/step0_setup_universe_fee04/strict_adx40_runner_ema100_200_fee04.json",
+      "metadata": {
+        "setup_profile": "strict",
+        "exit_mode": "ema100_200",
+        "fees": 0.0004,
+        "setup_description": "current best strict setup from previous runner research",
+        "exit_description": "ADX40 runner disables initial TP, exits by EMA100/200 protective loss-of-momentum or emergency SL"
+      }
+    },
+    {
+      "candidate_id": "strict_adx40_runner_rsi90_plus_ema100_200_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/step0_setup_universe_fee04/strict_adx40_runner_rsi90_plus_ema100_200_fee04.json",
+      "metadata": {
+        "setup_profile": "strict",
+        "exit_mode": "rsi90_plus_ema100_200",
+        "fees": 0.0004,
+        "setup_description": "current best strict setup from previous runner research",
+        "exit_description": "defensive combo: RSI90 take + EMA100/200 protective"
+      }
+    },
+    {
+      "candidate_id": "relaxed_initial_control_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/step0_setup_universe_fee04/relaxed_initial_control_fee04.json",
+      "metadata": {
+        "setup_profile": "relaxed",
+        "exit_mode": "initial_control",
+        "fees": 0.0004,
+        "setup_description": "known relaxed medium setup from previous phases; more trades, lower per-trade edge expected",
+        "exit_description": "no exit_management; baseline SL/TP only"
+      }
+    },
+    {
+      "candidate_id": "relaxed_adx40_runner_rsi90_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/step0_setup_universe_fee04/relaxed_adx40_runner_rsi90_fee04.json",
+      "metadata": {
+        "setup_profile": "relaxed",
+        "exit_mode": "rsi90",
+        "fees": 0.0004,
+        "setup_description": "known relaxed medium setup from previous phases; more trades, lower per-trade edge expected",
+        "exit_description": "ADX40 runner disables initial TP, exits by RSI90/10 or emergency SL"
+      }
+    },
+    {
+      "candidate_id": "relaxed_adx40_runner_rsi88_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/step0_setup_universe_fee04/relaxed_adx40_runner_rsi88_fee04.json",
+      "metadata": {
+        "setup_profile": "relaxed",
+        "exit_mode": "rsi88",
+        "fees": 0.0004,
+        "setup_description": "known relaxed medium setup from previous phases; more trades, lower per-trade edge expected",
+        "exit_description": "ADX40 runner disables initial TP, exits by RSI88/12 or emergency SL"
+      }
+    },
+    {
+      "candidate_id": "relaxed_adx40_runner_ema100_200_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/step0_setup_universe_fee04/relaxed_adx40_runner_ema100_200_fee04.json",
+      "metadata": {
+        "setup_profile": "relaxed",
+        "exit_mode": "ema100_200",
+        "fees": 0.0004,
+        "setup_description": "known relaxed medium setup from previous phases; more trades, lower per-trade edge expected",
+        "exit_description": "ADX40 runner disables initial TP, exits by EMA100/200 protective loss-of-momentum or emergency SL"
+      }
+    },
+    {
+      "candidate_id": "relaxed_adx40_runner_rsi90_plus_ema100_200_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/step0_setup_universe_fee04/relaxed_adx40_runner_rsi90_plus_ema100_200_fee04.json",
+      "metadata": {
+        "setup_profile": "relaxed",
+        "exit_mode": "rsi90_plus_ema100_200",
+        "fees": 0.0004,
+        "setup_description": "known relaxed medium setup from previous phases; more trades, lower per-trade edge expected",
+        "exit_description": "defensive combo: RSI90 take + EMA100/200 protective"
+      }
+    },
+    {
+      "candidate_id": "loose_probe_initial_control_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/step0_setup_universe_fee04/loose_probe_initial_control_fee04.json",
+      "metadata": {
+        "setup_profile": "loose_probe",
+        "exit_mode": "initial_control",
+        "fees": 0.0004,
+        "setup_description": "new Step 0 exploratory setup probe to increase trade count; not accepted production candidate yet",
+        "exit_description": "no exit_management; baseline SL/TP only"
+      }
+    },
+    {
+      "candidate_id": "loose_probe_adx40_runner_rsi90_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/step0_setup_universe_fee04/loose_probe_adx40_runner_rsi90_fee04.json",
+      "metadata": {
+        "setup_profile": "loose_probe",
+        "exit_mode": "rsi90",
+        "fees": 0.0004,
+        "setup_description": "new Step 0 exploratory setup probe to increase trade count; not accepted production candidate yet",
+        "exit_description": "ADX40 runner disables initial TP, exits by RSI90/10 or emergency SL"
+      }
+    },
+    {
+      "candidate_id": "loose_probe_adx40_runner_rsi88_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/step0_setup_universe_fee04/loose_probe_adx40_runner_rsi88_fee04.json",
+      "metadata": {
+        "setup_profile": "loose_probe",
+        "exit_mode": "rsi88",
+        "fees": 0.0004,
+        "setup_description": "new Step 0 exploratory setup probe to increase trade count; not accepted production candidate yet",
+        "exit_description": "ADX40 runner disables initial TP, exits by RSI88/12 or emergency SL"
+      }
+    },
+    {
+      "candidate_id": "loose_probe_adx40_runner_ema100_200_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/step0_setup_universe_fee04/loose_probe_adx40_runner_ema100_200_fee04.json",
+      "metadata": {
+        "setup_profile": "loose_probe",
+        "exit_mode": "ema100_200",
+        "fees": 0.0004,
+        "setup_description": "new Step 0 exploratory setup probe to increase trade count; not accepted production candidate yet",
+        "exit_description": "ADX40 runner disables initial TP, exits by EMA100/200 protective loss-of-momentum or emergency SL"
+      }
+    },
+    {
+      "candidate_id": "loose_probe_adx40_runner_rsi90_plus_ema100_200_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/step0_setup_universe_fee04/loose_probe_adx40_runner_rsi90_plus_ema100_200_fee04.json",
+      "metadata": {
+        "setup_profile": "loose_probe",
+        "exit_mode": "rsi90_plus_ema100_200",
+        "fees": 0.0004,
+        "setup_description": "new Step 0 exploratory setup probe to increase trade count; not accepted production candidate yet",
+        "exit_description": "defensive combo: RSI90 take + EMA100/200 protective"
+      }
+    }
+  ]
+}

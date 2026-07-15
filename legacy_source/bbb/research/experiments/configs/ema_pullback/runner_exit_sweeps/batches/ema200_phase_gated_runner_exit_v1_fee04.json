@@ -1,0 +1,144 @@
+{
+  "experiment_id": "ema200_phase_gated_runner_exit_v1_fee04",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Phase-gated runner exit research v1: reusable rsi_signal_exit and ema_cross_loss_exit in exit_management.runtime_exit.",
+  "candidates": [
+    {
+      "candidate_id": "strict_initial_control_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04/strict_initial_control_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "notes": "baseline initial SL6/TP14 without managed runner exits",
+        "scope": "strict EMA200 width+untouched setup, both sides, ADX runner phase"
+      }
+    },
+    {
+      "candidate_id": "strict_adx40_runner_no_signal_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04/strict_adx40_runner_no_signal_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "notes": "ADX40 runner disables initial TP, no runtime exits",
+        "scope": "strict EMA200 width+untouched setup, both sides, ADX runner phase"
+      }
+    },
+    {
+      "candidate_id": "strict_adx45_runner_no_signal_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04/strict_adx45_runner_no_signal_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "notes": "ADX45 runner disables initial TP, no runtime exits",
+        "scope": "strict EMA200 width+untouched setup, both sides, ADX runner phase"
+      }
+    },
+    {
+      "candidate_id": "strict_adx40_runner_only_rsi90_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04/strict_adx40_runner_only_rsi90_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "notes": "runner-only RSI90/10 take exit",
+        "scope": "strict EMA200 width+untouched setup, both sides, ADX runner phase"
+      }
+    },
+    {
+      "candidate_id": "strict_adx40_runner_only_rsi85_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04/strict_adx40_runner_only_rsi85_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "notes": "runner-only RSI85/15 lower-threshold comparison",
+        "scope": "strict EMA200 width+untouched setup, both sides, ADX runner phase"
+      }
+    },
+    {
+      "candidate_id": "strict_adx40_runner_only_ema100_200_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04/strict_adx40_runner_only_ema100_200_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "notes": "runner-only EMA100/200 protective exit",
+        "scope": "strict EMA200 width+untouched setup, both sides, ADX runner phase"
+      }
+    },
+    {
+      "candidate_id": "strict_adx40_runner_only_ema50_200_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04/strict_adx40_runner_only_ema50_200_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "notes": "runner-only EMA50/200 protective exit comparison",
+        "scope": "strict EMA200 width+untouched setup, both sides, ADX runner phase"
+      }
+    },
+    {
+      "candidate_id": "strict_adx40_runner_rsi90_plus_ema100_200_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04/strict_adx40_runner_rsi90_plus_ema100_200_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "notes": "combined: EMA100/200 protective + RSI90/10 take",
+        "scope": "strict EMA200 width+untouched setup, both sides, ADX runner phase"
+      }
+    },
+    {
+      "candidate_id": "strict_adx40_runner_rsi85_plus_ema100_200_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04/strict_adx40_runner_rsi85_plus_ema100_200_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "notes": "combined: EMA100/200 protective + RSI85/15 take",
+        "scope": "strict EMA200 width+untouched setup, both sides, ADX runner phase"
+      }
+    },
+    {
+      "candidate_id": "strict_adx45_runner_only_rsi90_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04/strict_adx45_runner_only_rsi90_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "notes": "runner-only RSI90/10 take exit",
+        "scope": "strict EMA200 width+untouched setup, both sides, ADX runner phase"
+      }
+    },
+    {
+      "candidate_id": "strict_adx45_runner_only_rsi85_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04/strict_adx45_runner_only_rsi85_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "notes": "runner-only RSI85/15 lower-threshold comparison",
+        "scope": "strict EMA200 width+untouched setup, both sides, ADX runner phase"
+      }
+    },
+    {
+      "candidate_id": "strict_adx45_runner_only_ema100_200_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04/strict_adx45_runner_only_ema100_200_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "notes": "runner-only EMA100/200 protective exit",
+        "scope": "strict EMA200 width+untouched setup, both sides, ADX runner phase"
+      }
+    },
+    {
+      "candidate_id": "strict_adx45_runner_only_ema50_200_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04/strict_adx45_runner_only_ema50_200_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "notes": "runner-only EMA50/200 protective exit comparison",
+        "scope": "strict EMA200 width+untouched setup, both sides, ADX runner phase"
+      }
+    },
+    {
+      "candidate_id": "strict_adx45_runner_rsi90_plus_ema100_200_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04/strict_adx45_runner_rsi90_plus_ema100_200_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "notes": "combined: EMA100/200 protective + RSI90/10 take",
+        "scope": "strict EMA200 width+untouched setup, both sides, ADX runner phase"
+      }
+    },
+    {
+      "candidate_id": "strict_adx45_runner_rsi85_plus_ema100_200_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/runner_exit_sweeps/candidates/phase_gated_runner_exit_v1_fee04/strict_adx45_runner_rsi85_plus_ema100_200_fee04.json",
+      "metadata": {
+        "fees": 0.0004,
+        "notes": "combined: EMA100/200 protective + RSI85/15 take",
+        "scope": "strict EMA200 width+untouched setup, both sides, ADX runner phase"
+      }
+    }
+  ]
+}

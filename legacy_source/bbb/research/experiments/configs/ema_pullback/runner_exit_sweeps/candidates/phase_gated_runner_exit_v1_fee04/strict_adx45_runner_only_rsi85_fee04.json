@@ -1,0 +1,154 @@
+{
+  "schema_version": 1,
+  "experiment_id": "strict_adx45_runner_only_rsi85_fee04",
+  "family": "ema_pullback",
+  "execution": {
+    "init_cash": 10000.0,
+    "fees": 0.0004,
+    "slippage": 0.0001
+  },
+  "instances": [
+    {
+      "instance_id": "strict_adx45_runner_only_rsi85_fee04",
+      "variant": "strict_adx45_runner_only_rsi85_fee04",
+      "market": {
+        "symbol": "BTCUSDT",
+        "base_timeframe": "5m"
+      },
+      "strategy": {
+        "trade_sides": [
+          "long",
+          "short"
+        ],
+        "anchor_stack": {
+          "source": "close",
+          "timeframe": "base",
+          "fast": 100,
+          "anchor": 200,
+          "slow": 496
+        },
+        "direction": {
+          "component_id": "ema_anchor_stack_trend"
+        },
+        "setups": [
+          {
+            "instance_id": "width_w12_r14_lb20",
+            "component_id": "anchor_stack_width_setup",
+            "atr_timeframe": "base",
+            "atr_period": 14,
+            "min_current_width_atr": 12.0,
+            "min_recent_width_atr": 14.0,
+            "width_lookback_bars": 20
+          },
+          {
+            "instance_id": "untouched_ulb75_ab8",
+            "component_id": "untouched_anchor_setup",
+            "lookback": 75,
+            "active_bars": 8
+          }
+        ],
+        "trigger": {
+          "component_id": "touch_anchor"
+        },
+        "blockers": [
+          {
+            "instance_id": "no_blockers",
+            "component_id": "no_blockers"
+          }
+        ],
+        "risk": {
+          "component_id": "no_risk_filter"
+        },
+        "contexts": {},
+        "trade_management": {
+          "exit_policy": {
+            "always_on": {
+              "exits": [
+                {
+                  "instance_id": "sl_6p0atr",
+                  "component_id": "atr_stop_loss",
+                  "distance": {
+                    "timeframe": "base",
+                    "period": 14,
+                    "multiplier": 6.0
+                  }
+                },
+                {
+                  "instance_id": "initial_tp_14p0atr",
+                  "component_id": "atr_take_profit",
+                  "distance": {
+                    "timeframe": "base",
+                    "period": 14,
+                    "multiplier": 14.0
+                  }
+                }
+              ]
+            },
+            "profiles": {
+              "aligned": {
+                "exits": []
+              },
+              "countertrend": {
+                "exits": []
+              },
+              "neutral": {
+                "exits": []
+              }
+            }
+          },
+          "exit_management": {
+            "mode": "managed",
+            "phase_rules": [
+              {
+                "rule_id": "runner_5m_adx_di_45",
+                "to_phase": "runner",
+                "condition": {
+                  "component_id": "adx_di_threshold",
+                  "params": {
+                    "timeframe": "base",
+                    "period": 14,
+                    "adx_threshold": 45.0,
+                    "require_di_alignment": true
+                  }
+                }
+              }
+            ],
+            "stop_management": [],
+            "take_management": [
+              {
+                "rule_id": "disable_initial_tp_at_runner_adx_45",
+                "component_id": "take_profile_switch",
+                "activate_when": {
+                  "phase_at_least": "runner"
+                },
+                "params": {
+                  "action": "disable_initial_tp"
+                }
+              }
+            ],
+            "runtime_exits": [
+              {
+                "rule_id": "runner_rsi85_15_take",
+                "component_id": "rsi_signal_exit",
+                "role": "exit_management.runtime_exit",
+                "activate_when": {
+                  "phase_at_least": "runner"
+                },
+                "exit_kind": "take_profit",
+                "params": {
+                  "rsi": {
+                    "timeframe": "base",
+                    "period": 14
+                  },
+                  "long_exit_above": 85.0,
+                  "short_exit_below": 15.0,
+                  "confirm_bars": 1
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,592 @@
+{
+  "experiment_id": "ema200_rsi_1h_edge_phase0_1h_atr_symmetric_ruler_calibration_fee04",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Phase 0 replacement for RSI_1h_edge_discovery: calibrate symmetric 1h ATR SL/TP rulers across no-width, known sanity width, relaxed known width, and strict known width profiles. No active RSI filter yet.",
+  "notes": [
+    "This replaces the earlier base-ATR Phase 0; the earlier run calibrated 5m/base ATR and was not the intended first step for this 1h-oriented research.",
+    "Exit distances use distance.timeframe='1h', period=14.",
+    "Width setup remains normalized by base ATR in this phase to isolate exit-distance timeframe.",
+    "No RSI blocker, RSI gate, ADX runner, BE, partial TP, trailing, HTF context, or exit-management runtime rules are included.",
+    "After run, verify that planned/used features include atr_close_1h_14 or equivalent 1h ATR feature in report diagnostics/logs."
+  ],
+  "candidates": [
+    {
+      "candidate_id": "no_width_sym_1hatr_sl0p5_tp0p5_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/no_width_sym_1hatr_sl0p5_tp0p5_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "no_width",
+        "setup_description": "No anchor_stack_width_setup; negative baseline / sanity.",
+        "has_width_setup": false,
+        "width": null,
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 0.5,
+        "tp_atr_1h": 0.5,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "no_width_sym_1hatr_sl0p75_tp0p75_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/no_width_sym_1hatr_sl0p75_tp0p75_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "no_width",
+        "setup_description": "No anchor_stack_width_setup; negative baseline / sanity.",
+        "has_width_setup": false,
+        "width": null,
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 0.75,
+        "tp_atr_1h": 0.75,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "no_width_sym_1hatr_sl1_tp1_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/no_width_sym_1hatr_sl1_tp1_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "no_width",
+        "setup_description": "No anchor_stack_width_setup; negative baseline / sanity.",
+        "has_width_setup": false,
+        "width": null,
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.0,
+        "tp_atr_1h": 1.0,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "no_width_sym_1hatr_sl1p25_tp1p25_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/no_width_sym_1hatr_sl1p25_tp1p25_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "no_width",
+        "setup_description": "No anchor_stack_width_setup; negative baseline / sanity.",
+        "has_width_setup": false,
+        "width": null,
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.25,
+        "tp_atr_1h": 1.25,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "no_width_sym_1hatr_sl1p5_tp1p5_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/no_width_sym_1hatr_sl1p5_tp1p5_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "no_width",
+        "setup_description": "No anchor_stack_width_setup; negative baseline / sanity.",
+        "has_width_setup": false,
+        "width": null,
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.5,
+        "tp_atr_1h": 1.5,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "no_width_sym_1hatr_sl2_tp2_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/no_width_sym_1hatr_sl2_tp2_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "no_width",
+        "setup_description": "No anchor_stack_width_setup; negative baseline / sanity.",
+        "has_width_setup": false,
+        "width": null,
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.0,
+        "tp_atr_1h": 2.0,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "known_width_sanity_sym_1hatr_sl0p5_tp0p5_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/known_width_sanity_sym_1hatr_sl0p5_tp0p5_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "known_width_sanity",
+        "setup_description": "Old early width sanity point.",
+        "has_width_setup": true,
+        "width": {
+          "current": 7.0,
+          "recent": 14.0,
+          "lookback": 35
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 0.5,
+        "tp_atr_1h": 0.5,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "known_width_sanity_sym_1hatr_sl0p75_tp0p75_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/known_width_sanity_sym_1hatr_sl0p75_tp0p75_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "known_width_sanity",
+        "setup_description": "Old early width sanity point.",
+        "has_width_setup": true,
+        "width": {
+          "current": 7.0,
+          "recent": 14.0,
+          "lookback": 35
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 0.75,
+        "tp_atr_1h": 0.75,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "known_width_sanity_sym_1hatr_sl1_tp1_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/known_width_sanity_sym_1hatr_sl1_tp1_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "known_width_sanity",
+        "setup_description": "Old early width sanity point.",
+        "has_width_setup": true,
+        "width": {
+          "current": 7.0,
+          "recent": 14.0,
+          "lookback": 35
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.0,
+        "tp_atr_1h": 1.0,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "known_width_sanity_sym_1hatr_sl1p25_tp1p25_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/known_width_sanity_sym_1hatr_sl1p25_tp1p25_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "known_width_sanity",
+        "setup_description": "Old early width sanity point.",
+        "has_width_setup": true,
+        "width": {
+          "current": 7.0,
+          "recent": 14.0,
+          "lookback": 35
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.25,
+        "tp_atr_1h": 1.25,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "known_width_sanity_sym_1hatr_sl1p5_tp1p5_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/known_width_sanity_sym_1hatr_sl1p5_tp1p5_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "known_width_sanity",
+        "setup_description": "Old early width sanity point.",
+        "has_width_setup": true,
+        "width": {
+          "current": 7.0,
+          "recent": 14.0,
+          "lookback": 35
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.5,
+        "tp_atr_1h": 1.5,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "known_width_sanity_sym_1hatr_sl2_tp2_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/known_width_sanity_sym_1hatr_sl2_tp2_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "known_width_sanity",
+        "setup_description": "Old early width sanity point.",
+        "has_width_setup": true,
+        "width": {
+          "current": 7.0,
+          "recent": 14.0,
+          "lookback": 35
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.0,
+        "tp_atr_1h": 2.0,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl0p5_tp0p5_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/relaxed_known_sym_1hatr_sl0p5_tp0p5_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline.",
+        "has_width_setup": true,
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 0.5,
+        "tp_atr_1h": 0.5,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl0p75_tp0p75_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/relaxed_known_sym_1hatr_sl0p75_tp0p75_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline.",
+        "has_width_setup": true,
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 0.75,
+        "tp_atr_1h": 0.75,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl1_tp1_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/relaxed_known_sym_1hatr_sl1_tp1_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline.",
+        "has_width_setup": true,
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.0,
+        "tp_atr_1h": 1.0,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl1p25_tp1p25_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/relaxed_known_sym_1hatr_sl1p25_tp1p25_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline.",
+        "has_width_setup": true,
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.25,
+        "tp_atr_1h": 1.25,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl1p5_tp1p5_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/relaxed_known_sym_1hatr_sl1p5_tp1p5_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline.",
+        "has_width_setup": true,
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.5,
+        "tp_atr_1h": 1.5,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2_tp2_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/relaxed_known_sym_1hatr_sl2_tp2_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline.",
+        "has_width_setup": true,
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.0,
+        "tp_atr_1h": 2.0,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl0p5_tp0p5_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/strict_known_sym_1hatr_sl0p5_tp0p5_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline.",
+        "has_width_setup": true,
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 0.5,
+        "tp_atr_1h": 0.5,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl0p75_tp0p75_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/strict_known_sym_1hatr_sl0p75_tp0p75_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline.",
+        "has_width_setup": true,
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 0.75,
+        "tp_atr_1h": 0.75,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl1_tp1_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/strict_known_sym_1hatr_sl1_tp1_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline.",
+        "has_width_setup": true,
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.0,
+        "tp_atr_1h": 1.0,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl1p25_tp1p25_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/strict_known_sym_1hatr_sl1p25_tp1p25_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline.",
+        "has_width_setup": true,
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.25,
+        "tp_atr_1h": 1.25,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl1p5_tp1p5_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/strict_known_sym_1hatr_sl1p5_tp1p5_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline.",
+        "has_width_setup": true,
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.5,
+        "tp_atr_1h": 1.5,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl2_tp2_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0_1h_atr_symmetric_ruler_calibration/strict_known_sym_1hatr_sl2_tp2_fee04.json",
+      "metadata": {
+        "phase": "0",
+        "purpose": "1h_atr_symmetric_ruler_calibration",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline.",
+        "has_width_setup": true,
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.0,
+        "tp_atr_1h": 2.0,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0",
+        "width_atr_timeframe": "base"
+      }
+    }
+  ]
+}

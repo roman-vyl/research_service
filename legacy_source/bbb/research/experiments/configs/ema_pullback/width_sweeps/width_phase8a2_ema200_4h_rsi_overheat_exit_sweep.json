@@ -1,0 +1,49 @@
+{
+  "experiment_id": "width_phase8a2_ema200_4h_rsi_overheat_exit_sweep",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Phase 8A.2: 4h RSI overheat exits. Symmetric long/short thresholds only. Fixed far ATR TP is a safety cap, not primary take profit.",
+  "candidates": [
+    {
+      "candidate_id": "p8a2_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_control_no_signal_exit",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a2_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_control_no_signal_exit.json"
+    },
+    {
+      "candidate_id": "p8a2_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_control_no_signal_exit",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a2_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_control_no_signal_exit.json"
+    },
+    {
+      "candidate_id": "p8a2_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi4h70_30",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a2_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi4h70_30.json"
+    },
+    {
+      "candidate_id": "p8a2_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi4h75_25",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a2_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi4h75_25.json"
+    },
+    {
+      "candidate_id": "p8a2_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi4h80_20",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a2_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi4h80_20.json"
+    },
+    {
+      "candidate_id": "p8a2_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi4h85_15",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a2_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi4h85_15.json"
+    },
+    {
+      "candidate_id": "p8a2_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi4h70_30",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a2_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi4h70_30.json"
+    },
+    {
+      "candidate_id": "p8a2_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi4h75_25",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a2_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi4h75_25.json"
+    },
+    {
+      "candidate_id": "p8a2_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi4h80_20",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a2_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi4h80_20.json"
+    },
+    {
+      "candidate_id": "p8a2_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi4h85_15",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a2_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi4h85_15.json"
+    }
+  ]
+}

@@ -1,0 +1,49 @@
+{
+  "experiment_id": "width_phase7a_ema200_mfe_depth_tp_sweep",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Phase 7A: EMA200 MFE-depth diagnostic TP extension sweep. Fixed entries, wider TP values to keep trades open longer and measure executed-window MFE/MAE distributions in v6 reports.",
+  "candidates": [
+    {
+      "candidate_id": "p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp10",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp10.json"
+    },
+    {
+      "candidate_id": "p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp14.json"
+    },
+    {
+      "candidate_id": "p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp20",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp20.json"
+    },
+    {
+      "candidate_id": "p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp30",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp30.json"
+    },
+    {
+      "candidate_id": "p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp40",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp40.json"
+    },
+    {
+      "candidate_id": "p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp20",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp20.json"
+    },
+    {
+      "candidate_id": "p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp24",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp24.json"
+    },
+    {
+      "candidate_id": "p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp30",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp30.json"
+    },
+    {
+      "candidate_id": "p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp40",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp40.json"
+    }
+  ]
+}

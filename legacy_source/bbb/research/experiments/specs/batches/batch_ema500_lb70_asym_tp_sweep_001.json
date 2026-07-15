@@ -1,0 +1,68 @@
+{
+  "experiment_id": "batch_ema500_lb70_asym_tp_sweep_001",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "candidates": [
+    {
+      "candidate_id": "ema500_lb70_sl6p5_tp6p5",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_lb70_asym_tp_sweep/ema500_lb70_sl6p5_tp6p5.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_tp7",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_lb70_asym_tp_sweep/ema500_lb70_sl6p5_tp7.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_tp7p5",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_lb70_asym_tp_sweep/ema500_lb70_sl6p5_tp7p5.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_tp8",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_lb70_asym_tp_sweep/ema500_lb70_sl6p5_tp8.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_tp8p5",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_lb70_asym_tp_sweep/ema500_lb70_sl6p5_tp8p5.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_tp9",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_lb70_asym_tp_sweep/ema500_lb70_sl6p5_tp9.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_tp10",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_lb70_asym_tp_sweep/ema500_lb70_sl6p5_tp10.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_tp11",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_lb70_asym_tp_sweep/ema500_lb70_sl6p5_tp11.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_tp12",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_lb70_asym_tp_sweep/ema500_lb70_sl6p5_tp12.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_tp14",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_lb70_asym_tp_sweep/ema500_lb70_sl6p5_tp14.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_tp16",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_lb70_asym_tp_sweep/ema500_lb70_sl6p5_tp16.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_tp18",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_lb70_asym_tp_sweep/ema500_lb70_sl6p5_tp18.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_tp20",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_lb70_asym_tp_sweep/ema500_lb70_sl6p5_tp20.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_tp25",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_lb70_asym_tp_sweep/ema500_lb70_sl6p5_tp25.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_tp30",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_lb70_asym_tp_sweep/ema500_lb70_sl6p5_tp30.json"
+    }
+  ]
+}

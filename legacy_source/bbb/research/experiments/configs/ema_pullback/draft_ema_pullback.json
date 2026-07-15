@@ -1,0 +1,123 @@
+{
+  "schema_version": 1,
+  "experiment_id": "draft_ema_pullback",
+  "family": "ema_pullback",
+  "execution": {},
+  "instances": [
+    {
+      "instance_id": "instance_1",
+      "variant": "instance_1",
+      "market": {
+        "symbol": "BTCUSDT",
+        "base_timeframe": "5m"
+      },
+      "strategy": {
+        "trade_sides": {
+          "long": true,
+          "short": false
+        },
+        "anchor_stack": {
+          "source": "close",
+          "timeframe": "base",
+          "fast": 200,
+          "anchor": 500,
+          "slow": 1000
+        },
+        "direction": {
+          "component_id": "ema_anchor_stack_trend"
+        },
+        "setups": [
+          {
+            "instance_id": "setup",
+            "component_id": "untouched_anchor_setup",
+            "lookback": 50,
+            "active_bars": 3
+          }
+        ],
+        "trigger": {
+          "component_id": "reclaim_anchor",
+          "lookback": 1
+        },
+        "blockers": [
+          {
+            "instance_id": "no_blockers",
+            "component_id": "no_blockers"
+          }
+        ],
+        "risk": {
+          "component_id": "no_risk_filter"
+        },
+        "trade_management": {
+          "exit_policy": {
+            "always_on": {
+              "exits": [
+                {
+                  "instance_id": "atr_sl",
+                  "component_id": "atr_stop_loss",
+                  "distance": {
+                    "timeframe": "5m",
+                    "period": 14,
+                    "multiplier": 2
+                  }
+                },
+                {
+                  "instance_id": "atr_tp",
+                  "component_id": "atr_take_profit",
+                  "distance": {
+                    "timeframe": "base",
+                    "period": 14,
+                    "multiplier": 4
+                  }
+                }
+              ]
+            },
+            "profiles": {
+              "aligned": {
+                "exits": [
+                  {
+                    "instance_id": "no_signal_exit_cxot",
+                    "component_id": "ema_close_loss_exit",
+                    "ema": {
+                      "timeframe": "base",
+                      "period": 200
+                    },
+                    "confirm_bars": 1
+                  }
+                ]
+              },
+              "countertrend": {
+                "exits": []
+              },
+              "neutral": {
+                "exits": []
+              }
+            },
+            "context_consumption": {
+              "context_ref": "htf_1",
+              "policy": {
+                "policy_id": "exit_profile_by_htf_state"
+              }
+            }
+          },
+          "exit_management": {
+            "mode": "diagnostic_only",
+            "phase_rules": [],
+            "stop_management": [],
+            "take_management": [],
+            "runtime_exits": []
+          }
+        },
+        "contexts": {
+          "htf_1": {
+            "component_id": "htf_context",
+            "timeframe": "4h",
+            "source": "close",
+            "fast_period": 100,
+            "anchor_period": 200,
+            "slow_period": 1000
+          }
+        }
+      }
+    }
+  ]
+}

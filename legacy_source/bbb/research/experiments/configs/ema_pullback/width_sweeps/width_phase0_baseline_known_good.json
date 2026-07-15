@@ -1,0 +1,17 @@
+{
+  "experiment_id": "width_phase0_baseline_known_good",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Sanity: compare no-width baseline vs current known useful width point 7/14/35 with fixed ATR exits 5/14.",
+  "candidates": [
+    {
+      "candidate_id": "p0_baseline_no_width_sl5_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p0_baseline_no_width_sl5_tp14.json"
+    },
+    {
+      "candidate_id": "p0_known_w7_r14_lb35_sl5_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p0_known_w7_r14_lb35_sl5_tp14.json"
+    }
+  ]
+}

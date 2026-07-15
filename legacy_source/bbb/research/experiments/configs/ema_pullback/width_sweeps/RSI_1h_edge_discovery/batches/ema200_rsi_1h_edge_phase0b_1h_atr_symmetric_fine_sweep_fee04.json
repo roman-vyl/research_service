@@ -1,0 +1,1192 @@
+{
+  "experiment_id": "ema200_rsi_1h_edge_phase0b_1h_atr_symmetric_fine_sweep_fee04",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Phase 0B for RSI_1h_edge_discovery: fine sweep of symmetric 1h ATR SL/TP multipliers from 1.50 to 2.50 with step 0.05 on relaxed_known and strict_known profiles.",
+  "notes": [
+    "Phase 0 best candidate was relaxed_known with 1hATR SL2/TP2, located at the upper boundary of the coarse grid.",
+    "This sweep fills intermediate values and extends above 2.0 to check whether the optimum is beyond the previous boundary.",
+    "No RSI blocker, RSI gate, ADX runner, runtime exits, BE, partial TP, trailing, HTF context, or asymmetric rails are included.",
+    "Width setup remains normalized by base ATR to isolate exit-distance multiplier/timeframe.",
+    "Primary target: select one or two 1h ATR symmetric rulers for Phase 1 current-width sweep."
+  ],
+  "candidates": [
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl1p5_tp1p5_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl1p5_tp1p5_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.5,
+        "tp_atr_1h": 1.5,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl1p55_tp1p55_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl1p55_tp1p55_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.55,
+        "tp_atr_1h": 1.55,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl1p6_tp1p6_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl1p6_tp1p6_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.6,
+        "tp_atr_1h": 1.6,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl1p65_tp1p65_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl1p65_tp1p65_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.65,
+        "tp_atr_1h": 1.65,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl1p7_tp1p7_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl1p7_tp1p7_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.7,
+        "tp_atr_1h": 1.7,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl1p75_tp1p75_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl1p75_tp1p75_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.75,
+        "tp_atr_1h": 1.75,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl1p8_tp1p8_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl1p8_tp1p8_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.8,
+        "tp_atr_1h": 1.8,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl1p85_tp1p85_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl1p85_tp1p85_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.85,
+        "tp_atr_1h": 1.85,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl1p9_tp1p9_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl1p9_tp1p9_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.9,
+        "tp_atr_1h": 1.9,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl1p95_tp1p95_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl1p95_tp1p95_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.95,
+        "tp_atr_1h": 1.95,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2_tp2_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl2_tp2_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.0,
+        "tp_atr_1h": 2.0,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p05_tp2p05_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl2p05_tp2p05_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.05,
+        "tp_atr_1h": 2.05,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p1_tp2p1_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl2p1_tp2p1_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.1,
+        "tp_atr_1h": 2.1,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p15_tp2p15_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl2p15_tp2p15_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.15,
+        "tp_atr_1h": 2.15,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p2_tp2p2_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl2p2_tp2p2_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.2,
+        "tp_atr_1h": 2.2,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p25_tp2p25_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl2p25_tp2p25_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.25,
+        "tp_atr_1h": 2.25,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p3_tp2p3_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl2p3_tp2p3_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.3,
+        "tp_atr_1h": 2.3,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p35_tp2p35_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl2p35_tp2p35_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.35,
+        "tp_atr_1h": 2.35,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p4_tp2p4_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl2p4_tp2p4_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.4,
+        "tp_atr_1h": 2.4,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p45_tp2p45_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl2p45_tp2p45_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.45,
+        "tp_atr_1h": 2.45,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p5_tp2p5_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/relaxed_known_sym_1hatr_sl2p5_tp2p5_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0 winner under 1hATR 2/2.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.5,
+        "tp_atr_1h": 2.5,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl1p5_tp1p5_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl1p5_tp1p5_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.5,
+        "tp_atr_1h": 1.5,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl1p55_tp1p55_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl1p55_tp1p55_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.55,
+        "tp_atr_1h": 1.55,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl1p6_tp1p6_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl1p6_tp1p6_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.6,
+        "tp_atr_1h": 1.6,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl1p65_tp1p65_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl1p65_tp1p65_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.65,
+        "tp_atr_1h": 1.65,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl1p7_tp1p7_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl1p7_tp1p7_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.7,
+        "tp_atr_1h": 1.7,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl1p75_tp1p75_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl1p75_tp1p75_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.75,
+        "tp_atr_1h": 1.75,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl1p8_tp1p8_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl1p8_tp1p8_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.8,
+        "tp_atr_1h": 1.8,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl1p85_tp1p85_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl1p85_tp1p85_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.85,
+        "tp_atr_1h": 1.85,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl1p9_tp1p9_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl1p9_tp1p9_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.9,
+        "tp_atr_1h": 1.9,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl1p95_tp1p95_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl1p95_tp1p95_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.95,
+        "tp_atr_1h": 1.95,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl2_tp2_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl2_tp2_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.0,
+        "tp_atr_1h": 2.0,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl2p05_tp2p05_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl2p05_tp2p05_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.05,
+        "tp_atr_1h": 2.05,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl2p1_tp2p1_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl2p1_tp2p1_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.1,
+        "tp_atr_1h": 2.1,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl2p15_tp2p15_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl2p15_tp2p15_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.15,
+        "tp_atr_1h": 2.15,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl2p2_tp2p2_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl2p2_tp2p2_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.2,
+        "tp_atr_1h": 2.2,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl2p25_tp2p25_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl2p25_tp2p25_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.25,
+        "tp_atr_1h": 2.25,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl2p3_tp2p3_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl2p3_tp2p3_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.3,
+        "tp_atr_1h": 2.3,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl2p35_tp2p35_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl2p35_tp2p35_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.35,
+        "tp_atr_1h": 2.35,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl2p4_tp2p4_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl2p4_tp2p4_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.4,
+        "tp_atr_1h": 2.4,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl2p45_tp2p45_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl2p45_tp2p45_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.45,
+        "tp_atr_1h": 2.45,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl2p5_tp2p5_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0b_1h_atr_symmetric_fine_sweep/strict_known_sym_1hatr_sl2p5_tp2p5_fee04.json",
+      "metadata": {
+        "phase": "0B",
+        "purpose": "1h_atr_symmetric_fine_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; comparison branch, short-biased under 1hATR 2/2.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.5,
+        "tp_atr_1h": 2.5,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0b",
+        "width_atr_timeframe": "base"
+      }
+    }
+  ]
+}

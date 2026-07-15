@@ -1,0 +1,44 @@
+{
+  "experiment_id": "batch_ema500_lb70_contextual_tp_extreme_rsi_htf_sweep_001",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "candidates": [
+    {
+      "candidate_id": "ema500_lb70_sl6p5_long_a40_n20_c6p5_rsi14_tf1h_lb10",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_contextual_tp_extreme_rsi_htf_sweep/ema500_lb70_sl6p5_long_a40_n20_c6p5_rsi14_tf1h_lb10.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_long_a40_n20_c6p5_rsi14_tf4h_lb10",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_contextual_tp_extreme_rsi_htf_sweep/ema500_lb70_sl6p5_long_a40_n20_c6p5_rsi14_tf4h_lb10.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_long_a40_n20_c6p5_rsi14_tf1d_lb10",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_contextual_tp_extreme_rsi_htf_sweep/ema500_lb70_sl6p5_long_a40_n20_c6p5_rsi14_tf1d_lb10.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_both_a40_n20_c10_rsi14_tf1h_lb10",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_contextual_tp_extreme_rsi_htf_sweep/ema500_lb70_sl6p5_both_a40_n20_c10_rsi14_tf1h_lb10.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_both_a40_n20_c10_rsi14_tf4h_lb10",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_contextual_tp_extreme_rsi_htf_sweep/ema500_lb70_sl6p5_both_a40_n20_c10_rsi14_tf4h_lb10.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_both_a40_n20_c10_rsi14_tf1d_lb10",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_contextual_tp_extreme_rsi_htf_sweep/ema500_lb70_sl6p5_both_a40_n20_c10_rsi14_tf1d_lb10.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_both_a40_n20_c6p5_rsi14_tf1h_lb10",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_contextual_tp_extreme_rsi_htf_sweep/ema500_lb70_sl6p5_both_a40_n20_c6p5_rsi14_tf1h_lb10.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_both_a40_n20_c6p5_rsi14_tf4h_lb10",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_contextual_tp_extreme_rsi_htf_sweep/ema500_lb70_sl6p5_both_a40_n20_c6p5_rsi14_tf4h_lb10.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_both_a40_n20_c6p5_rsi14_tf1d_lb10",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_contextual_tp_extreme_rsi_htf_sweep/ema500_lb70_sl6p5_both_a40_n20_c6p5_rsi14_tf1d_lb10.json"
+    }
+  ]
+}

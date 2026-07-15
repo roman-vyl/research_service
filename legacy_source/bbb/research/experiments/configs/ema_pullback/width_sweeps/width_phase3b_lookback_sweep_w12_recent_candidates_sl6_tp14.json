@@ -1,0 +1,149 @@
+{
+  "experiment_id": "width_phase3b_lookback_sweep_w12_recent_candidates_sl6_tp14",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Phase 3B: width_lookback_bars sweep for w12 with selected recent-width thresholds. Exit policy fixed to SL6/TP14. Use this after Phase 3A or run directly as a broad map.",
+  "candidates": [
+    {
+      "candidate_id": "p3b_w12_r1_lb20_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r1_lb20_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r1_lb35_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r1_lb35_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r1_lb50_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r1_lb50_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r1_lb75_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r1_lb75_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r1_lb100_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r1_lb100_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r1_lb150_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r1_lb150_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r1_lb200_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r1_lb200_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r12_lb20_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r12_lb20_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r12_lb35_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r12_lb35_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r12_lb50_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r12_lb50_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r12_lb75_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r12_lb75_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r12_lb100_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r12_lb100_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r12_lb150_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r12_lb150_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r12_lb200_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r12_lb200_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r14_lb20_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r14_lb20_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r14_lb35_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r14_lb35_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r14_lb50_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r14_lb50_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r14_lb75_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r14_lb75_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r14_lb100_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r14_lb100_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r14_lb150_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r14_lb150_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r14_lb200_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r14_lb200_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r16_lb20_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r16_lb20_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r16_lb35_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r16_lb35_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r16_lb50_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r16_lb50_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r16_lb75_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r16_lb75_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r16_lb100_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r16_lb100_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r16_lb150_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r16_lb150_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r16_lb200_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r16_lb200_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r20_lb20_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r20_lb20_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r20_lb35_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r20_lb35_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r20_lb50_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r20_lb50_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r20_lb75_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r20_lb75_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r20_lb100_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r20_lb100_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r20_lb150_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r20_lb150_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p3b_w12_r20_lb200_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p3b_w12_r20_lb200_sl6_tp14.json"
+    }
+  ]
+}

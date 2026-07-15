@@ -1,0 +1,201 @@
+{
+  "experiment_id": "width_phase4b_relaxed_width_small_exits",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Phase 4B: relax width setup conditions and test smaller exits to search for more trades with smaller profit target. Untouched setup remains lookback75/active8.",
+  "candidates": [
+    {
+      "candidate_id": "p4b_w8_r10_wlb20_ulb75_ab8_sl2p5_tp5",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w8_r10_wlb20_ulb75_ab8_sl2p5_tp5.json"
+    },
+    {
+      "candidate_id": "p4b_w8_r10_wlb20_ulb75_ab8_sl3_tp6",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w8_r10_wlb20_ulb75_ab8_sl3_tp6.json"
+    },
+    {
+      "candidate_id": "p4b_w8_r10_wlb20_ulb75_ab8_sl3_tp8",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w8_r10_wlb20_ulb75_ab8_sl3_tp8.json"
+    },
+    {
+      "candidate_id": "p4b_w8_r10_wlb20_ulb75_ab8_sl3p5_tp7",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w8_r10_wlb20_ulb75_ab8_sl3p5_tp7.json"
+    },
+    {
+      "candidate_id": "p4b_w8_r10_wlb20_ulb75_ab8_sl4_tp8",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w8_r10_wlb20_ulb75_ab8_sl4_tp8.json"
+    },
+    {
+      "candidate_id": "p4b_w8_r10_wlb20_ulb75_ab8_sl4_tp10",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w8_r10_wlb20_ulb75_ab8_sl4_tp10.json"
+    },
+    {
+      "candidate_id": "p4b_w8_r10_wlb20_ulb75_ab8_sl5_tp10",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w8_r10_wlb20_ulb75_ab8_sl5_tp10.json"
+    },
+    {
+      "candidate_id": "p4b_w8_r10_wlb20_ulb75_ab8_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w8_r10_wlb20_ulb75_ab8_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p4b_w9_r10_wlb20_ulb75_ab8_sl2p5_tp5",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w9_r10_wlb20_ulb75_ab8_sl2p5_tp5.json"
+    },
+    {
+      "candidate_id": "p4b_w9_r10_wlb20_ulb75_ab8_sl3_tp6",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w9_r10_wlb20_ulb75_ab8_sl3_tp6.json"
+    },
+    {
+      "candidate_id": "p4b_w9_r10_wlb20_ulb75_ab8_sl3_tp8",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w9_r10_wlb20_ulb75_ab8_sl3_tp8.json"
+    },
+    {
+      "candidate_id": "p4b_w9_r10_wlb20_ulb75_ab8_sl3p5_tp7",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w9_r10_wlb20_ulb75_ab8_sl3p5_tp7.json"
+    },
+    {
+      "candidate_id": "p4b_w9_r10_wlb20_ulb75_ab8_sl4_tp8",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w9_r10_wlb20_ulb75_ab8_sl4_tp8.json"
+    },
+    {
+      "candidate_id": "p4b_w9_r10_wlb20_ulb75_ab8_sl4_tp10",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w9_r10_wlb20_ulb75_ab8_sl4_tp10.json"
+    },
+    {
+      "candidate_id": "p4b_w9_r10_wlb20_ulb75_ab8_sl5_tp10",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w9_r10_wlb20_ulb75_ab8_sl5_tp10.json"
+    },
+    {
+      "candidate_id": "p4b_w9_r10_wlb20_ulb75_ab8_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w9_r10_wlb20_ulb75_ab8_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r10_wlb20_ulb75_ab8_sl2p5_tp5",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r10_wlb20_ulb75_ab8_sl2p5_tp5.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r10_wlb20_ulb75_ab8_sl3_tp6",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r10_wlb20_ulb75_ab8_sl3_tp6.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r10_wlb20_ulb75_ab8_sl3_tp8",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r10_wlb20_ulb75_ab8_sl3_tp8.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r10_wlb20_ulb75_ab8_sl3p5_tp7",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r10_wlb20_ulb75_ab8_sl3p5_tp7.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r10_wlb20_ulb75_ab8_sl4_tp8",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r10_wlb20_ulb75_ab8_sl4_tp8.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r10_wlb20_ulb75_ab8_sl4_tp10",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r10_wlb20_ulb75_ab8_sl4_tp10.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r10_wlb20_ulb75_ab8_sl5_tp10",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r10_wlb20_ulb75_ab8_sl5_tp10.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r10_wlb20_ulb75_ab8_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r10_wlb20_ulb75_ab8_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r12_wlb20_ulb75_ab8_sl2p5_tp5",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r12_wlb20_ulb75_ab8_sl2p5_tp5.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r12_wlb20_ulb75_ab8_sl3_tp6",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r12_wlb20_ulb75_ab8_sl3_tp6.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r12_wlb20_ulb75_ab8_sl3_tp8",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r12_wlb20_ulb75_ab8_sl3_tp8.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r12_wlb20_ulb75_ab8_sl3p5_tp7",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r12_wlb20_ulb75_ab8_sl3p5_tp7.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r12_wlb20_ulb75_ab8_sl4_tp8",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r12_wlb20_ulb75_ab8_sl4_tp8.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r12_wlb20_ulb75_ab8_sl4_tp10",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r12_wlb20_ulb75_ab8_sl4_tp10.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r12_wlb20_ulb75_ab8_sl5_tp10",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r12_wlb20_ulb75_ab8_sl5_tp10.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r12_wlb20_ulb75_ab8_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r12_wlb20_ulb75_ab8_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r12_wlb35_ulb75_ab8_sl2p5_tp5",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r12_wlb35_ulb75_ab8_sl2p5_tp5.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r12_wlb35_ulb75_ab8_sl3_tp6",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r12_wlb35_ulb75_ab8_sl3_tp6.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r12_wlb35_ulb75_ab8_sl3_tp8",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r12_wlb35_ulb75_ab8_sl3_tp8.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r12_wlb35_ulb75_ab8_sl3p5_tp7",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r12_wlb35_ulb75_ab8_sl3p5_tp7.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r12_wlb35_ulb75_ab8_sl4_tp8",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r12_wlb35_ulb75_ab8_sl4_tp8.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r12_wlb35_ulb75_ab8_sl4_tp10",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r12_wlb35_ulb75_ab8_sl4_tp10.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r12_wlb35_ulb75_ab8_sl5_tp10",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r12_wlb35_ulb75_ab8_sl5_tp10.json"
+    },
+    {
+      "candidate_id": "p4b_w10_r12_wlb35_ulb75_ab8_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w10_r12_wlb35_ulb75_ab8_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p4b_w12_r14_wlb20_ulb75_ab8_sl2p5_tp5",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w12_r14_wlb20_ulb75_ab8_sl2p5_tp5.json"
+    },
+    {
+      "candidate_id": "p4b_w12_r14_wlb20_ulb75_ab8_sl3_tp6",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w12_r14_wlb20_ulb75_ab8_sl3_tp6.json"
+    },
+    {
+      "candidate_id": "p4b_w12_r14_wlb20_ulb75_ab8_sl3_tp8",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w12_r14_wlb20_ulb75_ab8_sl3_tp8.json"
+    },
+    {
+      "candidate_id": "p4b_w12_r14_wlb20_ulb75_ab8_sl3p5_tp7",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w12_r14_wlb20_ulb75_ab8_sl3p5_tp7.json"
+    },
+    {
+      "candidate_id": "p4b_w12_r14_wlb20_ulb75_ab8_sl4_tp8",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w12_r14_wlb20_ulb75_ab8_sl4_tp8.json"
+    },
+    {
+      "candidate_id": "p4b_w12_r14_wlb20_ulb75_ab8_sl4_tp10",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w12_r14_wlb20_ulb75_ab8_sl4_tp10.json"
+    },
+    {
+      "candidate_id": "p4b_w12_r14_wlb20_ulb75_ab8_sl5_tp10",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w12_r14_wlb20_ulb75_ab8_sl5_tp10.json"
+    },
+    {
+      "candidate_id": "p4b_w12_r14_wlb20_ulb75_ab8_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p4b_w12_r14_wlb20_ulb75_ab8_sl6_tp14.json"
+    }
+  ]
+}

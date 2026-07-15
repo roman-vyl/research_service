@@ -1,0 +1,176 @@
+{
+  "schema_version": 1,
+  "experiment_id": "phase3b_perf_current_base_stability_1h_2p5_10_adx40_runner_rsi90_10_plus_ema100_200_fee04",
+  "family": "ema_pullback",
+  "execution": {
+    "init_cash": 10000.0,
+    "fees": 0.0004,
+    "slippage": 0.0001
+  },
+  "instances": [
+    {
+      "instance_id": "phase3b_perf_current_base_stability_1h_2p5_10_adx40_runner_rsi90_10_plus_ema100_200_fee04",
+      "variant": "phase3b_perf_current_base_stability_1h_2p5_10_adx40_runner_rsi90_10_plus_ema100_200_fee04",
+      "market": {
+        "symbol": "BTCUSDT",
+        "base_timeframe": "5m"
+      },
+      "strategy": {
+        "trade_sides": [
+          "long",
+          "short"
+        ],
+        "anchor_stack": {
+          "source": "close",
+          "timeframe": "base",
+          "fast": 100,
+          "anchor": 200,
+          "slow": 496
+        },
+        "direction": {
+          "component_id": "ema_anchor_stack_trend"
+        },
+        "setups": [
+          {
+            "instance_id": "width_base_w11_r12_lb20",
+            "component_id": "anchor_stack_width_setup",
+            "atr_timeframe": "base",
+            "atr_period": 14,
+            "min_current_width_atr": 11.0,
+            "min_recent_width_atr": 12.0,
+            "width_lookback_bars": 20
+          },
+          {
+            "instance_id": "untouched_ulb75_ab8",
+            "component_id": "untouched_anchor_setup",
+            "lookback": 75,
+            "active_bars": 8
+          }
+        ],
+        "trigger": {
+          "component_id": "touch_anchor"
+        },
+        "blockers": [
+          {
+            "instance_id": "no_blockers",
+            "component_id": "no_blockers"
+          }
+        ],
+        "risk": {
+          "component_id": "no_risk_filter"
+        },
+        "contexts": {},
+        "trade_management": {
+          "exit_policy": {
+            "always_on": {
+              "exits": [
+                {
+                  "instance_id": "initial_sl_1h_2p5",
+                  "component_id": "atr_stop_loss",
+                  "distance": {
+                    "timeframe": "1h",
+                    "period": 14,
+                    "multiplier": 2.5
+                  }
+                },
+                {
+                  "instance_id": "initial_tp_1h_10",
+                  "component_id": "atr_take_profit",
+                  "distance": {
+                    "timeframe": "1h",
+                    "period": 14,
+                    "multiplier": 10.0
+                  }
+                }
+              ]
+            },
+            "profiles": {
+              "aligned": {
+                "exits": []
+              },
+              "countertrend": {
+                "exits": []
+              },
+              "neutral": {
+                "exits": []
+              }
+            }
+          },
+          "exit_management": {
+            "mode": "managed",
+            "phase_rules": [
+              {
+                "rule_id": "runner_5m_adx_di_40",
+                "to_phase": "runner",
+                "condition": {
+                  "component_id": "adx_di_threshold",
+                  "params": {
+                    "timeframe": "base",
+                    "period": 14,
+                    "adx_threshold": 40.0,
+                    "require_di_alignment": true
+                  }
+                }
+              }
+            ],
+            "stop_management": [],
+            "take_management": [
+              {
+                "rule_id": "disable_initial_tp_at_runner_adx_40",
+                "component_id": "take_profile_switch",
+                "activate_when": {
+                  "phase_at_least": "runner"
+                },
+                "params": {
+                  "action": "disable_initial_tp"
+                }
+              }
+            ],
+            "runtime_exits": [
+              {
+                "rule_id": "runner_rsi90_10_take",
+                "component_id": "rsi_signal_exit",
+                "role": "exit_management.runtime_exit",
+                "activate_when": {
+                  "phase_at_least": "runner"
+                },
+                "exit_kind": "take_profit",
+                "params": {
+                  "rsi": {
+                    "timeframe": "base",
+                    "period": 14
+                  },
+                  "long_exit_above": 90.0,
+                  "short_exit_below": 10.0,
+                  "confirm_bars": 1
+                }
+              },
+              {
+                "rule_id": "runner_ema100_200_cross_protect",
+                "component_id": "ema_cross_loss_exit",
+                "role": "exit_management.runtime_exit",
+                "activate_when": {
+                  "phase_at_least": "runner"
+                },
+                "exit_kind": "protective_exit",
+                "params": {
+                  "fast_ema": {
+                    "timeframe": "base",
+                    "source": "close",
+                    "period": 100
+                  },
+                  "slow_ema": {
+                    "timeframe": "base",
+                    "source": "close",
+                    "period": 200
+                  },
+                  "confirm_bars": 1
+                }
+              }
+            ]
+          }
+        }
+      }
+    }
+  ]
+}

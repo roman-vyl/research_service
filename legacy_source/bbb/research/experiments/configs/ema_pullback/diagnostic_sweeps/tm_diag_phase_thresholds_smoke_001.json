@@ -1,0 +1,41 @@
+{
+  "experiment_id": "tm_diag_phase_thresholds_smoke_001",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Small diagnostic-only smoke batch for trade-management phases on current EMA200 favorites. Baselines plus relaxed/strict candidates with high MFE ATR phase thresholds. Diagnostics only; no behavior-changing exit management.",
+  "candidates": [
+    {
+      "candidate_id": "p10_smoke_relaxed_w9_r10_sl4_safetytp40_baseline_no_exit_mgmt",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/diagnostic_sweeps/p10_smoke_relaxed_w9_r10_sl4_safetytp40_baseline_no_exit_mgmt.json"
+    },
+    {
+      "candidate_id": "p10_smoke_strict_w12_r14_sl6_safetytp40_baseline_no_exit_mgmt",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/diagnostic_sweeps/p10_smoke_strict_w12_r14_sl6_safetytp40_baseline_no_exit_mgmt.json"
+    },
+    {
+      "candidate_id": "p10_smoke_relaxed_w9_r10_sl4_safetytp40_diag_atr3_6_9",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/diagnostic_sweeps/p10_smoke_relaxed_w9_r10_sl4_safetytp40_diag_atr3_6_9.json"
+    },
+    {
+      "candidate_id": "p10_smoke_relaxed_w9_r10_sl4_safetytp40_diag_atr4_8_12",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/diagnostic_sweeps/p10_smoke_relaxed_w9_r10_sl4_safetytp40_diag_atr4_8_12.json"
+    },
+    {
+      "candidate_id": "p10_smoke_relaxed_w9_r10_sl4_safetytp40_diag_atr5_10_15",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/diagnostic_sweeps/p10_smoke_relaxed_w9_r10_sl4_safetytp40_diag_atr5_10_15.json"
+    },
+    {
+      "candidate_id": "p10_smoke_strict_w12_r14_sl6_safetytp40_diag_atr3_6_9",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/diagnostic_sweeps/p10_smoke_strict_w12_r14_sl6_safetytp40_diag_atr3_6_9.json"
+    },
+    {
+      "candidate_id": "p10_smoke_strict_w12_r14_sl6_safetytp40_diag_atr4_8_12",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/diagnostic_sweeps/p10_smoke_strict_w12_r14_sl6_safetytp40_diag_atr4_8_12.json"
+    },
+    {
+      "candidate_id": "p10_smoke_strict_w12_r14_sl6_safetytp40_diag_atr5_10_15",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/diagnostic_sweeps/p10_smoke_strict_w12_r14_sl6_safetytp40_diag_atr5_10_15.json"
+    }
+  ]
+}

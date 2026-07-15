@@ -1,0 +1,33 @@
+{
+  "experiment_id": "width_phase8a2_ema200_1h_rsi_overheat_confirm2_sweep",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Optional Phase 8A.2: 1h RSI overheat exits with confirm_bars=2. Run only if loader accepts confirm_bars for rsi_signal_exit.",
+  "candidates": [
+    {
+      "candidate_id": "p8a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi1h70_30_c2",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi1h70_30_c2.json"
+    },
+    {
+      "candidate_id": "p8a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi1h75_25_c2",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi1h75_25_c2.json"
+    },
+    {
+      "candidate_id": "p8a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi1h80_20_c2",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi1h80_20_c2.json"
+    },
+    {
+      "candidate_id": "p8a_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi1h70_30_c2",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi1h70_30_c2.json"
+    },
+    {
+      "candidate_id": "p8a_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi1h75_25_c2",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi1h75_25_c2.json"
+    },
+    {
+      "candidate_id": "p8a_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi1h80_20_c2",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi1h80_20_c2.json"
+    }
+  ]
+}

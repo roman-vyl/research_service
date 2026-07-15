@@ -1,0 +1,64 @@
+schema_version: 1
+experiment_id: "ema_pullback_batch_001"
+family: "ema_pullback"
+
+execution:
+  init_cash: 10000.0
+  fees: 0.0006
+  slippage: 0.0001
+
+instances:
+
+  - instance_id: "exp_06_ema_50_200_500_rsi_exit"
+    variant: "exp_06_ema_50_200_500_rsi_exit"
+    market:
+      symbol: "BTCUSDT"
+      base_timeframe: "5m"
+    strategy:
+      trade_sides:
+        long: true
+        short: true
+      anchor_stack:
+        source: "close"
+        timeframe: "base"
+        fast: 200
+        anchor: 500
+        slow: 1000
+      direction:
+        component_id: "ema_anchor_stack_trend"
+      setup:
+        component_id: "pullback_to_anchor"
+        lookback: 3
+      trigger:
+        component_id: "touch_anchor"
+      blockers:
+        - instance_id: "rsi_base"
+          component_id: "rsi_extreme_blocker"
+          rsi:
+            timeframe: "5m"
+            period: 14
+          lookback: 20
+          long_min: 20
+          short_max: 80
+      risk:
+        component_id: "no_risk_filter"
+      exits:
+        - instance_id: "atr_sl_far"
+          component_id: "atr_stop_loss"
+          distance:
+            timeframe: "5m"
+            period: 14
+            multiplier: 2
+        - instance_id: "atr_tp_far"
+          component_id: "atr_take_profit"
+          distance:
+            timeframe: "base"
+            period: 14
+            multiplier: 500
+        - instance_id: "rsi_exit_base"
+          component_id: "rsi_signal_exit"
+          rsi:
+            timeframe: "5m"
+            period: 14
+          long_exit_above: 80
+          short_exit_below: 20

@@ -1,0 +1,40 @@
+{
+  "experiment_id": "batch_ema500_lb70_ema_cross_exit_sweep_001",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "candidates": [
+    {
+      "candidate_id": "ema500_lb70_sl6p5_a40_n20_c6p5_xema50_100_always_on",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_ema_cross_exit_sweep/ema500_lb70_sl6p5_a40_n20_c6p5_xema50_100_always_on.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_a40_n20_c6p5_xema100_200_always_on",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_ema_cross_exit_sweep/ema500_lb70_sl6p5_a40_n20_c6p5_xema100_200_always_on.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_a40_n20_c6p5_xema150_300_always_on",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_ema_cross_exit_sweep/ema500_lb70_sl6p5_a40_n20_c6p5_xema150_300_always_on.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_a40_n20_c6p5_xema200_500_always_on",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_ema_cross_exit_sweep/ema500_lb70_sl6p5_a40_n20_c6p5_xema200_500_always_on.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_a40_n20_c6p5_xema50_100_aligned",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_ema_cross_exit_sweep/ema500_lb70_sl6p5_a40_n20_c6p5_xema50_100_aligned.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_a40_n20_c6p5_xema100_200_aligned",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_ema_cross_exit_sweep/ema500_lb70_sl6p5_a40_n20_c6p5_xema100_200_aligned.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_a40_n20_c6p5_xema150_300_aligned",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_ema_cross_exit_sweep/ema500_lb70_sl6p5_a40_n20_c6p5_xema150_300_aligned.json"
+    },
+    {
+      "candidate_id": "ema500_lb70_sl6p5_a40_n20_c6p5_xema200_500_aligned",
+      "strategy_config_path": "research/experiments/specs/candidates/ema500_ema_cross_exit_sweep/ema500_lb70_sl6p5_a40_n20_c6p5_xema200_500_aligned.json"
+    }
+  ]
+}

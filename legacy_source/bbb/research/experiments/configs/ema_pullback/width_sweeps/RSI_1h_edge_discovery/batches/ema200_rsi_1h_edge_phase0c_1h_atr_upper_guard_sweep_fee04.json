@@ -1,0 +1,437 @@
+{
+  "experiment_id": "ema200_rsi_1h_edge_phase0c_1h_atr_upper_guard_sweep_fee04",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Phase 0C for RSI_1h_edge_discovery: upper guard sweep after Phase 0B found relaxed_known optimum near the upper boundary at 2.45/2.50. Relaxed is swept 2.50..3.00 step 0.05; strict has sparse control points.",
+  "notes": [
+    "Phase 0 coarse grid found relaxed_known 1hATR 2.0/2.0 as the best corrected coarse ruler.",
+    "Phase 0B fine grid found relaxed_known 1hATR 2.45/2.45 as best, with 2.50 close behind; the optimum may be above the previous boundary.",
+    "This Phase 0C batch checks whether 2.45/2.50 is a local top or whether wider 1h ATR rails keep improving.",
+    "No RSI blocker, RSI gate, ADX runner, runtime exits, BE, partial TP, trailing, HTF context, or asymmetric rails are included.",
+    "Width setup remains normalized by base ATR to isolate the exit-distance multiplier/timeframe.",
+    "If 2.50..3.00 keeps improving, treat the ruler as a wider continuation rail and decide whether that is acceptable before Phase 1."
+  ],
+  "candidates": [
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p5_tp2p5_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0c_1h_atr_upper_guard_sweep/relaxed_known_sym_1hatr_sl2p5_tp2p5_fee04.json",
+      "metadata": {
+        "phase": "0C",
+        "purpose": "1h_atr_upper_guard_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0B main winner around 2.45/2.50.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.5,
+        "tp_atr_1h": 2.5,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0c",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p55_tp2p55_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0c_1h_atr_upper_guard_sweep/relaxed_known_sym_1hatr_sl2p55_tp2p55_fee04.json",
+      "metadata": {
+        "phase": "0C",
+        "purpose": "1h_atr_upper_guard_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0B main winner around 2.45/2.50.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.55,
+        "tp_atr_1h": 2.55,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0c",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p6_tp2p6_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0c_1h_atr_upper_guard_sweep/relaxed_known_sym_1hatr_sl2p6_tp2p6_fee04.json",
+      "metadata": {
+        "phase": "0C",
+        "purpose": "1h_atr_upper_guard_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0B main winner around 2.45/2.50.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.6,
+        "tp_atr_1h": 2.6,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0c",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p65_tp2p65_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0c_1h_atr_upper_guard_sweep/relaxed_known_sym_1hatr_sl2p65_tp2p65_fee04.json",
+      "metadata": {
+        "phase": "0C",
+        "purpose": "1h_atr_upper_guard_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0B main winner around 2.45/2.50.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.65,
+        "tp_atr_1h": 2.65,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0c",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p7_tp2p7_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0c_1h_atr_upper_guard_sweep/relaxed_known_sym_1hatr_sl2p7_tp2p7_fee04.json",
+      "metadata": {
+        "phase": "0C",
+        "purpose": "1h_atr_upper_guard_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0B main winner around 2.45/2.50.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.7,
+        "tp_atr_1h": 2.7,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0c",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p75_tp2p75_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0c_1h_atr_upper_guard_sweep/relaxed_known_sym_1hatr_sl2p75_tp2p75_fee04.json",
+      "metadata": {
+        "phase": "0C",
+        "purpose": "1h_atr_upper_guard_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0B main winner around 2.45/2.50.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.75,
+        "tp_atr_1h": 2.75,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0c",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p8_tp2p8_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0c_1h_atr_upper_guard_sweep/relaxed_known_sym_1hatr_sl2p8_tp2p8_fee04.json",
+      "metadata": {
+        "phase": "0C",
+        "purpose": "1h_atr_upper_guard_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0B main winner around 2.45/2.50.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.8,
+        "tp_atr_1h": 2.8,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0c",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p85_tp2p85_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0c_1h_atr_upper_guard_sweep/relaxed_known_sym_1hatr_sl2p85_tp2p85_fee04.json",
+      "metadata": {
+        "phase": "0C",
+        "purpose": "1h_atr_upper_guard_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0B main winner around 2.45/2.50.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.85,
+        "tp_atr_1h": 2.85,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0c",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p9_tp2p9_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0c_1h_atr_upper_guard_sweep/relaxed_known_sym_1hatr_sl2p9_tp2p9_fee04.json",
+      "metadata": {
+        "phase": "0C",
+        "purpose": "1h_atr_upper_guard_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0B main winner around 2.45/2.50.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.9,
+        "tp_atr_1h": 2.9,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0c",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl2p95_tp2p95_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0c_1h_atr_upper_guard_sweep/relaxed_known_sym_1hatr_sl2p95_tp2p95_fee04.json",
+      "metadata": {
+        "phase": "0C",
+        "purpose": "1h_atr_upper_guard_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0B main winner around 2.45/2.50.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.95,
+        "tp_atr_1h": 2.95,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0c",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "relaxed_known_sym_1hatr_sl3_tp3_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0c_1h_atr_upper_guard_sweep/relaxed_known_sym_1hatr_sl3_tp3_fee04.json",
+      "metadata": {
+        "phase": "0C",
+        "purpose": "1h_atr_upper_guard_sweep",
+        "setup_profile": "relaxed_known",
+        "setup_description": "Known relaxed medium/bounce width baseline; Phase 0B main winner around 2.45/2.50.",
+        "width": {
+          "current": 9.0,
+          "recent": 10.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 3.0,
+        "tp_atr_1h": 3.0,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0c",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl2p45_tp2p45_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0c_1h_atr_upper_guard_sweep/strict_known_sym_1hatr_sl2p45_tp2p45_fee04.json",
+      "metadata": {
+        "phase": "0C",
+        "purpose": "1h_atr_upper_guard_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; sparse control branch, not primary both-side ruler.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.45,
+        "tp_atr_1h": 2.45,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0c",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl2p5_tp2p5_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0c_1h_atr_upper_guard_sweep/strict_known_sym_1hatr_sl2p5_tp2p5_fee04.json",
+      "metadata": {
+        "phase": "0C",
+        "purpose": "1h_atr_upper_guard_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; sparse control branch, not primary both-side ruler.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.5,
+        "tp_atr_1h": 2.5,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0c",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl2p75_tp2p75_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0c_1h_atr_upper_guard_sweep/strict_known_sym_1hatr_sl2p75_tp2p75_fee04.json",
+      "metadata": {
+        "phase": "0C",
+        "purpose": "1h_atr_upper_guard_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; sparse control branch, not primary both-side ruler.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.75,
+        "tp_atr_1h": 2.75,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0c",
+        "width_atr_timeframe": "base"
+      }
+    },
+    {
+      "candidate_id": "strict_known_sym_1hatr_sl3_tp3_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase0c_1h_atr_upper_guard_sweep/strict_known_sym_1hatr_sl3_tp3_fee04.json",
+      "metadata": {
+        "phase": "0C",
+        "purpose": "1h_atr_upper_guard_sweep",
+        "setup_profile": "strict_known",
+        "setup_description": "Known strict continuation width baseline; sparse control branch, not primary both-side ruler.",
+        "width": {
+          "current": 12.0,
+          "recent": 14.0,
+          "lookback": 20
+        },
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 3.0,
+        "tp_atr_1h": 3.0,
+        "rail_shape": "symmetric_1h_atr",
+        "rsi_active_filter": false,
+        "rsi_1h_usage": "future_diagnostic_not_active_in_phase0c",
+        "width_atr_timeframe": "base"
+      }
+    }
+  ]
+}

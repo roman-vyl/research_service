@@ -1,0 +1,49 @@
+{
+  "experiment_id": "width_phase8a_ema200_1h_rsi_overheat_exit_sweep",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Phase 8A: 1h RSI overheat signal exits on relaxed/strict EMA200 diagnostic baselines. Loader-format configs only. ATR TP is a far safety cap, not the primary profit target.",
+  "candidates": [
+    {
+      "candidate_id": "p8a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_control_no_signal_exit",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_control_no_signal_exit.json"
+    },
+    {
+      "candidate_id": "p8a_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_control_no_signal_exit",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_control_no_signal_exit.json"
+    },
+    {
+      "candidate_id": "p8a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi1h65_35",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi1h65_35.json"
+    },
+    {
+      "candidate_id": "p8a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi1h70_30",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi1h70_30.json"
+    },
+    {
+      "candidate_id": "p8a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi1h75_25",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi1h75_25.json"
+    },
+    {
+      "candidate_id": "p8a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi1h80_20",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_safetytp40_rsi1h80_20.json"
+    },
+    {
+      "candidate_id": "p8a_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi1h65_35",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi1h65_35.json"
+    },
+    {
+      "candidate_id": "p8a_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi1h70_30",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi1h70_30.json"
+    },
+    {
+      "candidate_id": "p8a_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi1h75_25",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi1h75_25.json"
+    },
+    {
+      "candidate_id": "p8a_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi1h80_20",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p8a_strict_w12_r14_wlb20_ulb75_ab8_sl6_safetytp40_rsi1h80_20.json"
+    }
+  ]
+}

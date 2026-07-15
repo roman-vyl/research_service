@@ -1,0 +1,18 @@
+{
+  "experiment_id": "exit_management_runner_rsi_ema_runtime_smoke_batch",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Single-candidate smoke for exit_management.runtime_exit using reusable rsi_signal_exit and ema_cross_loss_exit after runner.",
+  "candidates": [
+    {
+      "candidate_id": "strict_adx40_runner_runtime_rsi90_ema100_200_smoke",
+      "strategy_config_path": "research/experiments/specs/smoke/exit_management_runner_rsi_ema_runtime_smoke_local.json",
+      "metadata": {
+        "purpose": "checkpoint_market_smoke",
+        "fees": 0.0004,
+        "expected": "runtime exits before runner must be zero; runtime_exit_breakdown should include rsi_signal_exit and/or ema_cross_loss_exit if runner trades reach those conditions"
+      }
+    }
+  ]
+}

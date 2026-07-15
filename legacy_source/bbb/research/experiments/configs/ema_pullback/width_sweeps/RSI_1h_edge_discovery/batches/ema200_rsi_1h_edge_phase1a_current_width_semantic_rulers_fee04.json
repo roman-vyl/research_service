@@ -1,0 +1,1337 @@
+{
+  "experiment_id": "ema200_rsi_1h_edge_phase1a_current_width_semantic_rulers_fee04",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Phase 1A for RSI_1h_edge_discovery: current-width sweep under lower semantic 1h ATR rulers selected from Phase 0E. This tests where anchor-stack width creates EMA200-compatible entry edge.",
+  "notes": [
+    "Phase 0 concluded that 1hATR 1.90-2.35 is the lower semantic EMA200-compatible zone.",
+    "Phase 1A intentionally excludes transition comparators 2.45/2.50 and wide continuation comparators 3.75/4.0.",
+    "Only relaxed-style branch is used first: recent width 10, width lookback 20, untouched75/active8.",
+    "The only swept parameter is min_current_width_atr.",
+    "No RSI blocker, RSI gate, ADX runner, runtime exits, BE, partial TP, trailing, HTF context, or asymmetric rails are included.",
+    "Question: under lower semantic 1h ATR rails, which current-width zone creates real entry edge?"
+  ],
+  "candidates": [
+    {
+      "candidate_id": "phase1a_semantic_conservative_w6_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_conservative_w6_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_conservative",
+        "rail_role": "A1 conservative semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.9,
+        "tp_atr_1h": 1.9,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 2817,
+          "pf": 1.089,
+          "maxdd": -0.153,
+          "long_pf": 1.109,
+          "short_pf": 1.068
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 6.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_conservative_w7_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_conservative_w7_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_conservative",
+        "rail_role": "A1 conservative semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.9,
+        "tp_atr_1h": 1.9,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 2817,
+          "pf": 1.089,
+          "maxdd": -0.153,
+          "long_pf": 1.109,
+          "short_pf": 1.068
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 7.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_conservative_w8_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_conservative_w8_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_conservative",
+        "rail_role": "A1 conservative semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.9,
+        "tp_atr_1h": 1.9,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 2817,
+          "pf": 1.089,
+          "maxdd": -0.153,
+          "long_pf": 1.109,
+          "short_pf": 1.068
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 8.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_conservative_w9_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_conservative_w9_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_conservative",
+        "rail_role": "A1 conservative semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.9,
+        "tp_atr_1h": 1.9,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 2817,
+          "pf": 1.089,
+          "maxdd": -0.153,
+          "long_pf": 1.109,
+          "short_pf": 1.068
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 9.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_conservative_w10_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_conservative_w10_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_conservative",
+        "rail_role": "A1 conservative semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.9,
+        "tp_atr_1h": 1.9,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 2817,
+          "pf": 1.089,
+          "maxdd": -0.153,
+          "long_pf": 1.109,
+          "short_pf": 1.068
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 10.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_conservative_w11_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_conservative_w11_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_conservative",
+        "rail_role": "A1 conservative semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.9,
+        "tp_atr_1h": 1.9,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 2817,
+          "pf": 1.089,
+          "maxdd": -0.153,
+          "long_pf": 1.109,
+          "short_pf": 1.068
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 11.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_conservative_w12_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_conservative_w12_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_conservative",
+        "rail_role": "A1 conservative semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.9,
+        "tp_atr_1h": 1.9,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 2817,
+          "pf": 1.089,
+          "maxdd": -0.153,
+          "long_pf": 1.109,
+          "short_pf": 1.068
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 12.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_conservative_w13_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_conservative_w13_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_conservative",
+        "rail_role": "A1 conservative semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.9,
+        "tp_atr_1h": 1.9,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 2817,
+          "pf": 1.089,
+          "maxdd": -0.153,
+          "long_pf": 1.109,
+          "short_pf": 1.068
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 13.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_conservative_w14_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_conservative_w14_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_conservative",
+        "rail_role": "A1 conservative semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.9,
+        "tp_atr_1h": 1.9,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 2817,
+          "pf": 1.089,
+          "maxdd": -0.153,
+          "long_pf": 1.109,
+          "short_pf": 1.068
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 14.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_conservative_w16_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_conservative_w16_r10_lb20_sym_1hatr_sl1p9_tp1p9_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_conservative",
+        "rail_role": "A1 conservative semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 1.9,
+        "tp_atr_1h": 1.9,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 2817,
+          "pf": 1.089,
+          "maxdd": -0.153,
+          "long_pf": 1.109,
+          "short_pf": 1.068
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 16.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_primary_w6_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_primary_w6_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_primary",
+        "rail_role": "A2 primary semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.15,
+        "tp_atr_1h": 2.15,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3697,
+          "pf": 1.108,
+          "maxdd": -0.2,
+          "long_pf": 1.146,
+          "short_pf": 1.071
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 6.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_primary_w7_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_primary_w7_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_primary",
+        "rail_role": "A2 primary semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.15,
+        "tp_atr_1h": 2.15,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3697,
+          "pf": 1.108,
+          "maxdd": -0.2,
+          "long_pf": 1.146,
+          "short_pf": 1.071
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 7.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_primary_w8_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_primary_w8_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_primary",
+        "rail_role": "A2 primary semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.15,
+        "tp_atr_1h": 2.15,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3697,
+          "pf": 1.108,
+          "maxdd": -0.2,
+          "long_pf": 1.146,
+          "short_pf": 1.071
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 8.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_primary_w9_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_primary_w9_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_primary",
+        "rail_role": "A2 primary semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.15,
+        "tp_atr_1h": 2.15,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3697,
+          "pf": 1.108,
+          "maxdd": -0.2,
+          "long_pf": 1.146,
+          "short_pf": 1.071
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 9.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_primary_w10_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_primary_w10_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_primary",
+        "rail_role": "A2 primary semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.15,
+        "tp_atr_1h": 2.15,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3697,
+          "pf": 1.108,
+          "maxdd": -0.2,
+          "long_pf": 1.146,
+          "short_pf": 1.071
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 10.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_primary_w11_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_primary_w11_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_primary",
+        "rail_role": "A2 primary semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.15,
+        "tp_atr_1h": 2.15,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3697,
+          "pf": 1.108,
+          "maxdd": -0.2,
+          "long_pf": 1.146,
+          "short_pf": 1.071
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 11.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_primary_w12_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_primary_w12_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_primary",
+        "rail_role": "A2 primary semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.15,
+        "tp_atr_1h": 2.15,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3697,
+          "pf": 1.108,
+          "maxdd": -0.2,
+          "long_pf": 1.146,
+          "short_pf": 1.071
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 12.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_primary_w13_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_primary_w13_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_primary",
+        "rail_role": "A2 primary semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.15,
+        "tp_atr_1h": 2.15,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3697,
+          "pf": 1.108,
+          "maxdd": -0.2,
+          "long_pf": 1.146,
+          "short_pf": 1.071
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 13.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_primary_w14_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_primary_w14_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_primary",
+        "rail_role": "A2 primary semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.15,
+        "tp_atr_1h": 2.15,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3697,
+          "pf": 1.108,
+          "maxdd": -0.2,
+          "long_pf": 1.146,
+          "short_pf": 1.071
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 14.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_primary_w16_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_primary_w16_r10_lb20_sym_1hatr_sl2p15_tp2p15_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_primary",
+        "rail_role": "A2 primary semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.15,
+        "tp_atr_1h": 2.15,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3697,
+          "pf": 1.108,
+          "maxdd": -0.2,
+          "long_pf": 1.146,
+          "short_pf": 1.071
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 16.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_upper_w6_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_upper_w6_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_upper",
+        "rail_role": "A3 upper semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.35,
+        "tp_atr_1h": 2.35,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3878,
+          "pf": 1.102,
+          "maxdd": -0.219,
+          "long_pf": 1.105,
+          "short_pf": 1.098
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 6.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_upper_w7_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_upper_w7_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_upper",
+        "rail_role": "A3 upper semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.35,
+        "tp_atr_1h": 2.35,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3878,
+          "pf": 1.102,
+          "maxdd": -0.219,
+          "long_pf": 1.105,
+          "short_pf": 1.098
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 7.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_upper_w8_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_upper_w8_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_upper",
+        "rail_role": "A3 upper semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.35,
+        "tp_atr_1h": 2.35,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3878,
+          "pf": 1.102,
+          "maxdd": -0.219,
+          "long_pf": 1.105,
+          "short_pf": 1.098
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 8.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_upper_w9_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_upper_w9_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_upper",
+        "rail_role": "A3 upper semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.35,
+        "tp_atr_1h": 2.35,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3878,
+          "pf": 1.102,
+          "maxdd": -0.219,
+          "long_pf": 1.105,
+          "short_pf": 1.098
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 9.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_upper_w10_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_upper_w10_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_upper",
+        "rail_role": "A3 upper semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.35,
+        "tp_atr_1h": 2.35,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3878,
+          "pf": 1.102,
+          "maxdd": -0.219,
+          "long_pf": 1.105,
+          "short_pf": 1.098
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 10.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_upper_w11_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_upper_w11_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_upper",
+        "rail_role": "A3 upper semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.35,
+        "tp_atr_1h": 2.35,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3878,
+          "pf": 1.102,
+          "maxdd": -0.219,
+          "long_pf": 1.105,
+          "short_pf": 1.098
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 11.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_upper_w12_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_upper_w12_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_upper",
+        "rail_role": "A3 upper semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.35,
+        "tp_atr_1h": 2.35,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3878,
+          "pf": 1.102,
+          "maxdd": -0.219,
+          "long_pf": 1.105,
+          "short_pf": 1.098
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 12.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_upper_w13_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_upper_w13_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_upper",
+        "rail_role": "A3 upper semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.35,
+        "tp_atr_1h": 2.35,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3878,
+          "pf": 1.102,
+          "maxdd": -0.219,
+          "long_pf": 1.105,
+          "short_pf": 1.098
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 13.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_upper_w14_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_upper_w14_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_upper",
+        "rail_role": "A3 upper semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.35,
+        "tp_atr_1h": 2.35,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3878,
+          "pf": 1.102,
+          "maxdd": -0.219,
+          "long_pf": 1.105,
+          "short_pf": 1.098
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 14.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    },
+    {
+      "candidate_id": "phase1a_semantic_upper_w16_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/RSI_1h_edge_discovery/candidates/phase1a_current_width_semantic_rulers/phase1a_semantic_upper_w16_r10_lb20_sym_1hatr_sl2p35_tp2p35_fee04.json",
+      "metadata": {
+        "phase": "1A",
+        "purpose": "current_width_sweep_under_lower_semantic_1hatr_rulers",
+        "rail_id": "semantic_upper",
+        "rail_role": "A3 upper semantic ruler",
+        "sl_atr_timeframe": "1h",
+        "tp_atr_timeframe": "1h",
+        "atr_period": 14,
+        "sl_atr_1h": 2.35,
+        "tp_atr_1h": 2.35,
+        "rail_shape": "symmetric_1h_atr",
+        "phase0_reference": {
+          "pnl": 3878,
+          "pf": 1.102,
+          "maxdd": -0.219,
+          "long_pf": 1.105,
+          "short_pf": 1.098
+        },
+        "branch": "relaxed_style",
+        "current_width_atr": 16.0,
+        "recent_width_atr": 10.0,
+        "width_lookback_bars": 20,
+        "untouched": {
+          "lookback": 75,
+          "active_bars": 8
+        },
+        "width_atr_timeframe": "base",
+        "rsi_active_filter": false,
+        "excluded": [
+          "RSI blocker",
+          "RSI gate",
+          "ADX runner",
+          "runtime exits",
+          "BE / lock",
+          "partial TP",
+          "trailing",
+          "HTF context",
+          "asymmetric rails"
+        ]
+      }
+    }
+  ]
+}

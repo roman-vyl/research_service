@@ -1,0 +1,97 @@
+{
+  "experiment_id": "width_phase7_ema200_mfe_depth_combined",
+  "family": "ema_pullback",
+  "symbol": "BTCUSDT",
+  "timeframe": "5m",
+  "description": "Phase 7 combined: Phase 7A TP extension + Phase 7B SL breathing-room diagnostic candidates.",
+  "candidates": [
+    {
+      "candidate_id": "p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp10",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp10.json"
+    },
+    {
+      "candidate_id": "p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp14.json"
+    },
+    {
+      "candidate_id": "p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp20",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp20.json"
+    },
+    {
+      "candidate_id": "p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp30",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp30.json"
+    },
+    {
+      "candidate_id": "p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp40",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp40.json"
+    },
+    {
+      "candidate_id": "p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp14",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp14.json"
+    },
+    {
+      "candidate_id": "p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp20",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp20.json"
+    },
+    {
+      "candidate_id": "p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp24",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp24.json"
+    },
+    {
+      "candidate_id": "p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp30",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp30.json"
+    },
+    {
+      "candidate_id": "p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp40",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7a_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp40.json"
+    },
+    {
+      "candidate_id": "p7b_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp30",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7b_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp30.json"
+    },
+    {
+      "candidate_id": "p7b_relaxed_w9_r10_wlb20_ulb75_ab8_sl5_tp30",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7b_relaxed_w9_r10_wlb20_ulb75_ab8_sl5_tp30.json"
+    },
+    {
+      "candidate_id": "p7b_relaxed_w9_r10_wlb20_ulb75_ab8_sl6_tp30",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7b_relaxed_w9_r10_wlb20_ulb75_ab8_sl6_tp30.json"
+    },
+    {
+      "candidate_id": "p7b_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp40",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7b_relaxed_w9_r10_wlb20_ulb75_ab8_sl4_tp40.json"
+    },
+    {
+      "candidate_id": "p7b_relaxed_w9_r10_wlb20_ulb75_ab8_sl5_tp40",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7b_relaxed_w9_r10_wlb20_ulb75_ab8_sl5_tp40.json"
+    },
+    {
+      "candidate_id": "p7b_relaxed_w9_r10_wlb20_ulb75_ab8_sl6_tp40",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7b_relaxed_w9_r10_wlb20_ulb75_ab8_sl6_tp40.json"
+    },
+    {
+      "candidate_id": "p7b_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp30",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7b_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp30.json"
+    },
+    {
+      "candidate_id": "p7b_strict_w12_r14_wlb20_ulb75_ab8_sl8_tp30",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7b_strict_w12_r14_wlb20_ulb75_ab8_sl8_tp30.json"
+    },
+    {
+      "candidate_id": "p7b_strict_w12_r14_wlb20_ulb75_ab8_sl10_tp30",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7b_strict_w12_r14_wlb20_ulb75_ab8_sl10_tp30.json"
+    },
+    {
+      "candidate_id": "p7b_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp40",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7b_strict_w12_r14_wlb20_ulb75_ab8_sl6_tp40.json"
+    },
+    {
+      "candidate_id": "p7b_strict_w12_r14_wlb20_ulb75_ab8_sl8_tp40",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7b_strict_w12_r14_wlb20_ulb75_ab8_sl8_tp40.json"
+    },
+    {
+      "candidate_id": "p7b_strict_w12_r14_wlb20_ulb75_ab8_sl10_tp40",
+      "strategy_config_path": "research/experiments/configs/ema_pullback/width_sweeps/p7b_strict_w12_r14_wlb20_ulb75_ab8_sl10_tp40.json"
+    }
+  ]
+}

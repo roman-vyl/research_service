@@ -1,0 +1,132 @@
+{
+  "schema_version": 1,
+  "experiment_id": "candidate_ema500_lb70_sl6p5_a40_n20_c6p5_rsi_exit_tf1h_80_20_always_on",
+  "family": "ema_pullback",
+  "execution": {
+    "init_cash": 10000.0,
+    "fees": 0.0006,
+    "slippage": 0.0001
+  },
+  "instances": [
+    {
+      "instance_id": "ema500_lb70_sl6p5_a40_n20_c6p5_rsi_exit_tf1h_80_20_always_on",
+      "variant": "ema500_lb70_sl6p5_a40_n20_c6p5_rsi_exit_tf1h_80_20_always_on",
+      "market": {
+        "symbol": "BTCUSDT",
+        "base_timeframe": "5m"
+      },
+      "strategy": {
+        "trade_sides": [
+          "long"
+        ],
+        "anchor_stack": {
+          "source": "close",
+          "timeframe": "base",
+          "fast": 200,
+          "anchor": 500,
+          "slow": 1000
+        },
+        "direction": {
+          "component_id": "ema_anchor_stack_trend"
+        },
+        "setup": {
+          "component_id": "untouched_anchor_setup",
+          "lookback": 70,
+          "active_bars": 3
+        },
+        "trigger": {
+          "component_id": "strong_reclaim_anchor",
+          "lookback": 3
+        },
+        "blockers": [
+          {
+            "instance_id": "no_blockers",
+            "component_id": "no_blockers"
+          }
+        ],
+        "risk": {
+          "component_id": "no_risk_filter"
+        },
+        "trade_management": {
+          "exit_policy": {
+            "always_on": {
+              "exits": [
+                {
+                  "instance_id": "atr_stop_loss_sl6p5",
+                  "component_id": "atr_stop_loss",
+                  "distance": {
+                    "timeframe": "base",
+                    "period": 14,
+                    "multiplier": 6.5
+                  }
+                },
+                {
+                  "instance_id": "rsi_exit_tf1h_p14_80_20_always_on",
+                  "component_id": "rsi_signal_exit",
+                  "rsi": {
+                    "timeframe": "1h",
+                    "period": 14
+                  },
+                  "long_exit_above": 80.0,
+                  "short_exit_below": 20.0
+                }
+              ]
+            },
+            "profiles": {
+              "aligned": {
+                "exits": [
+                  {
+                    "instance_id": "atr_take_profit_aligned_tp40",
+                    "component_id": "atr_take_profit",
+                    "distance": {
+                      "timeframe": "base",
+                      "period": 14,
+                      "multiplier": 40
+                    }
+                  }
+                ]
+              },
+              "neutral": {
+                "exits": [
+                  {
+                    "instance_id": "atr_take_profit_neutral_tp20",
+                    "component_id": "atr_take_profit",
+                    "distance": {
+                      "timeframe": "base",
+                      "period": 14,
+                      "multiplier": 20
+                    }
+                  }
+                ]
+              },
+              "countertrend": {
+                "exits": [
+                  {
+                    "instance_id": "atr_take_profit_countertrend_tp6p5",
+                    "component_id": "atr_take_profit",
+                    "distance": {
+                      "timeframe": "base",
+                      "period": 14,
+                      "multiplier": 6.5
+                    }
+                  }
+                ]
+              }
+            },
+            "context_ref": "htf"
+          }
+        },
+        "contexts": {
+          "htf": {
+            "component_id": "htf_context",
+            "timeframe": "4h",
+            "source": "close",
+            "fast_period": 20,
+            "anchor_period": 50,
+            "slow_period": 100
+          }
+        }
+      }
+    }
+  ]
+}
