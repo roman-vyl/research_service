@@ -47,13 +47,33 @@ Invalid versioned artifacts SHALL return a stable server error.
 - **THEN** the route returns a stable structured server error rather than a
   partially projected response.
 
+### Requirement: Summary reports the resolved market
+
+The run summary's `ticker`/`timeframe`/`from_ms`/`to_ms` fields SHALL come
+from the persisted Strategy Engine evaluation's resolved market, not the
+originally requested market.
+
+#### Scenario: Summary for a full_available run
+
+- **WHEN** a run's request specified `range_policy=full_available` and its
+  resolved market range differs from the originally requested range
+- **THEN** the run's list entry and summary report the resolved range, not
+  the originally requested one.
+
 ### Requirement: Direct projections
 
-Trades and metrics SHALL be direct projections of the persisted
-authoritative result.
+Trades SHALL be a direct projection of the persisted `result.json`
+(`accounting.trades`). Metrics SHALL be a direct projection of the persisted
+`metrics.json`. Neither is recalculated at read time.
 
-#### Scenario: Trades/metrics route
+#### Scenario: Trades route
 
-- **WHEN** the trades or metrics route is called for a run
+- **WHEN** the trades route is called for a run
 - **THEN** the response is read directly from that run's persisted
   `result.json`, with no recalculation.
+
+#### Scenario: Metrics route
+
+- **WHEN** the metrics route is called for a run
+- **THEN** the response is read directly from that run's persisted
+  `metrics.json`, with no recalculation.

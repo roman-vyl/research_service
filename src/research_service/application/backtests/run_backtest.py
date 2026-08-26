@@ -11,7 +11,7 @@ from research_service.application.backtests.history_window import ResolveBacktes
 from research_service.application.backtests.strategy_contract import (
     accept_strategy_execution_contract,
 )
-from research_service.domain.contracts import ManagedReplayRequest
+from research_service.domain.contracts import ManagedReplayRequest, MarketRange
 from research_service.domain.execution import PositionState
 from research_service.execution.loop import ManagedReplayProvider, run_unified_execution_loop
 from research_service.ports.market_data import MarketDataPort
@@ -52,7 +52,9 @@ class RunSingleInstanceBacktest:
         acceptance = accept_strategy_execution_contract(evaluation, market_frame)
 
         managed_provider = (
-            self._managed_provider(request) if request.managed_policy_enabled else None
+            self._managed_provider(request, window.market)
+            if request.managed_policy_enabled
+            else None
         )
         execution = run_unified_execution_loop(
             evaluation,
@@ -74,18 +76,24 @@ class RunSingleInstanceBacktest:
     def _managed_provider(
         self,
         request: SingleInstanceBacktestRequest,
+        resolved_market: MarketRange,
     ) -> ManagedReplayProvider:
         def evaluate(position: PositionState):
             # BBB v1 managed policy was anchored to the signal-bar close. The
             # entry fill may include Research-owned slippage, so pass the
             # reference price rather than the adjusted fill price.
+            #
+            # `resolved_market` (not `request.strategy.market`) so managed
+            # replay uses the same effective range as range evaluation and
+            # historical candle acquisition — under `full_available` those
+            # differ from the originally requested range.
             return self._strategy_engine.evaluate_managed_replay(
                 ManagedReplayRequest(
                     strategy_id=request.strategy.strategy_id,
                     strategy_version=request.strategy.strategy_version,
                     instance_id=request.strategy.instance_id,
                     strategy_spec=request.strategy.strategy_spec,
-                    market=request.strategy.market,
+                    market=resolved_market,
                     trade_id=position.position_id,
                     side=position.side,
                     entry_time_ms=position.entry_fill.time_ms,

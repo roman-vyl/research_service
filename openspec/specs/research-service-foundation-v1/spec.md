@@ -3,8 +3,8 @@
 ## Purpose
 
 Define the cross-cutting service composition contract: the installable
-package, its explicit external ports, its incomplete-capability contract,
-its stable error envelope, and its operational endpoints. Business-capability
+package, its explicit external ports, its stable error envelope, and its
+operational endpoints. Business-capability
 ownership is defined in `research-service-boundaries-v1`; per-route behavior
 is defined in each capability's own spec.
 
@@ -36,22 +36,12 @@ SHALL be accessed through `ArtifactStore`.
 - **THEN** it depends on the corresponding port interface, not on a concrete
   HTTP client or filesystem path directly.
 
-### Requirement: Honest incomplete capabilities
-
-Preserved routes without a completed semantic port SHALL return HTTP 501
-with `error=capability_not_ported`.
-
-#### Scenario: An unported route is called
-
-- **WHEN** a client calls a preserved Workbench route whose backing use case
-  is not yet implemented
-- **THEN** the response is HTTP 501 with `code=capability_not_ported` and no
-  legacy code executes and no fake-success payload is returned.
-
 ### Requirement: Stable error envelope
 
-Every non-2xx API response SHALL use the Research Service error envelope
-(`code`, `message`, `status_code`, and optional `details`).
+Every non-2xx API response SHALL use the Research Service error envelope:
+HTTP body fields `error` (the stable error code), `message`, `details`
+(an object, possibly empty), and `request_id`. The HTTP status line SHALL
+carry the status code; it SHALL NOT be duplicated as a body field.
 
 #### Scenario: An upstream service fails
 
@@ -59,6 +49,14 @@ Every non-2xx API response SHALL use the Research Service error envelope
   unavailable
 - **THEN** the Research Service response maps it through the same envelope
   shape rather than passing the raw upstream payload through.
+
+#### Scenario: A domain error is raised
+
+- **WHEN** any `ResearchServiceError` subclass is raised while handling a
+  request
+- **THEN** the response body is `{"error": ..., "message": ..., "details":
+  ..., "request_id": ...}` and the HTTP status line carries that error's
+  status code.
 
 ### Requirement: Operational endpoints
 

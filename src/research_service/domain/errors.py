@@ -14,16 +14,6 @@ class ResearchServiceError(Exception):
     details: dict[str, Any] | None = None
 
 
-class CapabilityNotPorted(ResearchServiceError):
-    def __init__(self, capability: str) -> None:
-        super().__init__(
-            code="capability_not_ported",
-            message=f"{capability} is preserved but not ported yet",
-            status_code=501,
-            details={"capability": capability},
-        )
-
-
 class UpstreamServiceError(ResearchServiceError):
     def __init__(
         self,

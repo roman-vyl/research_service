@@ -136,7 +136,10 @@ class ReadResearchRuns:
 
     @staticmethod
     def _summary(documents: _RunDocuments) -> RunSummary:
-        market = documents.request.strategy.market
+        # The resolved/effective market (not the as-requested market) —
+        # under `range_policy=full_available` the two differ, and the
+        # summary must report what was actually evaluated and executed.
+        market = documents.result.strategy_evaluation.market
         strategy = documents.request.strategy
         return RunSummary(
             run_id=documents.manifest.run_id,

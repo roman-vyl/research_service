@@ -2,10 +2,6 @@
 
 Independent research backend and Workbench BFF extracted from BBB.
 
-## Legacy reference source
-
-`legacy_source/bbb/` is an immutable, disconnected mirror of the original BBB research and BFF files. It is kept only for inspection, extraction audits and frozen parity fixtures. Production code under `src/research_service/` does not import it, runtime wiring does not load it, and no request executes it. The new Research Service is built as an independent authoritative service over Strategy Engine and Market Data Service APIs.
-
 ## Current status
 
 `research-service-foundation-v1` is implemented. The package provides:
@@ -14,8 +10,7 @@ Independent research backend and Workbench BFF extracted from BBB.
 - Strategy Engine and Market Data Service HTTP clients behind ports;
 - filesystem artifact-store boundary;
 - settings, wiring, health/readiness and stable errors;
-- explicit HTTP 501 for routes whose semantics have not yet been ported;
-- immutable BBB reference source under `legacy_source/bbb`.
+- explicit HTTP 501 for routes whose semantics have not yet been ported.
 
 ## Install
 
@@ -38,7 +33,7 @@ The browser talks only to Research Service. It never needs Strategy Engine or Ma
 
 ## Migrated BFF capability
 
-`GET /api/market/candles-window` is backed by Market Data Service. It preserves the BBB Workbench DTO, converts legacy `BTCUSDT` to canonical `BTCUSDT.P`, and returns only complete ready ranges. Other preserved market/research routes still return `501 capability_not_ported` until their vertical slices are implemented.
+`GET /api/market/candles-window` is backed by Market Data Service. It preserves the BBB Workbench DTO, converts legacy `BTCUSDT` to canonical `BTCUSDT.P`, and returns only complete ready ranges.
 
 ### EMA window
 
@@ -85,7 +80,7 @@ The Strategy Engine range and managed-replay clients now use the real nested wir
 
 ## Function-by-function rebuilding plan
 
-The authoritative staged extraction plan is `docs/21_research_service_function_porting_plan.md`. Each legacy Python call identified by the unified seam audit is replaced by a Strategy Engine/MDS contract plus a clean Research-owned implementation. `legacy_source` is never a runtime fallback.
+The authoritative staged extraction plan is `docs/21_research_service_function_porting_plan.md`. Each legacy Python call identified by the unified seam audit is replaced by a Strategy Engine/MDS contract plus a clean Research-owned implementation.
 
 ## Entry execution
 

@@ -6,7 +6,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from research_service.api.errors import install_error_handlers
-from research_service.api.routers import market, preserved, research, system
+from research_service.api.routers import market, research, system
 from research_service.application.backtests import (
     PersistSingleInstanceBacktest,
     ReadResearchRuns,
@@ -69,5 +69,4 @@ def create_app(
     app.include_router(system.router)
     app.include_router(market.router)
     app.include_router(research.router)
-    app.include_router(preserved.router)
     return app

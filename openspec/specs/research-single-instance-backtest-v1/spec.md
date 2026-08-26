@@ -38,6 +38,34 @@ Market identity and bar grid SHALL be accepted before any execution.
 - **THEN** market identity and bar-grid acceptance runs before any fill or
   accounting logic executes.
 
+### Requirement: Resolved evaluation window
+
+The use case SHALL resolve the requested market range into an effective
+window before evaluation: for `range_policy=explicit_range`, the requested
+range verified against Market Data Service's continuity audit; for
+`range_policy=full_available`, the full range reported by Market Data
+Service's stream bounds, verified the same way. The resolved window's
+market range and `market_data_hash` — not the originally requested range —
+SHALL be used for every downstream stage of that backtest: Strategy Engine
+range evaluation, historical candle acquisition, and managed-replay
+requests.
+
+#### Scenario: full_available resolves a wider effective range
+
+- **WHEN** a request specifies `range_policy=full_available` with a narrower
+  requested range than the ticker/timeframe's full available history
+- **THEN** the resolved window covers the full available range, and
+  Strategy Engine evaluation, historical candle acquisition, and every
+  managed-replay request for that backtest all use that resolved range, not
+  the originally requested one.
+
+#### Scenario: Continuity audit fails
+
+- **WHEN** Market Data Service's continuity audit for the resolved range
+  reports a gap or a candle count that does not match the range
+- **THEN** the backtest is rejected before Strategy Engine evaluation
+  begins.
+
 ### Requirement: Strategy Engine contract acceptance
 
 The Strategy Engine response SHALL be rejected when it omits any of the

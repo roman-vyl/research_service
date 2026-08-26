@@ -43,15 +43,30 @@ milliseconds to Unix seconds.
 ### Requirement: Cache behavior
 
 The BFF SHALL retain a process-local cache keyed by ticker, timeframe, and
-period, report `cache_hit`, and request only a missing right-edge suffix
-when extending cached coverage.
+period. `cache_hit` SHALL be true only when the requested range is fully
+covered by the existing cache entry and the request requires no Strategy
+Engine call. A request that extends the right edge of a previously cached
+window SHALL request only the missing suffix from Strategy Engine, reusing
+the cached prefix, but SHALL report `cache_hit=false` — it still required an
+upstream call.
 
-#### Scenario: Extending a cached window
+#### Scenario: Cold miss
 
-- **WHEN** a later request extends the right edge of a previously cached
-  ticker/timeframe/period window
-- **THEN** only the missing suffix is requested from Strategy Engine and
-  `cache_hit` reflects whether any cached data was reused.
+- **WHEN** no cache entry exists yet for the ticker/timeframe/period
+- **THEN** the full requested range is fetched from Strategy Engine and
+  `cache_hit` is `false`.
+
+#### Scenario: Full cache hit
+
+- **WHEN** a cache entry already covers the entire requested range
+- **THEN** no Strategy Engine call is made and `cache_hit` is `true`.
+
+#### Scenario: Right-edge extension is not a cache hit
+
+- **WHEN** a cache entry covers only a prefix of the requested range
+- **THEN** only the missing right-edge suffix is requested from Strategy
+  Engine, the response combines the cached prefix with the fetched suffix,
+  and `cache_hit` is `false`.
 
 ### Requirement: Honest origin metadata
 

@@ -29,18 +29,6 @@ trigger audit, repair, or bootstrap.
   `available_to_ms` (exclusive) from one consistent snapshot, and no audit
   or repair is triggered by the read.
 
-### Requirement: Research range policy
-
-Research Service SHALL own selection of the requested evaluation range. A
-`full_available` policy SHALL be resolved through Market Data Service
-coverage before Strategy Engine evaluation begins.
-
-#### Scenario: full_available policy resolution
-
-- **WHEN** a run request specifies `range_policy=full_available`
-- **THEN** Research Service resolves it to a concrete half-open range from
-  Market Data Service coverage before calling Strategy Engine.
-
 ### Requirement: Strategy-owned warmup
 
 Strategy Engine SHALL derive required warmup from the validated strategy
@@ -105,16 +93,20 @@ chart-indicator origins rather than the first arbitrary BFF request.
 
 ### Requirement: Deferred coordinated implementation
 
-This specification SHALL remain planned and unimplemented until the
-current Research Service BFF and backend cutover reaches its final
-integration phases. Implementation SHALL be coordinated across Market Data
-Service, Strategy Engine, and Research Service rather than partially
-activated in only one service.
+The requirements in this change that depend on Strategy Engine or Market
+Data Service behavior SHALL remain planned and unimplemented until those
+services' matching halves exist, coordinated across all three services
+rather than partially activated in only one. Research Service's own range
+resolution and Market Data Service acquisition (`explicit_range` /
+`full_available`, continuity audit, `market_data_hash` verification) are no
+longer part of this deferred scope — they are current, implemented
+Research Service behavior; see `research-single-instance-backtest-v1`.
 
 #### Scenario: Partial single-service activation
 
-- **WHEN** any one of the three services considers implementing its part of
-  this contract alone
-- **THEN** it does not activate that behavior until the other two services'
+- **WHEN** any one of the three services considers implementing a
+  Strategy-Engine-warmup or Market-Data-Service-coverage-contract
+  requirement from this change alone
+- **THEN** it does not activate that behavior until the other services'
   matching halves are ready, per the coordinated rollout this change
   defines.
