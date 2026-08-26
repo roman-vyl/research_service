@@ -1,2 +1,12 @@
 research_service.zip
 src/*.egg-info/
+*.egg-info/
+__pycache__/
+dist/
+build/
+.DS_Store
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+var/
