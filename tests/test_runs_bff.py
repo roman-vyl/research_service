@@ -27,7 +27,7 @@ from test_single_instance_backtest import (
 
 
 def _container(tmp_path: Path) -> Container:
-    settings = Settings(artifacts_root=tmp_path)
+    settings = Settings(artifacts_root=tmp_path, configs_root=tmp_path / "configs")
     return Container(
         settings=settings,
         strategy_engine=FakeStrategyEngine(strategy_result()),
@@ -133,6 +133,48 @@ def test_valid_json_tampering_is_rejected_by_manifest_hash(tmp_path: Path) -> No
     assert response.status_code == 500
     assert response.json()["error"] == "invalid_run_artifact"
     assert "mismatch" in response.json()["message"]
+
+
+def test_summary_reports_resolved_market_not_requested_market(tmp_path: Path) -> None:
+    resolved_market = market_frame().market
+    narrow_requested_market = resolved_market.model_copy(
+        update={"from_ms": 300_000, "to_ms": 600_000}
+    )
+    narrow_request = strategy_request().model_copy(update={"market": narrow_requested_market})
+    run_id = "full-available-run"
+    request = SingleInstanceBacktestRequest(
+        run_id=run_id,
+        strategy=narrow_request,
+        range_policy="full_available",
+        execution=ExecutionPolicy(quantity=Decimal("2")),
+        accounting=AccountingPolicy(
+            initial_equity=Decimal("10.00"),
+            entry_fee_rate=Decimal("0.001"),
+            exit_fee_rate=Decimal("0.001"),
+        ),
+        managed_policy_enabled=False,
+    )
+    container = Container(
+        settings=Settings(artifacts_root=tmp_path, configs_root=tmp_path / "configs"),
+        strategy_engine=FakeStrategyEngine(strategy_result(market=resolved_market)),
+        market_data=FakeMarketData(market_frame()),
+        artifacts=FilesystemArtifactStore(tmp_path),
+    )
+    result = RunSingleInstanceBacktest(
+        container.strategy_engine,
+        container.market_data,
+    ).execute(request)
+    PersistSingleInstanceBacktest(container.artifacts).execute(request, result)
+
+    client = TestClient(create_app(container.settings, container))
+    listed = client.get("/api/research/runs")
+    summary = client.get(f"/api/research/runs/{run_id}/summary")
+
+    assert narrow_requested_market != resolved_market
+    assert listed.json()[0]["from_ms"] == resolved_market.from_ms
+    assert listed.json()[0]["to_ms"] == resolved_market.to_ms
+    assert summary.json()["summary"]["from_ms"] == resolved_market.from_ms
+    assert summary.json()["summary"]["to_ms"] == resolved_market.to_ms
 
 
 def test_runs_routes_are_declared_once(tmp_path: Path) -> None:

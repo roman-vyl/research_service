@@ -38,7 +38,7 @@ class ArtifactStore:
 
 
 def make_client(tmp_path: Path, strategy: FakeStrategyEngine) -> TestClient:
-    settings = Settings(artifacts_root=tmp_path)
+    settings = Settings(artifacts_root=tmp_path, configs_root=tmp_path / "configs")
     return TestClient(
         create_app(
             settings,
@@ -98,6 +98,38 @@ def test_ema_window_second_slice_is_cache_hit(tmp_path: Path) -> None:
     assert second.status_code == 200
     assert second.json()["coverage"]["cache_hit"] is True
     assert len(strategy.calls) == 1
+
+
+def test_ema_window_right_edge_extension_is_not_a_cache_hit(tmp_path: Path) -> None:
+    strategy = FakeStrategyEngine()
+    client = make_client(tmp_path, strategy)
+    first = client.get(
+        "/api/market/ema-window",
+        params={
+            "symbol": "BTCUSDT.P",
+            "timeframe": "5m",
+            "period": 10,
+            "from": 0,
+            "to": 600_000,
+        },
+    )
+    assert first.status_code == 200
+    extended = client.get(
+        "/api/market/ema-window",
+        params={
+            "symbol": "BTCUSDT.P",
+            "timeframe": "5m",
+            "period": 10,
+            "from": 0,
+            "to": 900_000,
+        },
+    )
+    assert extended.status_code == 200
+    assert extended.json()["coverage"]["cache_hit"] is False
+    assert len(strategy.calls) == 2
+    second_market, _ = strategy.calls[1]
+    assert (second_market.from_ms, second_market.to_ms) == (600_000, 900_000)
+    assert [point["time"] for point in extended.json()["points"]] == [0, 300, 600]
 
 
 def test_ema_window_rejects_unsupported_origin_policy(tmp_path: Path) -> None:

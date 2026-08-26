@@ -11,6 +11,7 @@ from research_service.domain.execution import (
     EntryDecision,
     EntryFill,
     ExecutionPolicy,
+    ExecutionSide,
     PositionState,
 )
 from research_service.execution.protection import (
@@ -51,7 +52,7 @@ def entry_decision_at(
     long_entries = _entry_series(evaluation, "long")
     short_entries = _entry_series(evaluation, "short")
 
-    side: str | None = None
+    side: ExecutionSide | None = None
     if long_entries[bar_index] and protection_ready_at(
         evaluation, side="long", bar_index=bar_index
     ):

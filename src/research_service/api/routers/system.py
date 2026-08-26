@@ -13,13 +13,13 @@ def health() -> dict[str, str]:
     return {"status": "ok"}
 
 
-@router.get("/readiness")
-def readiness(request: Request):
+@router.get("/readiness", response_model=None)
+def readiness(request: Request) -> dict[str, object] | JSONResponse:
     container = request.app.state.container
     strategy_ok = container.strategy_engine.health()
     market_ok = container.market_data.health()
     ready = strategy_ok and market_ok
-    payload = {
+    payload: dict[str, object] = {
         "status": "ready" if ready else "not_ready",
         "dependencies": {
             "strategy_engine": strategy_ok,

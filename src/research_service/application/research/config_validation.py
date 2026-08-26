@@ -2,11 +2,8 @@
 
 from __future__ import annotations
 
-from research_service.api.contracts.config import (
-    StrategyConfigDraft,
-    ValidationErrorItem,
-    ValidationResult,
-)
+from research_service.api.contracts.config import ValidationErrorItem, ValidationResult
+from research_service.domain.config import StrategyConfigDraft
 from research_service.ports.strategy_engine import StrategyEnginePort
 
 

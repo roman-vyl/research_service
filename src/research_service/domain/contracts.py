@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -198,3 +199,37 @@ class ManagedReplayResult(BaseModel):
         if self.bars and self.bars[-1].effective_from_time_ms is not None:
             raise ValueError("last managed decision must not claim an unavailable next bar")
         return self
+
+
+class StreamBounds(BaseModel):
+    """Market Data Service's committed stream bounds for one ticker/timeframe."""
+
+    model_config = ConfigDict(frozen=True)
+
+    contract_version: Literal["market_stream_bounds.v1"] = "market_stream_bounds.v1"
+    ticker: str
+    timeframe: str
+    earliest_open_time_ms: int = Field(ge=0)
+    latest_open_time_ms: int = Field(ge=0)
+    stream_state: str
+
+
+class GapRange(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    from_ms: int = Field(ge=0)
+    to_ms: int = Field(gt=0)
+
+
+class ContinuityAudit(BaseModel):
+    """Market Data Service's continuity/hash audit for one market range."""
+
+    model_config = ConfigDict(frozen=True)
+
+    contract_version: Literal["market_continuity_audit.v1"] = "market_continuity_audit.v1"
+    market: MarketRange
+    candle_count: int = Field(ge=0)
+    is_continuous: bool
+    gaps: tuple[GapRange, ...] = ()
+    stream_state: str
+    market_data_hash: str | None = None

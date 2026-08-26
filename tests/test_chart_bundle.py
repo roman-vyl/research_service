@@ -62,7 +62,7 @@ def make_client(
     market: FakeMarketData,
     strategy: FakeStrategyEngine,
 ) -> TestClient:
-    settings = Settings(artifacts_root=tmp_path)
+    settings = Settings(artifacts_root=tmp_path, configs_root=tmp_path / "configs")
     return TestClient(
         create_app(
             settings,

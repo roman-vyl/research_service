@@ -12,6 +12,7 @@ from research_service.application.backtests import (
 )
 from research_service.domain.contracts import (
     Candle,
+    ContinuityAudit,
     ManagedBarDecision,
     ManagedReplayRequest,
     ManagedReplayResult,
@@ -19,9 +20,6 @@ from research_service.domain.contracts import (
     MarketRange,
     StrategyEvaluationRequest,
     StrategyEvaluationResult,
-)
-from research_service.application.backtests.history_window import (
-    ContinuityAudit,
     StreamBounds,
 )
 from research_service.domain.errors import InvalidRequest
@@ -262,3 +260,32 @@ def test_market_mismatch_stops_before_execution() -> None:
                 managed_policy_enabled=False,
             )
         )
+
+
+def test_full_available_resolved_market_reaches_every_downstream_stage() -> None:
+    resolved_market = market_frame().market
+    narrow_requested_market = resolved_market.model_copy(
+        update={"from_ms": 300_000, "to_ms": 600_000}
+    )
+    narrow_request = strategy_request().model_copy(
+        update={"market": narrow_requested_market}
+    )
+    strategy = FakeStrategyEngine(strategy_result(market=resolved_market))
+    market = FakeMarketData(market_frame())
+    use_case = RunSingleInstanceBacktest(strategy, market)
+
+    use_case.execute(
+        SingleInstanceBacktestRequest(
+            run_id="run-full-available",
+            strategy=narrow_request,
+            range_policy="full_available",
+            execution=ExecutionPolicy(entry_slippage_rate=Decimal("0.01")),
+            managed_policy_enabled=True,
+        )
+    )
+
+    assert narrow_requested_market != resolved_market
+    assert strategy.range_requests[0].market == resolved_market
+    assert market.requests == [resolved_market]
+    assert len(strategy.managed_requests) == 1
+    assert strategy.managed_requests[0].market == resolved_market

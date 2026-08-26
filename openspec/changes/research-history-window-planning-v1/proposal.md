@@ -2,7 +2,16 @@
 
 ## Status
 
-Deferred. This change is intentionally scheduled after the current Research Service BFF and backend cutover work. It is recorded now so that temporary first-request range behavior is not mistaken for the final architecture.
+Partially implemented, remainder deferred (reconciled 2026-08-26, see
+`tasks.md`). Research Service's own range-resolution and MDS acquisition
+slice (`explicit_range`/`full_available`, continuity audit,
+`market_data_hash` verification) shipped as part of the single-instance
+backtest orchestration and is now current truth in
+`research-single-instance-backtest-v1`. The Strategy Engine warmup/
+history-policy half and the coordinated three-service rollout this proposal
+originally scoped are still scheduled after the current cutover work and
+remain deferred. It is recorded now so that the still-first-request-based
+EMA-window chart origin is not mistaken for final architecture.
 
 ## Why
 

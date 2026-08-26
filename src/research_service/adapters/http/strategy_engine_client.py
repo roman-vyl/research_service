@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Any, cast
 
 import httpx
 
@@ -25,6 +26,9 @@ from research_service.ports.strategy_engine import (
 class HttpStrategyEngineClient:
     def __init__(self, base_url: str, timeout_seconds: float = 60.0) -> None:
         self._client = httpx.Client(base_url=base_url.rstrip("/"), timeout=timeout_seconds)
+
+    def close(self) -> None:
+        self._client.close()
 
     def health(self) -> bool:
         try:
@@ -93,7 +97,7 @@ class HttpStrategyEngineClient:
         self,
         request: StrategyEvaluationRequest,
     ) -> StrategyEvaluationResult:
-        payload = {
+        payload: dict[str, object] = {
             "market": {
                 "ticker": request.market.ticker,
                 "base_timeframe": request.market.timeframe,
@@ -131,8 +135,8 @@ class HttpStrategyEngineClient:
         parsed_market = MarketRange(
             ticker=str(market.get("ticker", "")),
             timeframe=str(market.get("base_timeframe", "")),
-            from_ms=int(market.get("from_ms", -1)),
-            to_ms=int(market.get("to_ms", -1)),
+            from_ms=_int(market.get("from_ms", -1)),
+            to_ms=_int(market.get("to_ms", -1)),
         )
         return StrategyEvaluationResult(
             contract_version=str(body.get("contract_version", "")),
@@ -141,9 +145,9 @@ class HttpStrategyEngineClient:
             instance_id=str(body.get("instance_id", "")),
             config_hash=str(body.get("config_hash", "")),
             market=parsed_market,
-            bar_count=int(market.get("bar_count", -1)),
+            bar_count=_int(market.get("bar_count", -1)),
             market_data_hash=str(market.get("market_data_hash", "")),
-            time_ms=tuple(int(value) for value in features.get("time_ms", [])),
+            time_ms=tuple(_int(value) for value in _list(features.get("time_ms", []))),
             entries=entries,
             exit_policy=_object(body, "exit_policy"),
             component_evidence=_object(body, "component_evidence"),
@@ -171,7 +175,7 @@ class HttpStrategyEngineClient:
             "trade_id": request.trade_id,
             "side": request.side,
             "entry_time_ms": request.entry_time_ms,
-            "entry_price": str(request.entry_price),
+            "entry_price": float(request.entry_price),
         }
         body = self._post_json(
             "/v1/strategy-evaluations/managed-replay",
@@ -180,10 +184,10 @@ class HttpStrategyEngineClient:
         )
         bars = tuple(
             ManagedBarDecision(
-                time_ms=int(item["time_ms"]),
-                bar_index=int(item["bar_index"]),
+                time_ms=_int(item["time_ms"]),
+                bar_index=_int(item["bar_index"]),
                 phase=str(item["phase"]),
-                bars_in_trade=int(item["bars_in_trade"]),
+                bars_in_trade=_int(item["bars_in_trade"]),
                 mfe_pct=Decimal(str(item["mfe_pct"])),
                 mae_pct=Decimal(str(item["mae_pct"])),
                 active_stop_price=(
@@ -193,24 +197,24 @@ class HttpStrategyEngineClient:
                 ),
                 active_take_profile=str(item["active_take_profile"]),
                 runtime_exit_rule_ids=tuple(
-                    str(value) for value in item.get("runtime_exit_rule_ids", [])
+                    str(value) for value in _list(item.get("runtime_exit_rule_ids", []))
                 ),
                 effective_from_time_ms=(
                     None
                     if item.get("effective_from_time_ms") is None
-                    else int(item["effective_from_time_ms"])
+                    else _int(item["effective_from_time_ms"])
                 ),
             )
-            for item in body.get("bars", [])
+            for item in cast("list[dict[str, object]]", body.get("bars", []))
         )
         return ManagedReplayResult(
             contract_version=str(body.get("contract_version", "")),
             decision_timing=str(body.get("decision_timing", "")),
             trade_id=str(body.get("trade_id", "")),
             side=str(body.get("side", "")),
-            entry_time_ms=int(body.get("entry_time_ms", -1)),
+            entry_time_ms=_int(body.get("entry_time_ms", -1)),
             bars=bars,
-            events=tuple(dict(item) for item in body.get("events", []) if isinstance(item, dict)),
+            events=tuple(dict(item) for item in _list(body.get("events", [])) if isinstance(item, dict)),
             final_state=_object(body, "final_state"),
             raw=body,
         )
@@ -248,9 +252,12 @@ class HttpStrategyEngineClient:
             payload,
             "Strategy Engine indicator request failed",
         )
+        raw_series = cast("dict[str, object]", body["series"])
         return IndicatorSeriesResult(
-            time_ms=tuple(int(value) for value in body["time_ms"]),
-            values=tuple(body["series"][output_id]),
+            time_ms=tuple(_int(value) for value in _list(body["time_ms"])),
+            values=tuple(
+                None if value is None else str(value) for value in _list(raw_series[output_id])
+            ),
             plan_hash=str(body["plan_hash"]),
             market_data_hash=str(body["market_data_hash"]),
         )
@@ -282,6 +289,24 @@ class HttpStrategyEngineClient:
                 message="Strategy Engine response is not an object",
             )
         return body
+
+
+def _int(value: object) -> int:
+    """Coerce a raw JSON scalar to int with the built-in's own semantics.
+
+    ``cast`` here only satisfies the type checker: ``value`` came from a
+    ``dict[str, object]`` produced by ``response.json()``, so mypy cannot
+    prove it is int-convertible ahead of time, but ``int(...)`` itself still
+    raises exactly as before on a malformed upstream value.
+    """
+
+    return int(cast(Any, value))
+
+
+def _list(value: object) -> list[object]:
+    """Coerce a raw JSON array to a typed list for iteration; see ``_int``."""
+
+    return cast("list[object]", value)
 
 
 def _object(body: dict[str, object], key: str) -> dict[str, object]:

@@ -92,7 +92,7 @@ def diagnostic_strategy_result():
 
 
 def client_with_run(tmp_path: Path) -> TestClient:
-    settings = Settings(artifacts_root=tmp_path)
+    settings = Settings(artifacts_root=tmp_path, configs_root=tmp_path / "configs")
     result_fixture = diagnostic_strategy_result()
     container = Container(
         settings=settings,

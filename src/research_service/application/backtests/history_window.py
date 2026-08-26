@@ -6,39 +6,9 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from research_service.domain.contracts import MarketRange
+from research_service.domain.contracts import ContinuityAudit, MarketRange
 from research_service.domain.errors import InvalidRequest
 from research_service.ports.market_data import MarketDataPort
-
-
-class StreamBounds(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    contract_version: Literal["market_stream_bounds.v1"] = "market_stream_bounds.v1"
-    ticker: str
-    timeframe: str
-    earliest_open_time_ms: int = Field(ge=0)
-    latest_open_time_ms: int = Field(ge=0)
-    stream_state: str
-
-
-class GapRange(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    from_ms: int = Field(ge=0)
-    to_ms: int = Field(gt=0)
-
-
-class ContinuityAudit(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    contract_version: Literal["market_continuity_audit.v1"] = "market_continuity_audit.v1"
-    market: MarketRange
-    candle_count: int = Field(ge=0)
-    is_continuous: bool
-    gaps: tuple[GapRange, ...] = ()
-    stream_state: str
-    market_data_hash: str | None = None
 
 
 class ResolvedBacktestWindow(BaseModel):

@@ -36,7 +36,7 @@ class Store:
 
 
 def client(tmp_path, strategy):
-    s = Settings(artifacts_root=tmp_path)
+    s = Settings(artifacts_root=tmp_path, configs_root=tmp_path / "configs")
     return TestClient(create_app(s, Container(s, strategy, Market(), Store(tmp_path))))
 
 

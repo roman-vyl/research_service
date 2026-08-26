@@ -4,13 +4,13 @@ from __future__ import annotations
 
 from typing import Protocol
 
-from research_service.domain.contracts import MarketFrame, MarketRange
+from research_service.domain.contracts import ContinuityAudit, MarketFrame, MarketRange, StreamBounds
 
 
 class MarketDataPort(Protocol):
-    def get_bounds(self, *, ticker: str, timeframe: str): ...
+    def get_bounds(self, *, ticker: str, timeframe: str) -> StreamBounds: ...
 
-    def audit_range(self, market: MarketRange): ...
+    def audit_range(self, market: MarketRange) -> ContinuityAudit: ...
 
     def read_historical_range(
         self,

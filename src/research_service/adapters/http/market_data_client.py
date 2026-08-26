@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
+
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
-from research_service.application.backtests.history_window import (
+from research_service.domain.contracts import (
+    Candle,
     ContinuityAudit,
     GapRange,
+    MarketFrame,
+    MarketRange,
     StreamBounds,
 )
-from research_service.domain.contracts import Candle, MarketFrame, MarketRange
 from research_service.domain.errors import DependencyUnavailable, UpstreamServiceError
 
 
@@ -54,6 +58,9 @@ class _CandleRangePayload(BaseModel):
 class HttpMarketDataClient:
     def __init__(self, base_url: str, timeout_seconds: float = 60.0) -> None:
         self._client = httpx.Client(base_url=base_url.rstrip("/"), timeout=timeout_seconds)
+
+    def close(self) -> None:
+        self._client.close()
 
     def health(self) -> bool:
         try:
@@ -163,9 +170,16 @@ class HttpMarketDataClient:
             market_data_hash=payload.market_data_hash,
         )
 
-    def _request(self, method: str, path: str, **kwargs: object) -> httpx.Response:
+    def _request(
+        self,
+        method: str,
+        path: str,
+        *,
+        json: dict[str, object] | None = None,
+        params: Mapping[str, str | int] | None = None,
+    ) -> httpx.Response:
         try:
-            response = self._client.request(method, path, **kwargs)
+            response = self._client.request(method, path, json=json, params=params)
         except httpx.HTTPError as exc:
             raise DependencyUnavailable(
                 service="market_data_service",
