@@ -27,6 +27,9 @@ class HttpStrategyEngineClient:
     def __init__(self, base_url: str, timeout_seconds: float = 60.0) -> None:
         self._client = httpx.Client(base_url=base_url.rstrip("/"), timeout=timeout_seconds)
 
+    def close(self) -> None:
+        self._client.close()
+
     def health(self) -> bool:
         try:
             response = self._client.get("/health")
@@ -172,7 +175,7 @@ class HttpStrategyEngineClient:
             "trade_id": request.trade_id,
             "side": request.side,
             "entry_time_ms": request.entry_time_ms,
-            "entry_price": str(request.entry_price),
+            "entry_price": float(request.entry_price),
         }
         body = self._post_json(
             "/v1/strategy-evaluations/managed-replay",

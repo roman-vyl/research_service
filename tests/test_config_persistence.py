@@ -18,6 +18,9 @@ class StubStrategyEngine:
     ) -> StrategyAuthoringValidationResult:
         return StrategyAuthoringValidationResult(valid=True, errors=())
 
+    def close(self) -> None:
+        """No-op: satisfies Container.close() during the app's lifespan shutdown."""
+
     def __getattr__(self, name: str) -> object:
         raise AssertionError(f"unexpected strategy call: {name}")
 

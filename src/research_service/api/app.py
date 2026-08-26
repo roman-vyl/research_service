@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -29,9 +32,21 @@ def create_app(
 ) -> FastAPI:
     resolved_settings = settings or Settings()
     resolved_container = container or build_container(resolved_settings)
-    app = FastAPI(title="Research Service", version="0.1.0")
+    resolved_services = _build_services(resolved_settings, resolved_container)
+
+    @asynccontextmanager
+    async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+        # State is assigned eagerly below, not here: Starlette's TestClient
+        # only runs lifespan under `with TestClient(...) as client:`, and
+        # the existing test suite constructs clients without it. Lifespan
+        # is used only for its guaranteed shutdown hook, closing the
+        # long-lived httpx clients when the process actually stops.
+        yield
+        resolved_container.close()
+
+    app = FastAPI(title="Research Service", version="0.1.0", lifespan=lifespan)
     app.state.container = resolved_container
-    app.state.services = _build_services(resolved_settings, resolved_container)
+    app.state.services = resolved_services
     app.add_middleware(
         CORSMiddleware,
         allow_origins=list(resolved_settings.cors_origins),

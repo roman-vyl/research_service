@@ -59,6 +59,9 @@ class HttpMarketDataClient:
     def __init__(self, base_url: str, timeout_seconds: float = 60.0) -> None:
         self._client = httpx.Client(base_url=base_url.rstrip("/"), timeout=timeout_seconds)
 
+    def close(self) -> None:
+        self._client.close()
+
     def health(self) -> bool:
         try:
             response = self._client.get("/health")

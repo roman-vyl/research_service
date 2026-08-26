@@ -20,6 +20,21 @@ class Container:
     market_data: MarketDataPort
     artifacts: ResearchArtifactStore
 
+    def close(self) -> None:
+        """Close the long-lived HTTP clients, if the wired port owns one.
+
+        ``strategy_engine``/``market_data`` are typed as ports (``Protocol``)
+        that intentionally do not declare ``close()`` — most test doubles
+        have no resources to release. Real ``Http*Client`` adapters do; this
+        duck-types the call so production wiring closes its connections
+        without forcing every fake in the test suite to grow a no-op method.
+        """
+
+        for dependency in (self.strategy_engine, self.market_data):
+            close = getattr(dependency, "close", None)
+            if callable(close):
+                close()
+
 
 def build_container(settings: Settings) -> Container:
     artifacts = FilesystemArtifactStore(settings.artifacts_root)

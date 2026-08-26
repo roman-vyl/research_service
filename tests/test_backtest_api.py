@@ -22,7 +22,7 @@ from test_single_instance_backtest import (
 
 
 def build_client(tmp_path: Path) -> TestClient:
-    settings = Settings(artifacts_root=tmp_path)
+    settings = Settings(artifacts_root=tmp_path, configs_root=tmp_path / "configs")
     return TestClient(
         create_app(
             settings,

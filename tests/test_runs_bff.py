@@ -27,7 +27,7 @@ from test_single_instance_backtest import (
 
 
 def _container(tmp_path: Path) -> Container:
-    settings = Settings(artifacts_root=tmp_path)
+    settings = Settings(artifacts_root=tmp_path, configs_root=tmp_path / "configs")
     return Container(
         settings=settings,
         strategy_engine=FakeStrategyEngine(strategy_result()),
@@ -155,7 +155,7 @@ def test_summary_reports_resolved_market_not_requested_market(tmp_path: Path) ->
         managed_policy_enabled=False,
     )
     container = Container(
-        settings=Settings(artifacts_root=tmp_path),
+        settings=Settings(artifacts_root=tmp_path, configs_root=tmp_path / "configs"),
         strategy_engine=FakeStrategyEngine(strategy_result(market=resolved_market)),
         market_data=FakeMarketData(market_frame()),
         artifacts=FilesystemArtifactStore(tmp_path),
