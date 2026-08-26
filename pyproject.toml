@@ -21,7 +21,8 @@ dev = [
   "build>=1.2,<2",
   "mypy>=1.11,<2",
   "pytest>=8.2,<9",
-  "ruff>=0.6,<1",
+  "ruff>=0.15.21,<0.16",
+  "types-PyYAML>=6.0,<7",
 ]
 
 [project.scripts]
