@@ -11,7 +11,7 @@ from typing import Any
 
 import yaml
 
-from research_service.api.contracts.config import ConfigListEntry, StrategyConfigDraft
+from research_service.domain.config import ConfigListEntry, StrategyConfigDraft
 from research_service.domain.errors import InvalidRequest
 
 _ALLOWED_FAMILIES = frozenset({"ema_pullback"})

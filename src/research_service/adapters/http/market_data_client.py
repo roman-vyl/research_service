@@ -7,12 +7,14 @@ from collections.abc import Mapping
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
-from research_service.application.backtests.history_window import (
+from research_service.domain.contracts import (
+    Candle,
     ContinuityAudit,
     GapRange,
+    MarketFrame,
+    MarketRange,
     StreamBounds,
 )
-from research_service.domain.contracts import Candle, MarketFrame, MarketRange
 from research_service.domain.errors import DependencyUnavailable, UpstreamServiceError
 
 

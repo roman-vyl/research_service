@@ -25,6 +25,7 @@ from research_service.api.contracts.config import (
 )
 from research_service.application.backtests import SingleInstanceBacktestRequest
 from research_service.domain.errors import InvalidRequest, RunAlreadyExists
+from research_service.runtime.services import services
 
 router = APIRouter(prefix="/api/research", tags=["research"])
 
@@ -44,12 +45,12 @@ def component_catalog(
     request: Request,
     family: str = Query(default="ema_pullback"),
 ) -> ComponentCatalog:
-    return request.app.state.component_catalog.execute(family=family)
+    return services(request).component_catalog.execute(family=family)
 
 
 @router.post("/config/validate", response_model=ValidationResult)
 def validate_config(request: Request, draft: StrategyConfigDraft) -> ValidationResult:
-    return request.app.state.config_validation.execute(draft)
+    return services(request).config_validation.execute(draft)
 
 
 @router.post("/config/serialize", response_model=SerializeResult)
@@ -58,12 +59,12 @@ def serialize_config(
     draft: StrategyConfigDraft,
     format: str = Query(default="json"),
 ) -> SerializeResult:
-    return request.app.state.research_configs.serialize(draft, format)
+    return services(request).research_configs.serialize(draft, format)
 
 
 @router.post("/config/save", response_model=SaveConfigResult)
 def save_config(request: Request, payload: SaveConfigRequest) -> SaveConfigResult:
-    return request.app.state.research_configs.save(payload.draft)
+    return services(request).research_configs.save(payload.draft)
 
 
 @router.get("/configs/state", response_model=ConfigStateResponse)
@@ -71,7 +72,7 @@ def config_state(
     request: Request,
     family: str = Query(default="ema_pullback"),
 ) -> ConfigStateResponse:
-    return request.app.state.research_configs.state(family)
+    return services(request).research_configs.state(family)
 
 
 @router.put("/configs/selected", response_model=ConfigStateResponse)
@@ -79,7 +80,7 @@ def select_config(
     request: Request,
     payload: SelectConfigRequest,
 ) -> ConfigStateResponse:
-    return request.app.state.research_configs.select(payload)
+    return services(request).research_configs.select(payload)
 
 
 @router.post(
@@ -93,9 +94,9 @@ def run_backtest(
 ) -> BacktestRunResponse:
     """Run and atomically persist one authoritative single-instance backtest."""
 
-    result = request.app.state.run_single_instance_backtest.execute(payload)
+    result = services(request).run_single_instance_backtest.execute(payload)
     try:
-        persisted = request.app.state.persist_single_instance_backtest.execute(
+        persisted = services(request).persist_single_instance_backtest.execute(
             payload,
             result,
         )
@@ -117,32 +118,32 @@ def run_backtest(
 
 @router.get("/runs", response_model=list[RunSummary])
 def list_runs(request: Request) -> list[RunSummary]:
-    return list(request.app.state.read_research_runs.list_runs())
+    return list(services(request).read_research_runs.list_runs())
 
 
 @router.get("/runs/latest", response_model=RunDetail)
 def latest_run(request: Request) -> RunDetail:
-    return request.app.state.read_research_runs.latest()
+    return services(request).read_research_runs.latest()
 
 
 @router.get("/runs/{run_id}", response_model=RunDetail)
 def get_run(request: Request, run_id: str) -> RunDetail:
-    return request.app.state.read_research_runs.detail(run_id)
+    return services(request).read_research_runs.detail(run_id)
 
 
 @router.get("/runs/{run_id}/summary", response_model=RunCompactSummary)
 def get_run_summary(request: Request, run_id: str) -> RunCompactSummary:
-    return request.app.state.read_research_runs.compact_summary(run_id)
+    return services(request).read_research_runs.compact_summary(run_id)
 
 
 @router.get("/runs/{run_id}/trades", response_model=RunTrades)
 def get_run_trades(request: Request, run_id: str) -> RunTrades:
-    return request.app.state.read_research_runs.trades(run_id)
+    return services(request).read_research_runs.trades(run_id)
 
 
 @router.get("/runs/{run_id}/metrics", response_model=RunMetrics)
 def get_run_metrics(request: Request, run_id: str) -> RunMetrics:
-    return request.app.state.read_research_runs.metrics(run_id)
+    return services(request).read_research_runs.metrics(run_id)
 
 
 @router.get("/runs/{run_id}/signal-trace", response_model=SignalTraceBundle)
@@ -156,7 +157,7 @@ def get_run_signal_trace(
     context_overlay_ref: str | None = Query(None, min_length=1),
 ) -> SignalTraceBundle:
     end_ms = _resolve_end_ms(to_ms, to_open_time_ms)
-    return request.app.state.project_run_diagnostics.signal_trace(
+    return services(request).project_run_diagnostics.signal_trace(
         run_id=run_id,
         variant=variant,
         from_ms=from_ms,
@@ -176,7 +177,7 @@ def get_run_chart_events(
     context_overlay_ref: str | None = Query(None, min_length=1),
 ) -> ChartEventsBundle:
     end_ms = _resolve_end_ms(to_ms, to_open_time_ms)
-    return request.app.state.project_run_diagnostics.chart_events(
+    return services(request).project_run_diagnostics.chart_events(
         run_id=run_id,
         variant=variant,
         from_ms=from_ms,

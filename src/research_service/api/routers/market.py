@@ -15,6 +15,7 @@ from research_service.application.market import (
     CANONICAL_ORIGIN_POLICY,
     resolve_exclusive_to_ms,
 )
+from research_service.runtime.services import services
 
 router = APIRouter(prefix="/api/market", tags=["market"])
 
@@ -41,7 +42,7 @@ def get_chart_bundle(
         to_ms=to_ms,
         to_open_time_ms=to_open_time_ms,
     )
-    return request.app.state.chart_bundle.execute(
+    return services(request).chart_bundle.execute(
         symbol=symbol,
         timeframe=timeframe,
         from_ms=from_ms,
@@ -70,7 +71,7 @@ def get_candles_window(
         to_ms=to_ms,
         to_open_time_ms=to_open_time_ms,
     )
-    return request.app.state.candles_window.execute(
+    return services(request).candles_window.execute(
         symbol=symbol,
         timeframe=timeframe,
         from_ms=from_ms,
@@ -98,7 +99,7 @@ def get_ema_window(
         to_ms=to_ms,
         to_open_time_ms=to_open_time_ms,
     )
-    return request.app.state.ema_window.execute(
+    return services(request).ema_window.execute(
         symbol=symbol,
         timeframe=timeframe,
         period=period,
@@ -127,7 +128,7 @@ def get_candles(
         to_ms=to_ms,
         to_open_time_ms=to_open_time_ms,
     )
-    return request.app.state.candles_window.execute(
+    return services(request).candles_window.execute(
         symbol=symbol,
         timeframe=timeframe,
         from_ms=from_ms,
@@ -155,7 +156,7 @@ def get_ema(
         to_ms=to_ms,
         to_open_time_ms=to_open_time_ms,
     )
-    return request.app.state.ema_window.execute(
+    return services(request).ema_window.execute(
         symbol=symbol,
         timeframe=timeframe,
         period=period,

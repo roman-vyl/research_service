@@ -10,9 +10,9 @@ from research_service.api.contracts.config import (
     SaveConfigResult,
     SelectConfigRequest,
     SerializeResult,
-    StrategyConfigDraft,
 )
 from research_service.application.research.config_validation import ValidateStrategyConfig
+from research_service.domain.config import StrategyConfigDraft
 from research_service.domain.errors import InvalidRequest
 
 

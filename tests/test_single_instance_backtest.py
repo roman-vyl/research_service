@@ -12,6 +12,7 @@ from research_service.application.backtests import (
 )
 from research_service.domain.contracts import (
     Candle,
+    ContinuityAudit,
     ManagedBarDecision,
     ManagedReplayRequest,
     ManagedReplayResult,
@@ -19,9 +20,6 @@ from research_service.domain.contracts import (
     MarketRange,
     StrategyEvaluationRequest,
     StrategyEvaluationResult,
-)
-from research_service.application.backtests.history_window import (
-    ContinuityAudit,
     StreamBounds,
 )
 from research_service.domain.errors import InvalidRequest

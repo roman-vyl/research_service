@@ -2,21 +2,15 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Protocol
+from typing import Protocol
 
-from research_service.domain.contracts import MarketFrame, MarketRange
-
-if TYPE_CHECKING:
-    from research_service.application.backtests.history_window import (
-        ContinuityAudit,
-        StreamBounds,
-    )
+from research_service.domain.contracts import ContinuityAudit, MarketFrame, MarketRange, StreamBounds
 
 
 class MarketDataPort(Protocol):
-    def get_bounds(self, *, ticker: str, timeframe: str) -> "StreamBounds": ...
+    def get_bounds(self, *, ticker: str, timeframe: str) -> StreamBounds: ...
 
-    def audit_range(self, market: MarketRange) -> "ContinuityAudit": ...
+    def audit_range(self, market: MarketRange) -> ContinuityAudit: ...
 
     def read_historical_range(
         self,
