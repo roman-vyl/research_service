@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from research_service.adapters.config import FilesystemConfigStore
 from research_service.api.contracts.config import (
     ConfigStateResponse,
@@ -11,6 +13,7 @@ from research_service.api.contracts.config import (
     StrategyConfigDraft,
 )
 from research_service.application.research.config_validation import ValidateStrategyConfig
+from research_service.domain.errors import InvalidRequest
 
 
 class ManageResearchConfigs:
@@ -31,8 +34,9 @@ class ManageResearchConfigs:
                 format="yaml" if normalized == "yaml" else "json",
                 errors=result.errors,
             )
-        content = self._store.serialize(draft, normalized)
-        return SerializeResult(ok=True, format=normalized, content=content)  # type: ignore[arg-type]
+        narrowed_format = _narrow_format(normalized)
+        content = self._store.serialize(draft, narrowed_format)
+        return SerializeResult(ok=True, format=narrowed_format, content=content)
 
     def save(self, draft: StrategyConfigDraft) -> SaveConfigResult:
         result = self._validation.execute(draft)
@@ -62,3 +66,11 @@ class ManageResearchConfigs:
     def select(self, request: SelectConfigRequest) -> ConfigStateResponse:
         self._store.select(request.family, request.experiment_id)
         return self.state(request.family)
+
+
+def _narrow_format(normalized: str) -> Literal["json", "yaml"]:
+    if normalized == "json":
+        return "json"
+    if normalized == "yaml":
+        return "yaml"
+    raise InvalidRequest("format must be json or yaml")

@@ -11,7 +11,11 @@ from research_service.application.backtests.history_window import ResolveBacktes
 from research_service.application.backtests.strategy_contract import (
     accept_strategy_execution_contract,
 )
-from research_service.domain.contracts import ManagedReplayRequest, MarketRange
+from research_service.domain.contracts import (
+    ManagedReplayRequest,
+    ManagedReplayResult,
+    MarketRange,
+)
 from research_service.domain.execution import PositionState
 from research_service.execution.loop import ManagedReplayProvider, run_unified_execution_loop
 from research_service.ports.market_data import MarketDataPort
@@ -78,7 +82,7 @@ class RunSingleInstanceBacktest:
         request: SingleInstanceBacktestRequest,
         resolved_market: MarketRange,
     ) -> ManagedReplayProvider:
-        def evaluate(position: PositionState):
+        def evaluate(position: PositionState) -> ManagedReplayResult:
             # BBB v1 managed policy was anchored to the signal-bar close. The
             # entry fill may include Research-owned slippage, so pass the
             # reference price rather than the adjusted fill price.

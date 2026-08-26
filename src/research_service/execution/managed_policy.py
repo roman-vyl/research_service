@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Mapping
+from typing import Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -222,7 +222,9 @@ def _managed_stop_fill(
     return None
 
 
-def _runtime_candidate_type(exit_kind: str) -> str:
+def _runtime_candidate_type(
+    exit_kind: str,
+) -> Literal["runtime_protective", "runtime_take", "runtime_close"]:
     if exit_kind == "protective_exit":
         return "runtime_protective"
     if exit_kind == "take_profit":

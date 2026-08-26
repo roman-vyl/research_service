@@ -24,9 +24,19 @@ from research_service.api.contracts.config import (
     ValidationResult,
 )
 from research_service.application.backtests import SingleInstanceBacktestRequest
-from research_service.domain.errors import RunAlreadyExists
+from research_service.domain.errors import InvalidRequest, RunAlreadyExists
 
 router = APIRouter(prefix="/api/research", tags=["research"])
+
+
+def _resolve_end_ms(to_ms: int | None, to_open_time_ms: int | None) -> int:
+    """Resolve the diagnostics-route exclusive end, preferring an explicit bar edge."""
+
+    if to_open_time_ms is not None:
+        return to_open_time_ms
+    if to_ms is not None:
+        return to_ms
+    raise InvalidRequest("provide to or to_open_time_ms")
 
 
 @router.get("/component-catalog", response_model=ComponentCatalog)
@@ -145,11 +155,7 @@ def get_run_signal_trace(
     to_open_time_ms: int | None = Query(None, ge=0),
     context_overlay_ref: str | None = Query(None, min_length=1),
 ) -> SignalTraceBundle:
-    if to_ms is None and to_open_time_ms is None:
-        from research_service.domain.errors import InvalidRequest
-
-        raise InvalidRequest("provide to or to_open_time_ms")
-    end_ms = to_open_time_ms if to_open_time_ms is not None else int(to_ms)
+    end_ms = _resolve_end_ms(to_ms, to_open_time_ms)
     return request.app.state.project_run_diagnostics.signal_trace(
         run_id=run_id,
         variant=variant,
@@ -169,11 +175,7 @@ def get_run_chart_events(
     to_open_time_ms: int | None = Query(None, ge=0),
     context_overlay_ref: str | None = Query(None, min_length=1),
 ) -> ChartEventsBundle:
-    if to_ms is None and to_open_time_ms is None:
-        from research_service.domain.errors import InvalidRequest
-
-        raise InvalidRequest("provide to or to_open_time_ms")
-    end_ms = to_open_time_ms if to_open_time_ms is not None else int(to_ms)
+    end_ms = _resolve_end_ms(to_ms, to_open_time_ms)
     return request.app.state.project_run_diagnostics.chart_events(
         run_id=run_id,
         variant=variant,
