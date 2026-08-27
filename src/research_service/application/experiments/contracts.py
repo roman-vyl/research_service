@@ -1,4 +1,13 @@
-"""Sequential batch experiment contracts."""
+"""Batch experiment contracts.
+
+An experiment compares several configurations of ONE strategy over ONE
+ticker/base_timeframe/historical comparison window -- not an array of
+independent standalone backtest requests. `range`/`range_policy` live at
+the experiment level, once, shared by every candidate; each candidate
+contributes only what legitimately varies between comparable
+configurations (`raw_spec`, execution/accounting policy,
+managed_policy_enabled, metadata).
+"""
 
 from __future__ import annotations
 
@@ -7,33 +16,68 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from research_service.application.backtests.contracts import SingleInstanceBacktestRequest
+from research_service.accounting.contracts import AccountingPolicy
+from research_service.domain.contracts import ExplicitRange
+from research_service.domain.execution import ExecutionPolicy
+from research_service.domain.strategy_instance import DeployableStrategyInstance
+
+_CANDIDATE_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 
 
 class BatchCandidateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    candidate_id: str = Field(min_length=1, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
-    backtest: SingleInstanceBacktestRequest
+    candidate_id: str = Field(min_length=1, pattern=_CANDIDATE_ID_PATTERN)
+    strategy: DeployableStrategyInstance
+    execution: ExecutionPolicy = ExecutionPolicy()
+    accounting: AccountingPolicy = AccountingPolicy()
+    managed_policy_enabled: bool = True
     metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class BatchExperimentRequest(BaseModel):
+    """One experiment: one strategy_id, one ticker, one base_timeframe, one
+    comparison window, shared by every candidate -- never a per-candidate
+    concern (`research-batch-experiments-v1`, "Experiment owns one range
+    policy/window")."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     experiment_id: str = Field(min_length=1, pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+    strategy_id: str = Field(min_length=1)
+    range_policy: Literal["explicit_range", "full_available"] = "explicit_range"
+    range: ExplicitRange | None = None
     candidates: tuple[BatchCandidateRequest, ...] = Field(min_length=1)
     description: str | None = None
 
     @model_validator(mode="after")
-    def validate_unique_identity(self) -> "BatchExperimentRequest":
-        # run_id no longer exists on a candidate request (Research-generated,
-        # only known after execution) — candidate_id is the sole
-        # pre-execution correlation identity (research-batch-experiments-v1,
-        # "Candidate validity").
+    def validate_experiment_invariants(self) -> "BatchExperimentRequest":
+        if self.range_policy == "explicit_range" and self.range is None:
+            raise ValueError("range_policy=explicit_range requires range.from_ms/to_ms")
+        if self.range_policy == "full_available" and self.range is not None:
+            raise ValueError("range_policy=full_available must not include a range")
+
         candidate_ids = [item.candidate_id for item in self.candidates]
         if len(candidate_ids) != len(set(candidate_ids)):
             raise ValueError("candidate_id values must be unique within a batch")
+
+        # One experiment compares configurations of one strategy over one
+        # ticker/base_timeframe -- candidates never get their own comparison
+        # universe (research-batch-experiments-v1, "Experiment owns one
+        # range policy/window").
+        for index, candidate in enumerate(self.candidates):
+            if candidate.strategy.strategy_id != self.strategy_id:
+                raise ValueError(
+                    f"candidates[{index}].strategy.strategy_id must match "
+                    f"experiment strategy_id {self.strategy_id!r}; "
+                    f"got {candidate.strategy.strategy_id!r}"
+                )
+        tickers = {item.strategy.ticker for item in self.candidates}
+        if len(tickers) > 1:
+            raise ValueError("every candidate must share the same strategy.ticker")
+        base_timeframes = {item.strategy.base_timeframe for item in self.candidates}
+        if len(base_timeframes) > 1:
+            raise ValueError("every candidate must share the same strategy.base_timeframe")
         return self
 
 

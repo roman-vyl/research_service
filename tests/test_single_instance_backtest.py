@@ -19,6 +19,8 @@ from research_service.domain.contracts import (
     ManagedReplayResult,
     MarketFrame,
     MarketRange,
+    StrategyEvaluationBatchRequest,
+    StrategyEvaluationBatchVariantOutcome,
     StrategyEvaluationRequest,
     StrategyEvaluationResult,
     StreamBounds,
@@ -108,10 +110,19 @@ def strategy_result(*, market: MarketRange | None = None) -> StrategyEvaluationR
 
 
 class FakeStrategyEngine:
-    def __init__(self, result: StrategyEvaluationResult) -> None:
+    def __init__(
+        self,
+        result: StrategyEvaluationResult,
+        *,
+        failing_variant_ids: frozenset[str] = frozenset(),
+        shuffle_response: bool = False,
+    ) -> None:
         self.result = result
         self.range_requests: list[StrategyEvaluationRequest] = []
+        self.batch_requests: list[StrategyEvaluationBatchRequest] = []
         self.managed_requests: list[ManagedReplayRequest] = []
+        self.failing_variant_ids = failing_variant_ids
+        self.shuffle_response = shuffle_response
 
     def evaluate_range(self, request: StrategyEvaluationRequest) -> StrategyEvaluationResult:
         self.range_requests.append(request)
@@ -119,6 +130,39 @@ class FakeStrategyEngine:
         # Engine behavior and lets callers vary raw_spec (which varies the
         # derived instance_id) without invalidating the canned result.
         return self.result.model_copy(update={"instance_id": request.instance_id})
+
+    def evaluate_range_batch(
+        self, request: StrategyEvaluationBatchRequest
+    ) -> tuple[StrategyEvaluationBatchVariantOutcome, ...]:
+        self.batch_requests.append(request)
+        outcomes = []
+        for variant in request.variants:
+            if variant.variant_id in self.failing_variant_ids:
+                outcomes.append(
+                    StrategyEvaluationBatchVariantOutcome(
+                        variant_id=variant.variant_id,
+                        error={
+                            "error": "invalid_request",
+                            "message": f"boom:{variant.variant_id}",
+                            "details": {},
+                        },
+                    )
+                )
+            else:
+                outcomes.append(
+                    StrategyEvaluationBatchVariantOutcome(
+                        variant_id=variant.variant_id,
+                        result=self.result.model_copy(
+                            update={
+                                "instance_id": variant.instance_id,
+                                "strategy_id": variant.strategy_id,
+                            }
+                        ),
+                    )
+                )
+        if self.shuffle_response:
+            outcomes = list(reversed(outcomes))
+        return tuple(outcomes)
 
     def evaluate_managed_replay(self, request: ManagedReplayRequest) -> ManagedReplayResult:
         self.managed_requests.append(request)
@@ -176,8 +220,11 @@ class FakeMarketData:
     def __init__(self, frame: MarketFrame) -> None:
         self.frame = frame
         self.requests: list[MarketRange] = []
+        self.bounds_calls = 0
+        self.audit_calls = 0
 
     def get_bounds(self, *, ticker: str, timeframe: str) -> StreamBounds:
+        self.bounds_calls += 1
         return StreamBounds(
             ticker=ticker,
             timeframe=timeframe,
@@ -187,6 +234,7 @@ class FakeMarketData:
         )
 
     def audit_range(self, market: MarketRange) -> ContinuityAudit:
+        self.audit_calls += 1
         return ContinuityAudit(
             market=market,
             candle_count=len(self.frame.candles),

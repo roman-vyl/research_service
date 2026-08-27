@@ -12,6 +12,8 @@ from research_service.domain.contracts import (
     ManagedReplayRequest,
     ManagedReplayResult,
     MarketRange,
+    StrategyEvaluationBatchRequest,
+    StrategyEvaluationBatchVariantOutcome,
     StrategyEvaluationRequest,
     StrategyEvaluationResult,
 )
@@ -121,38 +123,108 @@ class HttpStrategyEngineClient:
             payload,
             "Strategy Engine range evaluation request failed",
         )
-        market = _object(body, "market")
-        features = _object(body, "features")
-        entries_raw = _object(body, "entries")
-        entries = {
-            str(side): tuple(bool(value) for value in values)
-            for side, values in entries_raw.items()
-            if isinstance(values, list)
+        # Engine no longer echoes instance_id
+        # (strategy-evaluation-canonical-boundary-v1) — stamp Research's own
+        # already-derived identity instead of parsing it off the wire.
+        return _parse_evaluation_result(body, instance_id=request.instance_id)
+
+    def evaluate_range_batch(
+        self,
+        request: StrategyEvaluationBatchRequest,
+    ) -> tuple[StrategyEvaluationBatchVariantOutcome, ...]:
+        payload: dict[str, object] = {
+            "market": {
+                "ticker": request.market.ticker,
+                "base_timeframe": request.market.timeframe,
+                "from_ms": request.market.from_ms,
+                "to_ms": request.market.to_ms,
+            },
+            "variants": [
+                {
+                    "variant_id": variant.variant_id,
+                    "strategy": {
+                        "strategy_id": variant.strategy_id,
+                        "raw_spec": variant.strategy_spec,
+                    },
+                }
+                for variant in request.variants
+            ],
+            "options": {
+                "include_features": True,
+                "include_contexts": True,
+                "include_component_evidence": True,
+                "include_state_artifact": False,
+            },
         }
-        parsed_market = MarketRange(
-            ticker=str(market.get("ticker", "")),
-            timeframe=str(market.get("base_timeframe", "")),
-            from_ms=_int(market.get("from_ms", -1)),
-            to_ms=_int(market.get("to_ms", -1)),
+        body = self._post_json(
+            "/v1/strategy-evaluations/range-batch",
+            payload,
+            "Strategy Engine range-batch evaluation request failed",
         )
-        return StrategyEvaluationResult(
-            contract_version=str(body.get("contract_version", "")),
-            strategy_id=str(body.get("strategy_id", "")),
-            # Engine no longer echoes instance_id
-            # (strategy-evaluation-canonical-boundary-v1) — stamp Research's
-            # own already-derived identity instead of parsing it off the
-            # wire.
-            instance_id=request.instance_id,
-            config_hash=str(body.get("config_hash", "")),
-            market=parsed_market,
-            bar_count=_int(market.get("bar_count", -1)),
-            market_data_hash=str(market.get("market_data_hash", "")),
-            time_ms=tuple(_int(value) for value in _list(features.get("time_ms", []))),
-            entries=entries,
-            exit_policy=_object(body, "exit_policy"),
-            component_evidence=_object(body, "component_evidence"),
-            raw=body,
-        )
+        raw_variants = body.get("variants")
+        if not isinstance(raw_variants, list):
+            raise UpstreamServiceError(
+                service="strategy_engine",
+                status_code=502,
+                message="Strategy Engine range-batch response field variants is invalid",
+            )
+
+        instance_id_by_variant = {
+            variant.variant_id: variant.instance_id for variant in request.variants
+        }
+        expected_variant_ids = set(instance_id_by_variant)
+        outcomes_by_variant: dict[str, StrategyEvaluationBatchVariantOutcome] = {}
+        for item in raw_variants:
+            if not isinstance(item, dict):
+                raise UpstreamServiceError(
+                    service="strategy_engine",
+                    status_code=502,
+                    message="Strategy Engine range-batch response variant entry is invalid",
+                )
+            variant_id = str(item.get("variant_id", ""))
+            if variant_id not in expected_variant_ids:
+                raise UpstreamServiceError(
+                    service="strategy_engine",
+                    status_code=502,
+                    message="Strategy Engine range-batch response has an unrequested variant_id",
+                    details={"variant_id": variant_id},
+                )
+            if variant_id in outcomes_by_variant:
+                raise UpstreamServiceError(
+                    service="strategy_engine",
+                    status_code=502,
+                    message="Strategy Engine range-batch response has a duplicate variant_id",
+                    details={"variant_id": variant_id},
+                )
+            result_raw = item.get("result")
+            error_raw = item.get("error")
+            result = (
+                _parse_evaluation_result(
+                    cast("dict[str, object]", result_raw),
+                    instance_id=instance_id_by_variant[variant_id],
+                )
+                if isinstance(result_raw, dict)
+                else None
+            )
+            error = error_raw if isinstance(error_raw, dict) else None
+            outcomes_by_variant[variant_id] = StrategyEvaluationBatchVariantOutcome(
+                variant_id=variant_id,
+                result=result,
+                error=cast("dict[str, object] | None", error),
+            )
+
+        missing = expected_variant_ids - set(outcomes_by_variant)
+        if missing:
+            raise UpstreamServiceError(
+                service="strategy_engine",
+                status_code=502,
+                message="Strategy Engine range-batch response is missing candidate outcome(s)",
+                details={"missing_variant_ids": sorted(missing)},
+            )
+
+        # Correlate by variant_id, not response array order -- return in
+        # request order for a deterministic, easy-to-assert-on sequence.
+        return tuple(outcomes_by_variant[variant.variant_id] for variant in request.variants)
 
     def evaluate_managed_replay(
         self,
@@ -286,6 +358,41 @@ class HttpStrategyEngineClient:
                 message="Strategy Engine response is not an object",
             )
         return body
+
+
+def _parse_evaluation_result(body: dict[str, object], *, instance_id: str) -> StrategyEvaluationResult:
+    """Parse one Strategy Engine range-evaluation response body (shared shape
+    between `/range` and each `/range-batch` variant's `result`), stamping
+    Research's own already-derived `instance_id` -- Engine never echoes it."""
+
+    market = _object(body, "market")
+    features = _object(body, "features")
+    entries_raw = _object(body, "entries")
+    entries = {
+        str(side): tuple(bool(value) for value in values)
+        for side, values in entries_raw.items()
+        if isinstance(values, list)
+    }
+    parsed_market = MarketRange(
+        ticker=str(market.get("ticker", "")),
+        timeframe=str(market.get("base_timeframe", "")),
+        from_ms=_int(market.get("from_ms", -1)),
+        to_ms=_int(market.get("to_ms", -1)),
+    )
+    return StrategyEvaluationResult(
+        contract_version=str(body.get("contract_version", "")),
+        strategy_id=str(body.get("strategy_id", "")),
+        instance_id=instance_id,
+        config_hash=str(body.get("config_hash", "")),
+        market=parsed_market,
+        bar_count=_int(market.get("bar_count", -1)),
+        market_data_hash=str(market.get("market_data_hash", "")),
+        time_ms=tuple(_int(value) for value in _list(features.get("time_ms", []))),
+        entries=entries,
+        exit_policy=_object(body, "exit_policy"),
+        component_evidence=_object(body, "component_evidence"),
+        raw=body,
+    )
 
 
 def _int(value: object) -> int:

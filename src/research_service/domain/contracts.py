@@ -164,6 +164,53 @@ class StrategyEvaluationResult(BaseModel):
         return self
 
 
+class StrategyEvaluationBatchVariant(BaseModel):
+    """One candidate's entry in a shared Strategy Engine `/range-batch`
+    call. Only `strategy_id`/`strategy_spec` (Engine's `raw_spec`) and the
+    ephemeral wire correlation key `variant_id` cross the Engine boundary
+    (`strategy-evaluation-canonical-boundary-v1`); `instance_id` is carried
+    here purely as Research-owned provenance so the Engine client can stamp
+    it onto the matching `StrategyEvaluationResult` — Engine itself never
+    receives or echoes it. `variant_id` equals the candidate's own
+    `candidate_id` (`research-batch-experiments-v1`); it is a wire-only
+    correlation key and never persisted."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    variant_id: str
+    instance_id: str
+    strategy_id: str
+    strategy_spec: dict[str, object]
+
+
+class StrategyEvaluationBatchRequest(BaseModel):
+    """One shared market window and N variants, evaluated by Strategy
+    Engine in a single call over one shared-L0 market acquisition."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    market: MarketRange
+    variants: tuple[StrategyEvaluationBatchVariant, ...] = Field(min_length=1)
+
+
+class StrategyEvaluationBatchVariantOutcome(BaseModel):
+    """One variant's outcome from a `/range-batch` call: either a parsed,
+    instance_id-stamped result, or an Engine-reported per-variant error —
+    never both, never neither."""
+
+    model_config = ConfigDict(frozen=True)
+
+    variant_id: str
+    result: StrategyEvaluationResult | None = None
+    error: dict[str, object] | None = None
+
+    @model_validator(mode="after")
+    def validate_exactly_one_outcome(self) -> "StrategyEvaluationBatchVariantOutcome":
+        if (self.result is None) == (self.error is None):
+            raise ValueError("batch variant outcome must have exactly one of result/error")
+        return self
+
+
 class ManagedReplayRequest(BaseModel):
     """Strategy Engine wire request. Only `strategy_id`/`strategy_spec`
     (Engine's `raw_spec`) cross the Engine boundary
