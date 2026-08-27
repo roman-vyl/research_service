@@ -327,6 +327,35 @@ the "why"; this section states only what constrains the "how"):
     `strategy_version`, tracked in `tasks.md` as a coordination point,
     not implemented here.
 
+15. **Strategy-evaluation acquisition is separated from backtest
+    materialization as its own application use case
+    (`MaterializeBacktestOutcome`), added after Step 1's Engine boundary
+    sync landed.** `RunSingleInstanceBacktest.execute()` split at the
+    point right after `evaluate_range()`/MDS `read_historical_range()`
+    return: everything from contract acceptance through
+    execution/managed-replay/accounting/result construction moved into
+    `MaterializeBacktestOutcome.execute(request, evaluation, market_frame)`,
+    which takes an already-acquired `StrategyEvaluationResult` +
+    `MarketFrame` and performs no further Engine range evaluation or MDS
+    window resolution itself. `RunSingleInstanceBacktest` keeps its
+    existing public signature and behavior unchanged — it now resolves
+    the window, calls Engine once, and delegates. `run_id` generation
+    moved with it: it is generated inside `MaterializeBacktestOutcome`
+    only once contract acceptance/execution/accounting have all
+    succeeded, not at the top of the old combined method — so a
+    candidate that fails before a materialized result exists never
+    consumes a run identity, matching the existing "run identity
+    generated only on success" invariant (Decision 13) under a future
+    shared-evaluation batch path. `instance_id` crosses the seam through
+    `StrategyEvaluationResult.instance_id` (already Research-stamped, not
+    Engine-echoed, since Step 1) — no separate `instance_id` parameter.
+    This is purely an internal application-architecture seam; it changes
+    no wire contract, no persisted artifact shape, and no batch behavior.
+    A future batch-evaluation optimization (one shared Engine
+    `/range-batch` call, N `MaterializeBacktestOutcome.execute()` calls)
+    is enabled by this seam but explicitly not implemented here — tracked
+    as a following, separate slice.
+
 ## Risks / Trade-offs
 
 - [Risk] Overlap with the still-active `research-history-window-planning-v1`

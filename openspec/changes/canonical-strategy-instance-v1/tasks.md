@@ -259,11 +259,64 @@ unchanged and needed no structural change here.
       correlated by `index`/`config_hash` — no Engine-returned
       `instance_id` was ever depended on. No code change required.
 
-## 10. Future follow-up (explicitly not this change)
+## 11. Application seam: separate evaluation acquisition from materialization (Step 2)
 
-- [ ] 10.1 (Not started, not designed here) A future Runtime-deployment
+Corrective/preparatory slice, added after §9 (Step 1). Purpose: let a
+future batch path acquire N `StrategyEvaluationResult`s from one shared
+Engine call and finish each one through the existing single-instance
+execution/accounting/persistence pipeline, without duplicating that
+pipeline. Does NOT implement batch itself — `RunBatchExperiment`,
+`BatchCandidateRequest`, `candidate_id`/`variant_id`, and any Engine
+`/range-batch` client remain untouched and continue to work exactly as
+before, via `RunSingleInstanceBacktest`.
+
+- [x] 11.1 Add `MaterializeBacktestOutcome`
+      (`application/backtests/materialize_backtest_outcome.py`):
+      `execute(request: SingleInstanceBacktestRequest, evaluation:
+      StrategyEvaluationResult, market_frame: MarketFrame) ->
+      SingleInstanceBacktestOutcome`. Performs contract acceptance,
+      managed-replay provisioning, execution, accounting, and result
+      construction — no Engine range evaluation, no MDS window
+      resolution, no persistence. Constructor takes only
+      `StrategyEnginePort` (needed for managed-replay calls during
+      execution).
+- [x] 11.2 Move `run_id` generation into `MaterializeBacktestOutcome`,
+      after contract acceptance/execution/accounting succeed, immediately
+      before constructing `SingleInstanceBacktestResult` — not at the top
+      of the (now split) orchestration, so a candidate that fails before
+      a materialized result exists never consumes a run identity.
+- [x] 11.3 Slim `RunSingleInstanceBacktest.execute()` down to: derive
+      `instance_id`, resolve the window, build the Engine wire request,
+      call `evaluate_range()` once, read the `MarketFrame`, delegate to
+      `MaterializeBacktestOutcome.execute()`. Public signature and
+      external behavior unchanged.
+- [x] 11.4 Tests: a continuation-only test proving
+      `MaterializeBacktestOutcome.execute()` produces a correct outcome
+      given a canned evaluation/frame with no `evaluate_range` call at
+      all (fake engine raises if range evaluation is attempted); an
+      `evaluate_range`-call-count assertion on the existing single-path
+      composition test; a Phase-A-failure test (window/MDS audit) proving
+      the continuation and its run-id generation are never reached; a
+      Phase-B-failure test proving `run_id` generation does not run
+      before a materialized result.
+- [x] 11.5 Confirmed unchanged: `PersistSingleInstanceBacktest`,
+      `accept_strategy_execution_contract`, `run_unified_execution_loop`,
+      `account_execution_loop`, all persisted artifact shapes, and the
+      entire `experiments/` batch package.
+
+## 12. Future follow-up (explicitly not this change)
+
+- [ ] 12.1 (Not started, not designed here) A future Runtime-deployment
       capability: `POST` deployment endpoint, atomic filesystem
       persistence into Runtime's deployment directory, Runtime
       discovery/reload interaction, and a Composer "Deploy" UI step after
       Validate/Backtest. This change's only contribution to that future
       work is making the deployable document already the right shape.
+- [ ] 12.2 (Not started, not designed here) Batch evaluation optimization
+      enabled by §11's seam: shared window resolution, one Engine
+      `/range-batch` call, and N `MaterializeBacktestOutcome.execute()`
+      calls in place of `RunBatchExperiment`'s current N sequential
+      `RunSingleInstanceBacktest.execute()` calls. Requires its own
+      design pass (Engine wire client, candidate_id/variant_id
+      correlation, shared-L0 semantics) — not designed or implemented
+      here.
