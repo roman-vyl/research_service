@@ -15,10 +15,11 @@ ExecutionSide = Literal["long", "short"]
 class ExecutionPolicy(BaseModel):
     """Execution assumptions owned by Research Service.
 
-    Entry fills support explicit adverse slippage. Under the ``bbb_v1``
-    compatibility profile, initial stop/take levels remain anchored to the
-    signal-bar close because that is the legacy VectorBT/managed-loop anchor.
-    Fees are intentionally deferred to accounting.
+    Entry fills support explicit adverse slippage. Initial stop/take levels
+    are always anchored to the signal-bar close -- the original BBB v1
+    engine's VectorBT/managed-loop anchor, not a caller-selectable profile;
+    there is no other supported anchor. Fees are intentionally deferred to
+    accounting.
     """
 
     model_config = ConfigDict(frozen=True)

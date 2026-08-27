@@ -122,7 +122,7 @@ def test_signal_trace_projects_strategy_evidence_and_execution_events(tmp_path: 
     client, run_id = client_with_run(tmp_path)
     response = client.get(
         f"/api/research/runs/{run_id}/signal-trace",
-        params={"variant": INSTANCE_ID, "from": 0, "to": 900_000},
+        params={"instance_id": INSTANCE_ID, "from": 0, "to": 900_000},
     )
     assert response.status_code == 200
     body = response.json()
@@ -131,6 +131,7 @@ def test_signal_trace_projects_strategy_evidence_and_execution_events(tmp_path: 
     assert body["long"]["direction_ok"] == [True, True, False]
     assert body["long"]["signal_entry"] == [True, False, False]
     assert body["long"]["portfolio_entry"] == [True, False, False]
+    assert body["meta"]["instance_id"] == INSTANCE_ID
     assert body["meta"]["component_ids"]["trigger"] == "touch_anchor"
     execution = [event for event in body["component_events"] if event["role"] == "execution"]
     assert [event["component_id"] for event in execution] == ["entry_filled", "exit_filled"]
@@ -141,7 +142,7 @@ def test_chart_events_is_sparse_projection_with_coverage(tmp_path: Path) -> None
     client, run_id = client_with_run(tmp_path)
     response = client.get(
         f"/api/research/runs/{run_id}/chart-events",
-        params={"variant": INSTANCE_ID, "from": 0, "to": 600_000},
+        params={"instance_id": INSTANCE_ID, "from": 0, "to": 600_000},
     )
     assert response.status_code == 200
     body = response.json()
@@ -153,17 +154,36 @@ def test_chart_events_is_sparse_projection_with_coverage(tmp_path: Path) -> None
     assert any(event["component_id"] == "entry_filled" for event in body["component_events"])
 
 
-def test_diagnostics_rejects_wrong_variant_and_missing_window(tmp_path: Path) -> None:
+def test_diagnostics_rejects_wrong_instance_id_and_missing_window(tmp_path: Path) -> None:
     client, run_id = client_with_run(tmp_path)
     wrong = client.get(
         f"/api/research/runs/{run_id}/signal-trace",
-        params={"variant": "other", "from": 0, "to": 900_000},
+        params={"instance_id": "other", "from": 0, "to": 900_000},
     )
     missing = client.get(
         f"/api/research/runs/{run_id}/chart-events",
-        params={"variant": INSTANCE_ID, "from": 0},
+        params={"instance_id": INSTANCE_ID, "from": 0},
     )
     assert wrong.status_code == 400
     assert wrong.json()["error"] == "invalid_request"
     assert missing.status_code == 400
     assert missing.json()["error"] == "invalid_request"
+
+
+def test_legacy_variant_query_param_is_no_longer_supported(tmp_path: Path) -> None:
+    # Clean break (research-backtest-api-v1): `variant` was the old wire
+    # name for this diagnostics identity; `instance_id` is required and
+    # `variant` is not a recognized alias -- omitting the required param
+    # fails FastAPI's own request validation (422), before any use case
+    # runs.
+    client, run_id = client_with_run(tmp_path)
+    signal_trace = client.get(
+        f"/api/research/runs/{run_id}/signal-trace",
+        params={"variant": INSTANCE_ID, "from": 0, "to": 900_000},
+    )
+    chart_events = client.get(
+        f"/api/research/runs/{run_id}/chart-events",
+        params={"variant": INSTANCE_ID, "from": 0, "to": 900_000},
+    )
+    assert signal_trace.status_code == 422
+    assert chart_events.status_code == 422

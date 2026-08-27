@@ -164,7 +164,7 @@ def get_run_metrics(request: Request, run_id: str) -> RunMetrics:
 def get_run_signal_trace(
     request: Request,
     run_id: str,
-    variant: str = Query(..., min_length=1),
+    instance_id: str = Query(..., min_length=1),
     from_ms: int = Query(..., alias="from", ge=0),
     to_ms: int | None = Query(None, alias="to", ge=1),
     to_open_time_ms: int | None = Query(None, ge=0),
@@ -173,7 +173,7 @@ def get_run_signal_trace(
     end_ms = _resolve_end_ms(to_ms, to_open_time_ms)
     return services(request).project_run_diagnostics.signal_trace(
         run_id=run_id,
-        variant=variant,
+        instance_id=instance_id,
         from_ms=from_ms,
         to_ms=end_ms,
         context_overlay_ref=context_overlay_ref,
@@ -184,7 +184,7 @@ def get_run_signal_trace(
 def get_run_chart_events(
     request: Request,
     run_id: str,
-    variant: str = Query(..., min_length=1),
+    instance_id: str = Query(..., min_length=1),
     from_ms: int = Query(..., alias="from", ge=0),
     to_ms: int | None = Query(None, alias="to", ge=1),
     to_open_time_ms: int | None = Query(None, ge=0),
@@ -193,7 +193,7 @@ def get_run_chart_events(
     end_ms = _resolve_end_ms(to_ms, to_open_time_ms)
     return services(request).project_run_diagnostics.chart_events(
         run_id=run_id,
-        variant=variant,
+        instance_id=instance_id,
         from_ms=from_ms,
         to_ms=end_ms,
         context_overlay_ref=context_overlay_ref,

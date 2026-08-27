@@ -72,7 +72,7 @@ def _spec_meta(raw_spec: Mapping[str, Any], instance_id: str) -> SignalTraceMeta
             }
         )
     return SignalTraceMeta(
-        variant=instance_id,
+        instance_id=instance_id,
         component_ids=SignalTraceComponentIds(
             direction=direction,
             setups=tuple(setups),
@@ -271,17 +271,17 @@ class ProjectRunDiagnostics:
         self,
         *,
         run_id: str,
-        variant: str,
+        instance_id: str,
         from_ms: int,
         to_ms: int,
         context_overlay_ref: str | None = None,
     ) -> SignalTraceBundle:
         detail = self._runs.detail(run_id)
         result = detail.result
-        if variant != result.instance_id:
+        if instance_id != result.instance_id:
             raise InvalidRequest(
-                "variant does not match the single-instance run",
-                {"variant": variant, "instance_id": result.instance_id},
+                "instance_id does not match the single-instance run",
+                {"instance_id": instance_id, "run_instance_id": result.instance_id},
             )
         if from_ms >= to_ms:
             raise InvalidRequest("from must be less than to")
@@ -358,14 +358,14 @@ class ProjectRunDiagnostics:
         self,
         *,
         run_id: str,
-        variant: str,
+        instance_id: str,
         from_ms: int,
         to_ms: int,
         context_overlay_ref: str | None = None,
     ) -> ChartEventsBundle:
         trace = self.signal_trace(
             run_id=run_id,
-            variant=variant,
+            instance_id=instance_id,
             from_ms=from_ms,
             to_ms=to_ms,
             context_overlay_ref=context_overlay_ref,
