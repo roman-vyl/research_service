@@ -20,7 +20,6 @@ class RunSummary(BaseModel):
     created_at_utc: str = Field(min_length=1)
     instance_id: str = Field(min_length=1)
     strategy_id: str = Field(min_length=1)
-    strategy_version: str = Field(min_length=1)
     ticker: str = Field(min_length=1)
     timeframe: str = Field(min_length=1)
     from_ms: int = Field(ge=0)
@@ -51,7 +50,7 @@ class RunDetail(BaseModel):
     # Sourced from the persisted request.json (request.strategy.strategy_spec) —
     # the authoritative strategy spec for one run. Only this field is surfaced;
     # the rest of the persisted request envelope (execution/accounting policy,
-    # range_policy, compatibility_profile, etc.) is deliberately not exposed.
+    # range_policy, etc.) is deliberately not exposed.
     strategy_spec: dict[str, Any]
 
 

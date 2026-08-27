@@ -22,7 +22,6 @@ def evaluation(*, signal: bool = True) -> StrategyEvaluationResult:
     return StrategyEvaluationResult(
         contract_version="strategy_evaluation.v1",
         strategy_id="ema_pullback",
-        strategy_version="v1",
         instance_id="i1",
         config_hash="cfg",
         market=MarketRange(ticker="BTCUSDT.P", timeframe="5m", from_ms=0, to_ms=600_000),

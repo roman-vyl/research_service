@@ -20,16 +20,11 @@ class GetComponentCatalog:
         cached = self._cache.get(strategy_id)
         if cached is not None:
             return cached
-        # Strategy Engine's own Composer Catalog API response still names its
-        # selector field `family` today (cross-repo seam, not renamed here —
-        # canonical-strategy-instance-v1, Decision 14). Research reads it
-        # under Engine's existing name without exposing `family` to its own
-        # callers.
         raw = self._strategy_engine.get_composer_catalog(strategy_id)
         catalog = ComponentCatalog.model_validate(raw)
-        if catalog.family != strategy_id:
+        if catalog.strategy_id != strategy_id:
             raise InvalidRequest(
-                "Strategy Engine composer catalog family does not match strategy_id"
+                "Strategy Engine composer catalog strategy_id does not match strategy_id"
             )
         self._cache[strategy_id] = catalog
         return catalog

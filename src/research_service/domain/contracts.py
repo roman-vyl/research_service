@@ -109,18 +109,19 @@ class MarketFrame(BaseModel):
 class StrategyEvaluationRequest(BaseModel):
     """Strategy Engine wire request. Internal-only since
     `canonical-strategy-instance-v1`: Research constructs this itself from a
-    `StrategyInstanceIdentity` plus internally-owned `strategy_version`/
-    `instance_id`/`compatibility_profile` — it is never built directly from
-    caller input."""
+    `StrategyInstanceIdentity` plus its own derived `instance_id`. Only
+    `strategy_id`/`strategy_spec` (Engine's `raw_spec`) cross the Engine
+    evaluation boundary (`strategy-evaluation-canonical-boundary-v1`);
+    `instance_id` is carried here purely as Research-owned provenance so the
+    Engine client can stamp it onto `StrategyEvaluationResult` — Engine
+    itself never receives or echoes it."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     strategy_id: str
-    strategy_version: str = "v1"
     instance_id: str
     strategy_spec: dict[str, object]
     market: MarketRange
-    compatibility_profile: str = "bbb_v1"
     include_features: bool = True
     include_contexts: bool = True
     include_component_evidence: bool = True
@@ -132,7 +133,6 @@ class StrategyEvaluationResult(BaseModel):
 
     contract_version: str
     strategy_id: str
-    strategy_version: str
     instance_id: str
     config_hash: str
     market: MarketRange
@@ -165,18 +165,20 @@ class StrategyEvaluationResult(BaseModel):
 
 
 class ManagedReplayRequest(BaseModel):
+    """Strategy Engine wire request. Only `strategy_id`/`strategy_spec`
+    (Engine's `raw_spec`) cross the Engine boundary
+    (`strategy-evaluation-canonical-boundary-v1`); managed-replay's response
+    carries no instance identity, so this request needs none either."""
+
     model_config = ConfigDict(frozen=True)
 
     strategy_id: str
-    strategy_version: str = "v1"
-    instance_id: str
     strategy_spec: dict[str, object]
     market: MarketRange
     trade_id: str
     side: str
     entry_time_ms: int
     entry_price: Decimal
-    compatibility_profile: str = "bbb_v1"
 
     @field_validator("side")
     @classmethod

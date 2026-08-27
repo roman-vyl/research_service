@@ -30,15 +30,6 @@ from research_service.execution.managed_policy_events import (
 from research_service.ports.market_data import MarketDataPort
 from research_service.ports.strategy_engine import StrategyEnginePort
 
-# Constants Research still sends on the wire to Strategy Engine internally.
-# Neither is exposed as a field Research requires from its own callers —
-# `strategy_version` has exactly one value across the whole system today
-# (canonical-strategy-instance-v1, Decision 5), and `compatibility_profile`
-# was already Research-owned/defaulted, never caller-supplied.
-_ENGINE_STRATEGY_VERSION = "v1"
-_ENGINE_COMPATIBILITY_PROFILE = "bbb_v1"
-
-
 def _generate_run_id() -> str:
     return f"run_{uuid.uuid4().hex}"
 
@@ -92,11 +83,9 @@ class RunSingleInstanceBacktest:
         )
         strategy_request = StrategyEvaluationRequest(
             strategy_id=request.strategy.strategy_id,
-            strategy_version=_ENGINE_STRATEGY_VERSION,
             instance_id=instance_id,
             strategy_spec=request.strategy.raw_spec,
             market=window.market,
-            compatibility_profile=_ENGINE_COMPATIBILITY_PROFILE,
             expected_market_data_hash=window.market_data_hash,
         )
         evaluation = self._strategy_engine.evaluate_range(strategy_request)
@@ -114,7 +103,6 @@ class RunSingleInstanceBacktest:
         managed_provider = (
             self._managed_provider(
                 request,
-                instance_id,
                 window.market,
                 managed_policy_events,
             )
@@ -145,7 +133,6 @@ class RunSingleInstanceBacktest:
     def _managed_provider(
         self,
         request: SingleInstanceBacktestRequest,
-        instance_id: str,
         resolved_market: MarketRange,
         managed_policy_events: list[ManagedPolicyEvent],
     ) -> ManagedReplayProvider:
@@ -162,15 +149,12 @@ class RunSingleInstanceBacktest:
             replay = self._strategy_engine.evaluate_managed_replay(
                 ManagedReplayRequest(
                     strategy_id=request.strategy.strategy_id,
-                    strategy_version=_ENGINE_STRATEGY_VERSION,
-                    instance_id=instance_id,
                     strategy_spec=request.strategy.raw_spec,
                     market=resolved_market,
                     trade_id=position.position_id,
                     side=position.side,
                     entry_time_ms=position.entry_fill.time_ms,
                     entry_price=position.entry_fill.reference_price,
-                    compatibility_profile=_ENGINE_COMPATIBILITY_PROFILE,
                 )
             )
             # Capture here, before the loop's ManagedPolicyTimeline (built from

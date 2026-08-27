@@ -17,7 +17,6 @@ def evaluation(*, signal_long=(False, False), signal_short=(False, False)):
     return StrategyEvaluationResult(
         contract_version="strategy_evaluation.v1",
         strategy_id="ema_pullback",
-        strategy_version="v1",
         instance_id="i1",
         config_hash="cfg",
         market=market,

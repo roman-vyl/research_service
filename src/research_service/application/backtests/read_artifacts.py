@@ -166,16 +166,11 @@ class ReadResearchRuns:
         # summary must report what was actually evaluated and executed.
         market = documents.result.strategy_evaluation.market
         strategy = documents.request.strategy
-        evaluation = documents.result.strategy_evaluation
         return RunSummary(
             run_id=documents.manifest.run_id,
             created_at_utc=documents.manifest.created_at_utc,
             instance_id=documents.manifest.instance_id,
             strategy_id=strategy.strategy_id,
-            # strategy_version no longer lives on the request (retired at
-            # the Research-facing boundary, canonical-strategy-instance-v1)
-            # — sourced from Strategy Engine's own echoed result instead.
-            strategy_version=evaluation.strategy_version,
             ticker=market.ticker,
             timeframe=market.timeframe,
             from_ms=market.from_ms,

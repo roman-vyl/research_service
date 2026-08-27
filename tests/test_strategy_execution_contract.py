@@ -22,8 +22,6 @@ def range_response() -> dict[str, object]:
     return {
         "contract_version": "strategy_evaluation.v1",
         "strategy_id": "ema_pullback",
-        "strategy_version": "v1",
-        "instance_id": "instance-1",
         "config_hash": "cfg-hash",
         "market": {
             "ticker": "BTCUSDT.P",
@@ -118,15 +116,16 @@ def test_real_strategy_engine_wire_contract_is_consumable() -> None:
             market=market,
         )
     )
+    assert set(seen[0]["strategy"]) == {"strategy_id", "raw_spec"}
     assert seen[0]["strategy"]["raw_spec"] == {"trade_sides": ["long", "short"]}
     assert seen[0]["market"]["base_timeframe"] == "5m"
     assert evaluation.market_data_hash == "market-hash"
     assert evaluation.entries["long"] == (False, True)
+    assert evaluation.instance_id == "instance-1"
 
     managed = client.evaluate_managed_replay(
         ManagedReplayRequest(
             strategy_id="ema_pullback",
-            instance_id="instance-1",
             strategy_spec={},
             market=market,
             trade_id="trade-1",
@@ -135,6 +134,7 @@ def test_real_strategy_engine_wire_contract_is_consumable() -> None:
             entry_price=Decimal("100"),
         )
     )
+    assert set(seen[1]["strategy"]) == {"strategy_id", "raw_spec"}
     assert managed.bars[0].effective_from_time_ms == 300_000
     assert managed.bars[-1].effective_from_time_ms is None
 

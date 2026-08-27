@@ -78,7 +78,6 @@ def strategy_request() -> StrategyEvaluationRequest:
     still used to assert what `FakeStrategyEngine` actually received."""
     return StrategyEvaluationRequest(
         strategy_id="ema_pullback",
-        strategy_version="v1",
         instance_id=INSTANCE_ID,
         strategy_spec=_RAW_SPEC,
         market=market_frame().market,
@@ -90,7 +89,6 @@ def strategy_result(*, market: MarketRange | None = None) -> StrategyEvaluationR
     return StrategyEvaluationResult(
         contract_version="strategy_evaluation.v1",
         strategy_id="ema_pullback",
-        strategy_version="v1",
         instance_id=INSTANCE_ID,
         config_hash="config-hash",
         market=resolved_market,

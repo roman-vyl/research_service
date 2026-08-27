@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
 from fastapi.testclient import TestClient
 
 from research_service.api.app import create_app
@@ -10,7 +11,7 @@ from research_service.runtime.wiring import Container
 
 
 CATALOG = {
-    "family": "ema_pullback",
+    "strategy_id": "ema_pullback",
     "schema_version": 1,
     "sections": [
         {"section_id": "direction", "label": "Direction", "role": "direction", "list_slot": False}
@@ -93,3 +94,28 @@ def test_component_catalog_rejects_unknown_strategy_id_without_upstream_call(tmp
     assert response.status_code == 400
     assert response.json()["error"] == "invalid_request"
     assert strategy.calls == []
+
+
+class LegacyFamilyStrategyEngine:
+    """Simulates a pre-cutover Engine response shape (`family` instead of
+    `strategy_id`) to prove Research's strict catalog parser rejects it
+    rather than silently accepting the old wire shape."""
+
+    def health(self) -> bool:
+        return True
+
+    def get_composer_catalog(self, strategy_id: str):
+        legacy = dict(CATALOG)
+        del legacy["strategy_id"]
+        legacy["family"] = "ema_pullback"
+        return legacy
+
+
+def test_component_catalog_rejects_legacy_family_wire_shape(tmp_path: Path) -> None:
+    from pydantic import ValidationError
+
+    from research_service.application.research.component_catalog import GetComponentCatalog
+
+    use_case = GetComponentCatalog(LegacyFamilyStrategyEngine())
+    with pytest.raises(ValidationError):
+        use_case.execute()

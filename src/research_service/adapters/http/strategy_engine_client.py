@@ -107,10 +107,7 @@ class HttpStrategyEngineClient:
             "expected_market_data_hash": request.expected_market_data_hash,
             "strategy": {
                 "strategy_id": request.strategy_id,
-                "strategy_version": request.strategy_version,
-                "instance_id": request.instance_id,
                 "raw_spec": request.strategy_spec,
-                "compatibility_profile": request.compatibility_profile,
             },
             "options": {
                 "include_features": request.include_features,
@@ -141,8 +138,11 @@ class HttpStrategyEngineClient:
         return StrategyEvaluationResult(
             contract_version=str(body.get("contract_version", "")),
             strategy_id=str(body.get("strategy_id", "")),
-            strategy_version=str(body.get("strategy_version", "")),
-            instance_id=str(body.get("instance_id", "")),
+            # Engine no longer echoes instance_id
+            # (strategy-evaluation-canonical-boundary-v1) — stamp Research's
+            # own already-derived identity instead of parsing it off the
+            # wire.
+            instance_id=request.instance_id,
             config_hash=str(body.get("config_hash", "")),
             market=parsed_market,
             bar_count=_int(market.get("bar_count", -1)),
@@ -167,10 +167,7 @@ class HttpStrategyEngineClient:
             },
             "strategy": {
                 "strategy_id": request.strategy_id,
-                "strategy_version": request.strategy_version,
-                "instance_id": request.instance_id,
                 "raw_spec": request.strategy_spec,
-                "compatibility_profile": request.compatibility_profile,
             },
             "trade_id": request.trade_id,
             "side": request.side,
