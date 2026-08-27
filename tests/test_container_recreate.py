@@ -52,7 +52,7 @@ def test_persisted_run_survives_container_recreate(tmp_path: Path) -> None:
     response = old_client.post(
         "/api/research/backtests",
         json={
-            "strategy": strategy_identity().model_dump(mode="json"),
+            "strategy": {"enabled": True, **strategy_identity().model_dump(mode="json")},
             "range": ExplicitRange(from_ms=0, to_ms=900_000).model_dump(mode="json"),
             "execution": ExecutionPolicy(quantity=Decimal("1")).model_dump(mode="json"),
             "accounting": AccountingPolicy(

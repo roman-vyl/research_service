@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from research_service.accounting import AccountingPolicy
 from research_service.adapters.artifacts.filesystem import FilesystemArtifactStore
 from research_service.api.app import create_app
+from research_service.api.contracts.backtests import BacktestRunRequest
 from research_service.application.backtests import (
     RunSingleInstanceBacktest,
     SingleInstanceBacktestRequest,
@@ -21,6 +22,7 @@ from research_service.domain.contracts import (
     ManagedReplayResult,
 )
 from research_service.domain.execution import ExecutionPolicy
+from research_service.domain.strategy_instance import DeployableStrategyInstance
 from research_service.execution.managed_policy_events import capture_managed_policy_events
 from research_service.runtime.settings import Settings
 from research_service.runtime.wiring import Container
@@ -31,6 +33,18 @@ from test_single_instance_backtest import (
     strategy_identity,
     strategy_result,
 )
+
+_RAW_SPEC = {"anchor": {"period": 200}}
+
+
+def _deployable_instance() -> DeployableStrategyInstance:
+    return DeployableStrategyInstance(
+        enabled=True,
+        strategy_id="ema_pullback",
+        ticker="BTCUSDT.P",
+        base_timeframe="5m",
+        raw_spec=_RAW_SPEC,
+    )
 
 
 class ManagedEventsStrategyEngine(FakeStrategyEngine):
@@ -102,6 +116,20 @@ class ManagedEventsStrategyEngine(FakeStrategyEngine):
 def _request(*, managed_policy_enabled: bool) -> SingleInstanceBacktestRequest:
     return SingleInstanceBacktestRequest(
         strategy=strategy_identity(),
+        range=ExplicitRange(from_ms=0, to_ms=900_000),
+        execution=ExecutionPolicy(quantity=Decimal("2")),
+        accounting=AccountingPolicy(
+            initial_equity=Decimal("1000"),
+            entry_fee_rate=Decimal("0.001"),
+            exit_fee_rate=Decimal("0.001"),
+        ),
+        managed_policy_enabled=managed_policy_enabled,
+    )
+
+
+def _http_request(*, managed_policy_enabled: bool) -> BacktestRunRequest:
+    return BacktestRunRequest(
+        strategy=_deployable_instance(),
         range=ExplicitRange(from_ms=0, to_ms=900_000),
         execution=ExecutionPolicy(quantity=Decimal("2")),
         accounting=AccountingPolicy(
@@ -190,7 +218,7 @@ def _persist_via_backtest_endpoint(
     engine = ManagedEventsStrategyEngine(strategy_result())
     container = _container(tmp_path, engine)
     client = TestClient(create_app(container.settings, container))
-    payload = _request(managed_policy_enabled=managed_policy_enabled)
+    payload = _http_request(managed_policy_enabled=managed_policy_enabled)
     response = client.post("/api/research/backtests", json=json.loads(payload.model_dump_json()))
     assert response.status_code == 201, response.json()
     return client, response.json()["run_id"]

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query, Request, status
 
-from research_service.api.contracts.backtests import BacktestRunResponse
+from research_service.api.contracts.backtests import BacktestRunRequest, BacktestRunResponse
 from research_service.api.contracts.runs import (
     RunCompactSummary,
     RunDetail,
@@ -24,7 +24,6 @@ from research_service.api.contracts.config import (
     StrategyConfigDraft,
     ValidationResult,
 )
-from research_service.application.backtests import SingleInstanceBacktestRequest
 from research_service.domain.errors import InvalidRequest, RunAlreadyExists
 from research_service.runtime.services import services
 
@@ -91,15 +90,22 @@ def select_config(
 )
 def run_backtest(
     request: Request,
-    payload: SingleInstanceBacktestRequest,
+    payload: BacktestRunRequest,
 ) -> BacktestRunResponse:
-    """Run and atomically persist one authoritative single-instance backtest."""
+    """Run and atomically persist one authoritative single-instance backtest.
 
-    outcome = services(request).run_single_instance_backtest.execute(payload)
+    Accepts a canonical deployable strategy instance (including `enabled`)
+    at the HTTP boundary; `BacktestRunRequest.to_application()` projects it
+    to the internal `SingleInstanceBacktestRequest` via `build_backtest_request()`
+    before orchestration begins.
+    """
+
+    application_request = payload.to_application()
+    outcome = services(request).run_single_instance_backtest.execute(application_request)
     result = outcome.result
     try:
         persisted = services(request).persist_single_instance_backtest.execute(
-            payload,
+            application_request,
             result,
             outcome.managed_policy_events,
         )
