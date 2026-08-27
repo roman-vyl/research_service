@@ -129,6 +129,31 @@ values SHALL yield the identical `instance_id` in both contexts.
 - **THEN** both contexts derive the identical `instance_id` for that
   instance.
 
+### Requirement: Research-to-Engine evaluation boundary
+
+Research Service SHALL send exactly `{strategy_id, raw_spec}` as the
+strategy input on every Strategy Engine evaluation call (range,
+managed-replay). It SHALL NOT send `strategy_version`, `instance_id`, or
+`compatibility_profile` on that wire boundary. Research's own derived
+`instance_id` SHALL NOT cross this boundary and SHALL NOT be expected
+back in Engine's response — Research stamps it onto its own result from
+its own prior derivation.
+
+#### Scenario: Engine evaluation request carries only strategy_id and raw_spec
+
+- **WHEN** Research Service calls Strategy Engine's range or
+  managed-replay evaluation endpoint
+- **THEN** the request's strategy input contains exactly `strategy_id`
+  and `raw_spec`, and no other field.
+
+#### Scenario: Engine response identity is Research's own, not Engine's echo
+
+- **WHEN** Research Service receives a Strategy Engine evaluation
+  response
+- **THEN** the `instance_id` Research associates with that evaluation is
+  the value it derived itself before the call, not a value parsed from
+  Engine's response body.
+
 ### Requirement: Deployable document is Runtime-consumable as-is
 
 A Composer-produced deployable strategy-instance document SHALL be

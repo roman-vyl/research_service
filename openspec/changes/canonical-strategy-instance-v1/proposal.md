@@ -136,16 +136,16 @@ this change removes. See the delta spec and Decision below.
   against this contract, including an editable `enabled` field on each
   instance draft — flagged in `tasks.md`, owned by that repo's own
   change.
-- **strategy_engine** (dependent, tracked, not implemented in this
-  change): dropping `strategy_version` as a Research-forwarded field is a
-  Research-Service-boundary decision; Engine's own `StrategySpecEnvelope`
-  schema and `config_hash` computation are that repo's own contract and
-  are not edited here. Same seam for the component-catalog boundary:
-  Strategy Engine's own Composer Catalog API response still names its
-  selector field `family` today; Research renaming its own query
-  param/internal usage to `strategy_id` does not by itself rename
-  Engine's response field — that is Engine's own contract to change on
-  its own timeline, coordinated the same way as `strategy_version`.
+- **strategy_engine**: resolved. `strategy_engine` completed
+  `strategy-evaluation-canonical-boundary-v1` (commits `4028242`,
+  `d61cfef`, `83e2f18`), retiring `strategy_version`, caller-supplied
+  `instance_id`, and `compatibility_profile` from its Research-facing
+  evaluation boundary and renaming the Composer Catalog API's `family`
+  field to `strategy_id`. This change's tasks.md §9 brings Research's
+  single-backtest, managed-replay, authoring-validation, and
+  component-catalog wire calls in line with that now-final Engine
+  contract. Batch's `/range-batch` client and `RunBatchExperiment`
+  architecture are an explicit non-goal of §9, tracked for a later slice.
 - **strategy_runtime** (authoritative source, not modified): its existing
   deployment-file shape and `derive_strategy_instance_id` function are
   the normative reference this contract converges on; no code change is

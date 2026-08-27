@@ -38,3 +38,24 @@ upstream request.
 - **WHEN** a request names a `strategy_id` Research Service does not
   support
 - **THEN** it returns HTTP 400 and no call is made to Strategy Engine.
+
+### Requirement: Strategy Engine catalog response uses strategy_id
+
+Research Service's `ComponentCatalog` model SHALL parse Strategy Engine's
+Composer Catalog API response field as `strategy_id`, matching Engine's
+final wire contract (`strategy-evaluation-canonical-boundary-v1`). It
+SHALL NOT accept a legacy `family`-named response field as an alias or
+fallback.
+
+#### Scenario: Engine response parsed under its final field name
+
+- **WHEN** Strategy Engine's Composer Catalog API responds with
+  `strategy_id`
+- **THEN** Research Service parses it as `ComponentCatalog.strategy_id`.
+
+#### Scenario: Legacy family-shaped response is rejected, not accepted
+
+- **WHEN** a Composer Catalog API response uses the retired `family`
+  field instead of `strategy_id`
+- **THEN** Research Service's strict catalog parser rejects the response
+  rather than silently accepting the old shape.

@@ -1,20 +1,18 @@
 ## 1. Cross-repo coordination prerequisites
 
-- [ ] 1.1 Confirm with the Strategy Engine repo owners that Engine will
-      keep accepting requests without a caller-supplied `strategy_version`
-      (Research MAY continue sending its historical constant internally
-      without exposing it as a field Research requires from its own
-      callers). Do not implement Engine-side changes here.
-- [ ] 1.2 Confirm `strategy_runtime`'s `derive_strategy_instance_id`
-      signature and hashing algorithm are stable enough to reference as
-      the normative derivation from this repo (read-only dependency, no
-      changes to that repo).
-- [ ] 1.3 Confirm with the Strategy Engine repo owners that Engine's
-      Composer Catalog API response field currently named `family`
-      (`ComponentCatalog.family`) either gets renamed on Engine's own
-      timeline or that Research reading it internally under its old name
-      (without exposing `family` to Research's own callers) is acceptable
-      in the interim. Do not implement Engine-side changes here.
+- [x] 1.1 Resolved: `strategy_engine` completed
+      `strategy-evaluation-canonical-boundary-v1` (commits `4028242`,
+      `d61cfef`, `83e2f18`). Engine's evaluation boundary now accepts
+      exactly `{strategy_id, raw_spec}` and rejects `strategy_version`,
+      caller-supplied `instance_id`, and `compatibility_profile` outright
+      (`extra="forbid"`) rather than merely tolerating their absence. See
+      §9 for the Research-side sync this enables.
+- [x] 1.2 Confirmed: `strategy_runtime`'s `derive_strategy_instance_id` is
+      unchanged and remains the normative derivation; no dependency
+      concern.
+- [x] 1.3 Resolved: Engine's Composer Catalog API response field is now
+      named `strategy_id`, not `family` (same Engine change as 1.1). See
+      §9.
 
 ## 2. Research Service — canonical strategy-instance domain types
 
@@ -130,12 +128,10 @@
       `execute(strategy_id=...)` in
       `application/research/component_catalog.py`, including the
       unsupported-value rejection message and the local cache key.
-- [x] 5.3 Handle the Engine-response-field seam: `ComponentCatalog.family`
-      (Strategy Engine's own response field, checked at
-      `component_catalog.py`'s `catalog.family != family` line) is not
-      renamed by this task — Research reads it internally under its
-      existing name while no longer exposing `family` to its own callers
-      (per design.md Decision 14 and task 1.3's coordination check).
+- [x] 5.3 Superseded by §9: Engine's own response field is now
+      `strategy_id`, not `family` — `ComponentCatalog.family` renamed to
+      `ComponentCatalog.strategy_id` and `component_catalog.py`'s
+      comparison updated accordingly (`catalog.strategy_id != strategy_id`).
 - [x] 5.4 Add tests for `strategy_id`-based catalog requests and for
       unsupported-`strategy_id` rejection (HTTP 400, no upstream call),
       per `research-component-catalog-v1`'s delta spec.
@@ -193,19 +189,79 @@
       construction against this contract; remove `variant`/`family`/
       editable `instance_id` from Composer UI; own change, own OpenSpec
       tree (or equivalent), not authored here.
-- [ ] 8.2 `strategy_engine`: decide, on its own timeline, whether to drop
-      `strategy_version` from `StrategySpecEnvelope`/`config_hash`, and
-      whether/when to rename the Composer Catalog API's `family` response
-      field to `strategy_id` — or keep either as Engine-internal-only
-      concerns once Research stops forwarding/requiring them as
-      caller-facing fields.
+- [x] 8.2 Resolved: `strategy_engine` completed
+      `strategy-evaluation-canonical-boundary-v1` — see §9.
 - [ ] 8.3 `strategy_runtime`: no change required; its existing
       `derive_strategy_instance_id` and deployment file shape are already
       the reference implementation this change points to.
 
-## 9. Future follow-up (explicitly not this change)
+## 9. Research ↔ Strategy Engine boundary sync (single + managed + authoring + catalog)
 
-- [ ] 9.1 (Not started, not designed here) A future Runtime-deployment
+Corrective slice, added once `strategy_engine` completed
+`strategy-evaluation-canonical-boundary-v1` (`4028242`/`d61cfef`/`83e2f18`)
+and unblocked tasks 1.1/1.3/8.2 above. Scope: bring the single-backtest,
+managed-replay, authoring-validation, and composer-catalog wire calls to
+Engine in line with its now-final contract. Batch's `RunBatchExperiment`
+architecture, `variant_id`/`candidate_id`, and shared-L0 acquisition are
+explicitly out of scope — batch already reuses `RunSingleInstanceBacktest`
+unchanged and needed no structural change here.
+
+- [x] 9.1 `StrategyEvaluationRequest`/`ManagedReplayRequest`
+      (`domain/contracts.py`): drop `strategy_version` and
+      `compatibility_profile` fields entirely (no longer sent to Engine,
+      nothing else read them). Drop `instance_id` from
+      `ManagedReplayRequest` (unused once off the wire — managed-replay's
+      response carries no instance identity). Keep `instance_id` on
+      `StrategyEvaluationRequest` as Research-owned provenance carried
+      into the client, not as a wire field.
+- [x] 9.2 `HttpStrategyEngineClient.evaluate_range`/`evaluate_managed_replay`
+      (`adapters/http/strategy_engine_client.py`): send exactly
+      `{strategy_id, raw_spec}` as `strategy` on both wire calls. Stamp
+      `StrategyEvaluationResult.instance_id` from `request.instance_id`
+      (Research's own already-derived identity) instead of parsing
+      `body.get("instance_id")`, since Engine no longer echoes it.
+- [x] 9.3 `StrategyEvaluationResult` (`domain/contracts.py`): drop
+      `strategy_version` (Engine no longer echoes it); keep `instance_id`
+      as described in 9.2. `evaluation.instance_id` remains the identity
+      the whole execution/accounting chain
+      (`execution/entry.py`/`loop.py`/`static_exits.py`/`protection.py`,
+      `accounting/service.py`) relies on — unaffected by this change since
+      it is stamped from Research's own derivation, never Engine's.
+- [x] 9.4 `run_backtest.py`: remove the now-dead `_ENGINE_STRATEGY_VERSION`/
+      `_ENGINE_COMPATIBILITY_PROFILE` constants and their use at both
+      `StrategyEvaluationRequest(...)` and `ManagedReplayRequest(...)`
+      call sites.
+- [x] 9.5 `RunSummary` (`application/backtests/run_views.py`) and its
+      `_summary()` builder (`application/backtests/read_artifacts.py`):
+      drop `strategy_version` — it existed on this Research-facing
+      contract solely as a pass-through of Engine's now-retired echo, not
+      as an independent Research concept.
+- [x] 9.6 `ComponentCatalog` (`api/contracts/catalog.py`): rename
+      `family` to `strategy_id`, matching Engine's now-final
+      `/composer-catalog` response field. Update
+      `GetComponentCatalog.execute()`'s (`application/research/
+      component_catalog.py`) comparison and drop the now-obsolete
+      "Engine still calls it family" comment.
+- [x] 9.7 Tests: exact-wire-key-set assertions for `/range` and
+      `/managed-replay` requests (`{strategy_id, raw_spec}` only, no
+      `strategy_version`/`instance_id`/`compatibility_profile`); a
+      regression test proving a legacy `family`-shaped catalog response is
+      rejected, not silently accepted; existing managed-policy-events and
+      persistence/manifest/`instance_id` regression coverage re-verified
+      green, not re-authored (`test_single_instance_backtest.py`,
+      `test_managed_policy_events.py`, `test_run_artifacts.py`).
+- [x] 9.8 Authoring validation: confirmed already correct as of
+      `canonical-strategy-instance-v1`'s original implementation —
+      `ValidateStrategyConfig.execute()` already sends
+      `DeployableStrategyInstance.model_dump(mode="json")` directly
+      (`{enabled, strategy_id, ticker, base_timeframe, raw_spec}`), the
+      exact shape Engine's `CanonicalStrategyInstanceModel` expects,
+      correlated by `index`/`config_hash` — no Engine-returned
+      `instance_id` was ever depended on. No code change required.
+
+## 10. Future follow-up (explicitly not this change)
+
+- [ ] 10.1 (Not started, not designed here) A future Runtime-deployment
       capability: `POST` deployment endpoint, atomic filesystem
       persistence into Runtime's deployment directory, Runtime
       discovery/reload interaction, and a Composer "Deploy" UI step after
