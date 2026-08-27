@@ -391,3 +391,43 @@ alias, no dual-schema acceptance, old shape fails closed.
       `expected_market_data_hash` to `/range-batch` and forwards it to the
       shared L0 acquisition — batch's shared acquisition now has the same
       fail-closed provenance guarantee single `/range` already had.
+
+## 14. Public backtest API boundary: accept the canonical deployable instance directly
+
+Corrective slice, closing the last narrow boundary leak found while
+auditing Research's public HTTP surface ahead of frontend migration:
+`POST /api/research/backtests` accepted the internal
+`SingleInstanceBacktestRequest` directly, forcing any caller to
+pre-project `DeployableStrategyInstance` → `StrategyInstanceIdentity`
+(dropping `enabled`) itself, even though `build_backtest_request()`
+already existed to do exactly that projection.
+
+- [x] 14.1 Add `BacktestRunRequest` (`api/contracts/backtests.py`):
+      wraps `DeployableStrategyInstance` (reused directly, not
+      hand-copied) plus `range_policy`/`range`/`execution`/`accounting`/
+      `managed_policy_enabled`. Mirrors
+      `SingleInstanceBacktestRequest.validate_range_shape` so malformed
+      range shape still fails closed via FastAPI's own body validation
+      (422), not a bare exception from inside `to_application()`.
+      `to_application()` calls the existing `build_backtest_request()` —
+      no manual `StrategyInstanceIdentity(...)` construction in the API
+      layer or the router.
+- [x] 14.2 `api/routers/research.py`: `run_backtest()`'s body type changes
+      from `SingleInstanceBacktestRequest` to `BacktestRunRequest`; the
+      route calls `payload.to_application()` before
+      `RunSingleInstanceBacktest.execute()`. `RunSingleInstanceBacktest`,
+      `PersistSingleInstanceBacktest`, `BacktestRunResponse`, and every
+      persisted artifact shape are unchanged.
+- [x] 14.3 Tests: `full_available`/`explicit_range` accepted through the
+      new shape; `enabled=true`/`enabled=false` both accepted with
+      identical derived `instance_id` and distinct `run_id`s; legacy
+      fields (`family`, `variant`, `strategy_version`, `instance_id`,
+      nested `market`, nested `strategy` blob, caller `run_id`) rejected
+      (422); persisted `request.json`'s `strategy` has no `enabled` field,
+      proving the projection actually ran; full existing single/batch
+      suite green unmodified.
+
+Explicitly unchanged (scope guard): Strategy Engine, batch
+(`RunBatchExperiment` already called `build_backtest_request()` itself,
+untouched), config API, diagnostics `variant` query param naming
+(tracked separately, not this slice).

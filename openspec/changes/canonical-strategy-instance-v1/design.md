@@ -389,6 +389,28 @@ the "why"; this section states only what constrains the "how"):
     range. Batch HTTP exposure remains a non-goal here, unchanged from
     the rest of this change's frontend/HTTP-surface scope.
 
+17. **`POST /api/research/backtests` accepts a canonical deployable
+    strategy instance directly, closing the boundary leak where the
+    caller had to pre-project it to `StrategyInstanceIdentity` itself.**
+    A new API-layer model, `BacktestRunRequest`
+    (`api/contracts/backtests.py`), wraps `DeployableStrategyInstance`
+    (not a hand-copied set of identity fields) plus the same
+    range/execution/accounting/managed-policy fields the internal
+    `SingleInstanceBacktestRequest` already had. Its `to_application()`
+    method calls the existing `build_backtest_request()` projector — no
+    duplicated field-mapping in the router, no new domain representation
+    of a strategy instance. The internal `SingleInstanceBacktestRequest`,
+    `RunSingleInstanceBacktest`, persisted artifact shapes, batch, and the
+    Engine boundary are all unchanged; this is purely a public-request
+    projection added one layer higher, mirroring the pattern
+    `RunBatchExperiment` already used for its own candidates. Rejected:
+    copying `DeployableStrategyInstance`'s fields onto `BacktestRunRequest`
+    by hand — would create a second, driftable representation of the same
+    canonical type for no benefit, when the API layer can safely import
+    and reuse the domain type directly (`api/contracts/config.py` already
+    establishes that this repo's `api/contracts` layer imports
+    domain/application types rather than re-declaring them).
+
 ## Risks / Trade-offs
 
 - [Risk] Overlap with the still-active `research-history-window-planning-v1`

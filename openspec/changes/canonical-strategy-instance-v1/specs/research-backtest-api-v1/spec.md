@@ -3,19 +3,27 @@
 ### Requirement: Request contract
 
 `POST /api/research/backtests` SHALL accept a Research backtest envelope
-containing exactly one canonical strategy-instance **identity subset**
-(`strategy_id`/`ticker`/`base_timeframe`/`raw_spec`, as defined by
-`canonical-strategy-instance-v1`) plus backtest-specific concerns: range
-specification, execution policy, accounting policy, and the
+containing exactly one canonical **deployable strategy instance**
+(`enabled`/`strategy_id`/`ticker`/`base_timeframe`/`raw_spec`, as defined
+by `canonical-strategy-instance-v1`) plus backtest-specific concerns:
+range specification, execution policy, accounting policy, and the
 managed-policy toggle. The envelope SHALL NOT accept `family`, `variant`,
-`strategy_version`, `enabled`, or a caller-supplied `instance_id` as
-request fields — backtest evaluation depends only on the identity subset,
-never on deployment metadata.
+`strategy_version`, or a caller-supplied `instance_id`/`run_id` as
+request fields.
+
+Research Service SHALL project the deployable instance to its identity
+subset internally (dropping `enabled`) before backtest evaluation begins
+— the caller SHALL NOT be required to perform this projection itself.
+`enabled` SHALL NOT affect evaluation semantics, the derived
+`instance_id`, or whether the backtest is accepted: a deployable instance
+with `enabled=false` SHALL be fully backtestable, producing an identical
+derived `instance_id` and identical Strategy Engine evaluation input as
+the same instance with `enabled=true`.
 
 #### Scenario: Valid request accepted
 
 - **WHEN** a well-formed request envelope wrapping one canonical
-  strategy-instance identity subset is posted
+  deployable strategy instance is posted
 - **THEN** the endpoint accepts it and begins orchestration.
 
 #### Scenario: Legacy identity field rejected
@@ -23,6 +31,13 @@ never on deployment metadata.
 - **WHEN** a request includes `family`, `variant`, `strategy_version`, or
   an explicit `instance_id`
 - **THEN** the request is rejected before orchestration begins.
+
+#### Scenario: enabled does not affect acceptance or identity
+
+- **WHEN** two otherwise-identical requests differ only in
+  `strategy.enabled`
+- **THEN** both are accepted, and both derive the identical
+  `instance_id`.
 
 ## REMOVED Requirements
 
