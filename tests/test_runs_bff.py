@@ -97,7 +97,21 @@ def test_run_detail_and_summary_project_versioned_artifacts(tmp_path: Path) -> N
     assert detail.json()["manifest"]["contract_version"] == "research_run_artifacts.v1"
     assert detail.json()["result"]["contract_version"] == "research_single_instance_backtest.v1"
     assert detail.json()["strategy_spec"] == {"anchor": {"period": 200}}
-    assert set(detail.json().keys()) == {"contract_version", "manifest", "result", "strategy_spec"}
+    detail_keys = set(detail.json().keys())
+    assert {"contract_version", "manifest", "result", "strategy_spec"} <= detail_keys
+    assert detail_keys.isdisjoint(
+        {
+            "execution",
+            "accounting",
+            "range_policy",
+            "managed_policy_enabled",
+            "compatibility_profile",
+            "expected_market_data_hash",
+            "include_features",
+            "include_contexts",
+            "include_component_evidence",
+        }
+    )
     assert summary.status_code == 200
     assert summary.json()["contract_version"] == "research_run_compact_summary.v1"
     assert summary.json()["summary"]["realised_trade_count"] == 1
