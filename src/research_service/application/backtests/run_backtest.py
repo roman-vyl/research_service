@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from research_service.accounting.service import account_execution_loop
 from research_service.application.backtests.contracts import (
     SingleInstanceBacktestRequest,
@@ -26,6 +28,20 @@ from research_service.ports.market_data import MarketDataPort
 from research_service.ports.strategy_engine import StrategyEnginePort
 
 
+@dataclass(frozen=True, slots=True)
+class SingleInstanceBacktestOutcome:
+    """Authoritative output of one backtest execution.
+
+    `result` is the existing persisted/HTTP-facing contract, unchanged.
+    `managed_policy_events` is captured evidence sitting alongside it — every
+    caller of `RunSingleInstanceBacktest.execute()` gets both from the same
+    authoritative application path, so no caller can silently drop it.
+    """
+
+    result: SingleInstanceBacktestResult
+    managed_policy_events: tuple[ManagedPolicyEvent, ...]
+
+
 class RunSingleInstanceBacktest:
     """Compose Strategy Engine, MDS, execution and accounting for one instance."""
 
@@ -41,9 +57,7 @@ class RunSingleInstanceBacktest:
     def execute(
         self,
         request: SingleInstanceBacktestRequest,
-        *,
-        managed_policy_events_sink: list[ManagedPolicyEvent] | None = None,
-    ) -> SingleInstanceBacktestResult:
+    ) -> SingleInstanceBacktestOutcome:
         window = self._window_planner.execute(
             request.strategy.market,
             request.range_policy,
@@ -61,8 +75,13 @@ class RunSingleInstanceBacktest:
         )
         acceptance = accept_strategy_execution_contract(evaluation, market_frame)
 
+        # Owned by this call, not the caller — every entrypoint (standalone
+        # POST /backtests, RunBatchExperiment) gets managed-policy events as
+        # part of the one authoritative outcome, never as an optional extra
+        # a caller has to remember to wire up.
+        managed_policy_events: list[ManagedPolicyEvent] = []
         managed_provider = (
-            self._managed_provider(request, window.market, managed_policy_events_sink)
+            self._managed_provider(request, window.market, managed_policy_events)
             if request.managed_policy_enabled
             else None
         )
@@ -74,7 +93,7 @@ class RunSingleInstanceBacktest:
         )
         accounting = account_execution_loop(execution, market_frame, request.accounting)
 
-        return SingleInstanceBacktestResult(
+        result = SingleInstanceBacktestResult(
             run_id=request.run_id,
             instance_id=request.strategy.instance_id,
             strategy_evaluation=evaluation,
@@ -82,12 +101,16 @@ class RunSingleInstanceBacktest:
             execution=execution,
             accounting=accounting,
         )
+        return SingleInstanceBacktestOutcome(
+            result=result,
+            managed_policy_events=tuple(managed_policy_events),
+        )
 
     def _managed_provider(
         self,
         request: SingleInstanceBacktestRequest,
         resolved_market: MarketRange,
-        managed_policy_events_sink: list[ManagedPolicyEvent] | None,
+        managed_policy_events: list[ManagedPolicyEvent],
     ) -> ManagedReplayProvider:
         def evaluate(position: PositionState) -> ManagedReplayResult:
             # BBB v1 managed policy was anchored to the signal-bar close. The
@@ -116,14 +139,13 @@ class RunSingleInstanceBacktest:
             # this same `replay`) is discarded on position close — this is the
             # one point in the call chain where the Engine's raw events are
             # still attributable to a position.
-            if managed_policy_events_sink is not None:
-                managed_policy_events_sink.extend(
-                    capture_managed_policy_events(
-                        replay,
-                        position_id=position.position_id,
-                        side=position.side,
-                    )
+            managed_policy_events.extend(
+                capture_managed_policy_events(
+                    replay,
+                    position_id=position.position_id,
+                    side=position.side,
                 )
+            )
             return replay
 
         return evaluate

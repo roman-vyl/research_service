@@ -20,10 +20,7 @@ from research_service.domain.contracts import (
     ManagedReplayResult,
 )
 from research_service.domain.execution import ExecutionPolicy
-from research_service.execution.managed_policy_events import (
-    ManagedPolicyEvent,
-    capture_managed_policy_events,
-)
+from research_service.execution.managed_policy_events import capture_managed_policy_events
 from research_service.runtime.settings import Settings
 from research_service.runtime.wiring import Container
 from test_single_instance_backtest import (
@@ -116,23 +113,24 @@ def _request(run_id: str, *, managed_policy_enabled: bool) -> SingleInstanceBack
 
 
 def test_managed_replay_events_survive_execution_loop() -> None:
-    """1. Engine managed replay events are captured before the loop discards the timeline."""
+    """1. Engine managed replay events are captured before the loop discards the timeline,
+    and returned as part of the one authoritative execute() outcome — not a caller-owned
+    sink."""
 
     engine = ManagedEventsStrategyEngine(strategy_result())
     use_case = RunSingleInstanceBacktest(engine, FakeMarketData(market_frame()))
-    sink: list[ManagedPolicyEvent] = []
 
-    result = use_case.execute(
-        _request("run-loop-capture", managed_policy_enabled=True),
-        managed_policy_events_sink=sink,
-    )
+    outcome = use_case.execute(_request("run-loop-capture", managed_policy_enabled=True))
 
-    assert len(result.accounting.trades) == 1
-    position_id = result.accounting.trades[0].position_id
-    assert len(sink) == 2
-    assert {event.event_type for event in sink} == {"phase_changed", "active_stop_updated"}
-    assert all(event.position_id == position_id for event in sink)
-    assert all(event.side == "long" for event in sink)
+    assert len(outcome.result.accounting.trades) == 1
+    position_id = outcome.result.accounting.trades[0].position_id
+    assert len(outcome.managed_policy_events) == 2
+    assert {event.event_type for event in outcome.managed_policy_events} == {
+        "phase_changed",
+        "active_stop_updated",
+    }
+    assert all(event.position_id == position_id for event in outcome.managed_policy_events)
+    assert all(event.side == "long" for event in outcome.managed_policy_events)
 
 
 def test_capture_managed_policy_events_attributes_wrapper_fields() -> None:

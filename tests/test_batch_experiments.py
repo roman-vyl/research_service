@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import json
 from decimal import Decimal
 from pathlib import Path
 
 from research_service.accounting import AccountingPolicy
 from research_service.adapters.artifacts.filesystem import FilesystemArtifactStore
 from research_service.application.backtests import (
+    PersistSingleInstanceBacktest,
     RunSingleInstanceBacktest,
     SingleInstanceBacktestRequest,
 )
@@ -17,6 +19,7 @@ from research_service.application.experiments import (
     RunBatchExperiment,
 )
 from research_service.domain.execution import ExecutionPolicy
+from test_managed_policy_events import ManagedEventsStrategyEngine
 from test_single_instance_backtest import (
     FakeMarketData,
     FakeStrategyEngine,
@@ -60,9 +63,11 @@ class FakePersistBacktest:
     def __init__(self, root: Path) -> None:
         self.root = root
         self.calls: list[str] = []
+        self.managed_policy_events_calls: list[tuple] = []
 
-    def execute(self, request, result):
+    def execute(self, request, result, managed_policy_events=()):
         self.calls.append(request.run_id)
+        self.managed_policy_events_calls.append(managed_policy_events)
         destination = self.root / request.run_id
         destination.mkdir(parents=True, exist_ok=False)
         return PersistedRunArtifacts(
@@ -164,6 +169,45 @@ def test_batch_artifacts_are_published_atomically(tmp_path: Path) -> None:
     assert (destination / "summary.json").is_file()
     assert (destination / "manifest.json").is_file()
     assert len(persisted.summary_sha256) == 64
+
+
+def test_batch_candidate_with_managed_policy_persists_real_events(tmp_path: Path) -> None:
+    """Regression: the same managed backtest, run through the batch application
+    path (not the standalone /backtests router), must persist the real
+    managed-policy events captured by RunSingleInstanceBacktest's one
+    authoritative outcome — not an empty artifact, which the caller-owned
+    sink design silently produced for batch candidates."""
+
+    run_backtest = RunSingleInstanceBacktest(
+        ManagedEventsStrategyEngine(strategy_result()),
+        FakeMarketData(market_frame()),
+    )
+    persist_backtest = PersistSingleInstanceBacktest(FilesystemArtifactStore(tmp_path))
+    request = BatchExperimentRequest(
+        experiment_id="batch-managed",
+        candidates=(
+            BatchCandidateRequest(
+                candidate_id="managed-a",
+                backtest=make_backtest_request("run-managed-a").model_copy(
+                    update={"managed_policy_enabled": True}
+                ),
+            ),
+        ),
+    )
+
+    result = RunBatchExperiment(run_backtest, persist_backtest).execute(request)
+
+    assert result.status == "completed"
+    assert result.candidates[0].status == "completed"
+
+    events_path = tmp_path / "run-managed-a" / "managed_policy_events.json"
+    trace = json.loads(events_path.read_text(encoding="utf-8"))
+    assert trace["run_id"] == "run-managed-a"
+    assert len(trace["events"]) == 2
+    assert {event["event_type"] for event in trace["events"]} == {
+        "phase_changed",
+        "active_stop_updated",
+    }
 
 
 def test_batch_contract_rejects_duplicate_candidate_ids() -> None:

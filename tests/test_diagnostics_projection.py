@@ -105,11 +105,13 @@ def client_with_run(tmp_path: Path) -> TestClient:
         strategy=strategy_request(),
         managed_policy_enabled=False,
     )
-    result = RunSingleInstanceBacktest(
+    outcome = RunSingleInstanceBacktest(
         container.strategy_engine,
         container.market_data,
     ).execute(request)
-    PersistSingleInstanceBacktest(container.artifacts).execute(request, result)
+    PersistSingleInstanceBacktest(container.artifacts).execute(
+        request, outcome.result, outcome.managed_policy_events
+    )
     return TestClient(create_app(settings, container))
 
 

@@ -11,7 +11,10 @@ from research_service.application.backtests.contracts import (
     SingleInstanceBacktestResult,
 )
 from research_service.application.backtests.read_artifacts import ReadResearchRuns
-from research_service.application.backtests.run_backtest import RunSingleInstanceBacktest
+from research_service.application.backtests.run_backtest import (
+    RunSingleInstanceBacktest,
+    SingleInstanceBacktestOutcome,
+)
 from research_service.application.backtests.run_views import (
     RunCompactSummary,
     RunDetail,
@@ -28,6 +31,7 @@ __all__ = [
     "RunDetail",
     "RunSingleInstanceBacktest",
     "RunSummary",
+    "SingleInstanceBacktestOutcome",
     "SingleInstanceBacktestRequest",
     "SingleInstanceBacktestResult",
 ]

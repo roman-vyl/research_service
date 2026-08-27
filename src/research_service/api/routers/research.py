@@ -26,7 +26,6 @@ from research_service.api.contracts.config import (
 )
 from research_service.application.backtests import SingleInstanceBacktestRequest
 from research_service.domain.errors import InvalidRequest, RunAlreadyExists
-from research_service.execution.managed_policy_events import ManagedPolicyEvent
 from research_service.runtime.services import services
 
 router = APIRouter(prefix="/api/research", tags=["research"])
@@ -96,16 +95,13 @@ def run_backtest(
 ) -> BacktestRunResponse:
     """Run and atomically persist one authoritative single-instance backtest."""
 
-    managed_policy_events: list[ManagedPolicyEvent] = []
-    result = services(request).run_single_instance_backtest.execute(
-        payload,
-        managed_policy_events_sink=managed_policy_events,
-    )
+    outcome = services(request).run_single_instance_backtest.execute(payload)
+    result = outcome.result
     try:
         persisted = services(request).persist_single_instance_backtest.execute(
             payload,
             result,
-            tuple(managed_policy_events),
+            outcome.managed_policy_events,
         )
     except FileExistsError as exc:
         raise RunAlreadyExists(payload.run_id) from exc

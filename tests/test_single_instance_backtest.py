@@ -188,7 +188,7 @@ def test_single_instance_backtest_composes_all_layers() -> None:
     market = FakeMarketData(market_frame())
     use_case = RunSingleInstanceBacktest(strategy, market)
 
-    result = use_case.execute(
+    outcome = use_case.execute(
         SingleInstanceBacktestRequest(
             run_id="run-1",
             strategy=strategy_request(),
@@ -201,6 +201,8 @@ def test_single_instance_backtest_composes_all_layers() -> None:
             managed_policy_enabled=False,
         )
     )
+    result = outcome.result
+    assert outcome.managed_policy_events == ()
 
     assert result.contract_version == "research_single_instance_backtest.v1"
     assert strategy.range_requests == [

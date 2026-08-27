@@ -49,11 +49,13 @@ def _persist(tmp_path: Path, run_id: str, created_at: str) -> None:
         managed_policy_enabled=False,
     )
     container = _container(tmp_path)
-    result = RunSingleInstanceBacktest(
+    outcome = RunSingleInstanceBacktest(
         container.strategy_engine,
         container.market_data,
     ).execute(request)
-    PersistSingleInstanceBacktest(container.artifacts).execute(request, result)
+    PersistSingleInstanceBacktest(container.artifacts).execute(
+        request, outcome.result, outcome.managed_policy_events
+    )
     manifest_path = tmp_path / run_id / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["created_at_utc"] = created_at
@@ -177,11 +179,13 @@ def test_summary_reports_resolved_market_not_requested_market(tmp_path: Path) ->
         market_data=FakeMarketData(market_frame()),
         artifacts=FilesystemArtifactStore(tmp_path),
     )
-    result = RunSingleInstanceBacktest(
+    outcome = RunSingleInstanceBacktest(
         container.strategy_engine,
         container.market_data,
     ).execute(request)
-    PersistSingleInstanceBacktest(container.artifacts).execute(request, result)
+    PersistSingleInstanceBacktest(container.artifacts).execute(
+        request, outcome.result, outcome.managed_policy_events
+    )
 
     client = TestClient(create_app(container.settings, container))
     listed = client.get("/api/research/runs")

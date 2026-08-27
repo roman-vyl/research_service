@@ -41,8 +41,13 @@ class RunBatchExperiment:
     def _run_candidate(self, candidate: BatchCandidateRequest) -> BatchCandidateResult:
         request = candidate.backtest
         try:
-            result = self._run_backtest.execute(request)
-            persisted = self._persist_backtest.execute(request, result)
+            outcome = self._run_backtest.execute(request)
+            result = outcome.result
+            persisted = self._persist_backtest.execute(
+                request,
+                result,
+                outcome.managed_policy_events,
+            )
             accounting = result.accounting
             return BatchCandidateResult(
                 candidate_id=candidate.candidate_id,

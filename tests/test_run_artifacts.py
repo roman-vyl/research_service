@@ -35,11 +35,11 @@ def completed_backtest(run_id: str = "run-artifact-1"):
         ),
         managed_policy_enabled=False,
     )
-    result = RunSingleInstanceBacktest(
+    outcome = RunSingleInstanceBacktest(
         FakeStrategyEngine(strategy_result()),
         FakeMarketData(market_frame()),
     ).execute(request)
-    return request, result
+    return request, outcome.result
 
 
 def test_persist_backtest_writes_versioned_atomic_bundle(tmp_path) -> None:
