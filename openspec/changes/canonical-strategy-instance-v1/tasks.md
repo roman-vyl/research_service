@@ -111,6 +111,16 @@
       under the old `<family>/` layout (flagged as a deployment/cutover
       concern in design.md — a one-time rename since `family` values and
       `strategy_id` values are identical today per the audit).
+- [x] 4.7 Enforce in `ValidateStrategyConfig.execute()` that every
+      `draft.instances[i].strategy_id` equals `draft.strategy_id` — one
+      experiment/config explores one strategy type. Fail closed with a
+      `ValidationErrorItem(path=f"instances[{i}].strategy_id", ...)` per
+      offending instance, before any Strategy Engine delegation (per
+      `research-config-validation-v1`'s new "One strategy type per
+      experiment/config" requirement). Add tests: single/multiple
+      matching instances accepted; single mismatching instance rejected;
+      mismatch among multiple instances rejected with the correct
+      offending index.
 
 ## 5. Research Service — component catalog
 

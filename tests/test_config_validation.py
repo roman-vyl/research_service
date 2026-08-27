@@ -84,3 +84,82 @@ def test_rejects_execution_before_upstream(tmp_path: Path):
     payload["execution"]["fees"] = -1
     r = client(tmp_path, strategy).post("/api/research/config/validate", json=payload)
     assert r.json()["ok"] is False and strategy.calls == []
+
+
+def _instance(strategy_id: str = "ema_pullback") -> dict:
+    return {
+        "enabled": True,
+        "strategy_id": strategy_id,
+        "ticker": "BTCUSDT.P",
+        "base_timeframe": "5m",
+        "raw_spec": {"anchor": {"period": 200}},
+    }
+
+
+def test_single_matching_instance_strategy_id_accepted(tmp_path: Path):
+    strategy = Strategy(StrategyAuthoringValidationResult(True, ()))
+    payload = draft()
+    payload["instances"] = [_instance("ema_pullback")]
+
+    r = client(tmp_path, strategy).post("/api/research/config/validate", json=payload)
+
+    assert r.json() == {"ok": True, "errors": []}
+
+
+def test_multiple_matching_instances_strategy_id_accepted(tmp_path: Path):
+    strategy = Strategy(StrategyAuthoringValidationResult(True, ()))
+    payload = draft()
+    payload["instances"] = [_instance("ema_pullback"), _instance("ema_pullback")]
+
+    r = client(tmp_path, strategy).post("/api/research/config/validate", json=payload)
+
+    assert r.json() == {"ok": True, "errors": []}
+
+
+def test_single_mismatching_instance_strategy_id_rejected(tmp_path: Path):
+    strategy = Strategy(StrategyAuthoringValidationResult(True, ()))
+    payload = draft()
+    payload["instances"] = [_instance("some_other_strategy")]
+
+    r = client(tmp_path, strategy).post("/api/research/config/validate", json=payload)
+
+    assert r.json() == {
+        "ok": False,
+        "errors": [
+            {
+                "path": "instances[0].strategy_id",
+                "message": (
+                    "must match draft.strategy_id ('ema_pullback'); "
+                    "got 'some_other_strategy'"
+                ),
+            }
+        ],
+    }
+    # Envelope-level mismatch fails closed before delegating to Engine.
+    assert strategy.calls == []
+
+
+def test_mismatch_among_multiple_instances_identifies_offending_index(tmp_path: Path):
+    strategy = Strategy(StrategyAuthoringValidationResult(True, ()))
+    payload = draft()
+    payload["instances"] = [
+        _instance("ema_pullback"),
+        _instance("some_other_strategy"),
+        _instance("ema_pullback"),
+    ]
+
+    r = client(tmp_path, strategy).post("/api/research/config/validate", json=payload)
+
+    assert r.json() == {
+        "ok": False,
+        "errors": [
+            {
+                "path": "instances[1].strategy_id",
+                "message": (
+                    "must match draft.strategy_id ('ema_pullback'); "
+                    "got 'some_other_strategy'"
+                ),
+            }
+        ],
+    }
+    assert strategy.calls == []

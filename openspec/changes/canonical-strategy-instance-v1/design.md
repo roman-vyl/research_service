@@ -236,6 +236,15 @@ the "why"; this section states only what constrains the "how"):
    never a translator converting one strategy representation into a
    structurally different one, because there is only one strategy
    representation and the backtest request is not itself a second one.
+   `draft.strategy_id`, the top-level field, identifies the one strategy
+   type this experiment/config explores — every `instances[]` entry's own
+   `strategy_id` MUST equal it. This is a grouping-consistency invariant,
+   not identity duplication: `draft.strategy_id` names what the
+   collection is *of*, distinct from each instance's own identity subset,
+   and enforcing the two stay consistent is exactly the kind of
+   envelope-level check `research-config-validation-v1`'s "Local envelope
+   validation only" requirement already owns — not a new validation
+   layer.
 
 9. **Persisted path `<configs_root>/<family>/<experiment_id>.json` becomes
    `<configs_root>/<strategy_id>/<experiment_id>.json`.** A rename of the

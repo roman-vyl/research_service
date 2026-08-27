@@ -97,7 +97,9 @@ work proceeds.
   requests no longer require a caller-supplied market range.
 - `research-config-validation-v1`: each config-draft instance is now
   validated as one deployable strategy instance, not an unconstrained
-  per-instance shape.
+  per-instance shape; every instance's `strategy_id` MUST also match the
+  draft's own top-level `strategy_id` — one experiment/config explores
+  one strategy type, never a mix.
 - `research-config-persistence-v1`: persisted config identifier and path
   layout move from `family` to `strategy_id`.
 - `research-batch-experiments-v1`: candidate pre-execution uniqueness and

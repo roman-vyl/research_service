@@ -28,3 +28,23 @@ whether it validates successfully.
 - **WHEN** a draft's `instances` entry has `enabled=false` and an
   otherwise well-formed identity subset
 - **THEN** validation succeeds for that instance.
+
+### Requirement: One strategy type per experiment/config
+
+`draft.strategy_id` SHALL identify the single strategy type an
+experiment/config explores. Every entry in `draft.instances` SHALL have a
+`strategy_id` equal to `draft.strategy_id`. An experiment/config SHALL
+NOT mix candidate instances of different strategy types.
+
+#### Scenario: Matching instance strategy_id accepted
+
+- **WHEN** every entry in `draft.instances` has `strategy_id` equal to
+  `draft.strategy_id`
+- **THEN** this invariant does not reject the draft.
+
+#### Scenario: Mismatching instance strategy_id rejected
+
+- **WHEN** a draft's `instances` entry has a `strategy_id` different
+  from `draft.strategy_id`
+- **THEN** validation reports an error identifying that instance by
+  index and the draft is rejected before any Strategy Engine delegation.

@@ -30,6 +30,20 @@ class ValidateStrategyConfig:
                     message="unsupported strategy_id; supported: ema_pullback",
                 )
             )
+        # An experiment/config explores one strategy type: every candidate
+        # instance in it MUST be that same strategy_id. Mixing strategy
+        # types inside one experiment is not a supported grouping.
+        for index, instance in enumerate(draft.instances):
+            if instance.strategy_id != draft.strategy_id:
+                errors.append(
+                    ValidationErrorItem(
+                        path=f"instances[{index}].strategy_id",
+                        message=(
+                            f"must match draft.strategy_id ({draft.strategy_id!r}); "
+                            f"got {instance.strategy_id!r}"
+                        ),
+                    )
+                )
         execution = draft.execution
         if execution.init_cash is not None and execution.init_cash <= 0:
             errors.append(

@@ -106,6 +106,37 @@ def test_bad_strategy_id_and_path_are_rejected(tmp_path: Path) -> None:
         assert response.status_code == 400
 
 
+def test_save_rejects_instance_strategy_id_mismatch(tmp_path: Path) -> None:
+    with client(tmp_path) as api:
+        payload = draft("mismatched")
+        payload["instances"] = [
+            {
+                "enabled": True,
+                "strategy_id": "some_other_strategy",
+                "ticker": "BTCUSDT.P",
+                "base_timeframe": "5m",
+                "raw_spec": {},
+            }
+        ]
+
+        response = api.post("/api/research/config/save", json={"draft": payload})
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["ok"] is False
+        assert body["path"] is None
+        assert body["errors"] == [
+            {
+                "path": "instances[0].strategy_id",
+                "message": (
+                    "must match draft.strategy_id ('ema_pullback'); "
+                    "got 'some_other_strategy'"
+                ),
+            }
+        ]
+        assert not (tmp_path / "configs" / "ema_pullback" / "mismatched.json").exists()
+
+
 def test_invalid_saved_file_is_listed_but_not_loaded(tmp_path: Path) -> None:
     root = tmp_path / "configs"
     strategy_dir = root / "ema_pullback"
