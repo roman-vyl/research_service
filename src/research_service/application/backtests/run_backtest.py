@@ -18,6 +18,10 @@ from research_service.domain.contracts import (
 )
 from research_service.domain.execution import PositionState
 from research_service.execution.loop import ManagedReplayProvider, run_unified_execution_loop
+from research_service.execution.managed_policy_events import (
+    ManagedPolicyEvent,
+    capture_managed_policy_events,
+)
 from research_service.ports.market_data import MarketDataPort
 from research_service.ports.strategy_engine import StrategyEnginePort
 
@@ -37,6 +41,8 @@ class RunSingleInstanceBacktest:
     def execute(
         self,
         request: SingleInstanceBacktestRequest,
+        *,
+        managed_policy_events_sink: list[ManagedPolicyEvent] | None = None,
     ) -> SingleInstanceBacktestResult:
         window = self._window_planner.execute(
             request.strategy.market,
@@ -56,7 +62,7 @@ class RunSingleInstanceBacktest:
         acceptance = accept_strategy_execution_contract(evaluation, market_frame)
 
         managed_provider = (
-            self._managed_provider(request, window.market)
+            self._managed_provider(request, window.market, managed_policy_events_sink)
             if request.managed_policy_enabled
             else None
         )
@@ -81,6 +87,7 @@ class RunSingleInstanceBacktest:
         self,
         request: SingleInstanceBacktestRequest,
         resolved_market: MarketRange,
+        managed_policy_events_sink: list[ManagedPolicyEvent] | None,
     ) -> ManagedReplayProvider:
         def evaluate(position: PositionState) -> ManagedReplayResult:
             # BBB v1 managed policy was anchored to the signal-bar close. The
@@ -91,7 +98,7 @@ class RunSingleInstanceBacktest:
             # replay uses the same effective range as range evaluation and
             # historical candle acquisition — under `full_available` those
             # differ from the originally requested range.
-            return self._strategy_engine.evaluate_managed_replay(
+            replay = self._strategy_engine.evaluate_managed_replay(
                 ManagedReplayRequest(
                     strategy_id=request.strategy.strategy_id,
                     strategy_version=request.strategy.strategy_version,
@@ -105,5 +112,18 @@ class RunSingleInstanceBacktest:
                     compatibility_profile=request.strategy.compatibility_profile,
                 )
             )
+            # Capture here, before the loop's ManagedPolicyTimeline (built from
+            # this same `replay`) is discarded on position close — this is the
+            # one point in the call chain where the Engine's raw events are
+            # still attributable to a position.
+            if managed_policy_events_sink is not None:
+                managed_policy_events_sink.extend(
+                    capture_managed_policy_events(
+                        replay,
+                        position_id=position.position_id,
+                        side=position.side,
+                    )
+                )
+            return replay
 
         return evaluate

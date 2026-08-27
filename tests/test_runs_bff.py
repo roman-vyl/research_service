@@ -205,4 +205,5 @@ def test_runs_routes_are_declared_once(tmp_path: Path) -> None:
         "/api/research/runs/{run_id}/metrics",
         "/api/research/runs/{run_id}/signal-trace",
         "/api/research/runs/{run_id}/chart-events",
+        "/api/research/runs/{run_id}/managed-policy-events",
     }

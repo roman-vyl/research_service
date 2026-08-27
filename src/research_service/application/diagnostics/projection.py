@@ -16,6 +16,7 @@ from research_service.api.contracts.diagnostics import (
     SignalTraceComponentIds,
     SignalTraceMeta,
 )
+from research_service.api.contracts.managed_policy_events import ManagedPolicyEventTrace
 from research_service.application.backtests.read_artifacts import ReadResearchRuns
 from research_service.domain.errors import InvalidRequest
 
@@ -387,4 +388,33 @@ class ProjectRunDiagnostics:
                 truncated=bool(trace.times)
                 and (actual_from > requested_from or actual_to < requested_to),
             ),
+        )
+
+    def managed_policy_events(
+        self,
+        *,
+        run_id: str,
+        position_id: str | None = None,
+    ) -> ManagedPolicyEventTrace:
+        detail = self._runs.detail(run_id)
+        trace = self._runs.managed_policy_events(run_id)
+        if position_id is None:
+            return trace
+        known_position_ids = {
+            position_execution.position.position_id
+            for position_execution in detail.result.execution.positions
+        }
+        if detail.result.execution.final_open_position is not None:
+            known_position_ids.add(detail.result.execution.final_open_position.position_id)
+        if position_id not in known_position_ids:
+            raise InvalidRequest(
+                "position_id does not belong to this run",
+                {"run_id": run_id, "position_id": position_id},
+            )
+        return trace.model_copy(
+            update={
+                "events": tuple(
+                    event for event in trace.events if event.position_id == position_id
+                ),
+            }
         )

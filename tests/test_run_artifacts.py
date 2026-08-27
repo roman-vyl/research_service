@@ -58,6 +58,7 @@ def test_persist_backtest_writes_versioned_atomic_bundle(tmp_path) -> None:
         "execution_events.json",
         "trades.json",
         "metrics.json",
+        "managed_policy_events.json",
         "result.json",
     }
 
@@ -65,7 +66,7 @@ def test_persist_backtest_writes_versioned_atomic_bundle(tmp_path) -> None:
     assert manifest["contract_version"] == "research_run_artifacts.v1"
     assert manifest["run_id"] == request.run_id
     assert manifest["market_data_hash"] == "market-hash"
-    assert len(manifest["files"]) == 6
+    assert len(manifest["files"]) == 7
     for record in manifest["files"]:
         payload = (run_dir / record["path"]).read_bytes()
         assert record["sha256"] == hashlib.sha256(payload).hexdigest()
@@ -74,6 +75,15 @@ def test_persist_backtest_writes_versioned_atomic_bundle(tmp_path) -> None:
     metrics = json.loads((run_dir / "metrics.json").read_text(encoding="utf-8"))
     assert metrics["realised_trade_count"] == 1
     assert metrics["net_pnl"] == "9.59000"
+
+    # completed_backtest() uses managed_policy_enabled=False — the artifact
+    # is still written, as an empty trace, not omitted.
+    managed_events = json.loads(
+        (run_dir / "managed_policy_events.json").read_text(encoding="utf-8")
+    )
+    assert managed_events["contract_version"] == "research_managed_policy_events.v1"
+    assert managed_events["run_id"] == request.run_id
+    assert managed_events["events"] == []
 
 
 def test_existing_run_is_immutable(tmp_path) -> None:

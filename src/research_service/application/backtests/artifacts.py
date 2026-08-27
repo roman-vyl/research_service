@@ -13,6 +13,10 @@ from research_service.application.backtests.contracts import (
     SingleInstanceBacktestRequest,
     SingleInstanceBacktestResult,
 )
+from research_service.execution.managed_policy_events import (
+    ManagedPolicyEvent,
+    ManagedPolicyEventTrace,
+)
 from research_service.ports.artifacts import RunArtifactStore
 
 
@@ -73,6 +77,7 @@ class PersistSingleInstanceBacktest:
         self,
         request: SingleInstanceBacktestRequest,
         result: SingleInstanceBacktestResult,
+        managed_policy_events: tuple[ManagedPolicyEvent, ...] = (),
     ) -> PersistedRunArtifacts:
         if request.run_id != result.run_id:
             raise ValueError("request and result run_id differ")
@@ -98,6 +103,11 @@ class PersistSingleInstanceBacktest:
                     "fees_paid": str(result.accounting.fees_paid),
                     "net_pnl": str(result.accounting.net_pnl),
                 }
+            ),
+            # Always written, even when empty (no managed policy, or no rules
+            # fired) — an empty trace is a valid outcome, not an omission.
+            "managed_policy_events.json": _model_json_bytes(
+                ManagedPolicyEventTrace(run_id=result.run_id, events=managed_policy_events)
             ),
             "result.json": _model_json_bytes(result),
         }

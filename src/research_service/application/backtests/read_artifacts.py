@@ -23,6 +23,7 @@ from research_service.application.backtests.contracts import (
     SingleInstanceBacktestResult,
 )
 from research_service.domain.errors import InvalidRunArtifact, RunNotFound
+from research_service.execution.managed_policy_events import ManagedPolicyEventTrace
 from research_service.ports.artifacts import RunArtifactReader
 
 
@@ -32,6 +33,7 @@ class _RunDocuments:
     request: SingleInstanceBacktestRequest
     result: SingleInstanceBacktestResult
     metrics: dict[str, Any]
+    managed_policy_events_raw: bytes
 
 
 def _decimal(metrics: dict[str, Any], key: str) -> Decimal:
@@ -88,6 +90,10 @@ class ReadResearchRuns:
         documents = self._documents(run_id)
         return RunTrades(run_id=run_id, trades=documents.result.accounting.trades)
 
+    def managed_policy_events(self, run_id: str) -> ManagedPolicyEventTrace:
+        documents = self._documents(run_id)
+        return ManagedPolicyEventTrace.model_validate_json(documents.managed_policy_events_raw)
+
     def metrics(self, run_id: str) -> RunMetrics:
         documents = self._documents(run_id)
         return RunMetrics(
@@ -129,6 +135,7 @@ class ReadResearchRuns:
             request_raw = payloads["request.json"]
             result_raw = payloads["result.json"]
             metrics_raw = payloads["metrics.json"]
+            managed_policy_events_raw = payloads["managed_policy_events.json"]
             request = SingleInstanceBacktestRequest.model_validate_json(request_raw)
             result = SingleInstanceBacktestResult.model_validate_json(result_raw)
             metrics = json.loads(metrics_raw)
@@ -136,7 +143,13 @@ class ReadResearchRuns:
             raise InvalidRunArtifact(str(exc), run_id=run_id) from exc
         if manifest.run_id != run_id or request.run_id != run_id or result.run_id != run_id:
             raise InvalidRunArtifact("run identity differs across artifact files", run_id=run_id)
-        return _RunDocuments(manifest=manifest, request=request, result=result, metrics=metrics)
+        return _RunDocuments(
+            manifest=manifest,
+            request=request,
+            result=result,
+            metrics=metrics,
+            managed_policy_events_raw=managed_policy_events_raw,
+        )
 
     @staticmethod
     def _summary(documents: _RunDocuments) -> RunSummary:

@@ -13,6 +13,7 @@ from research_service.api.contracts.runs import (
     RunTrades,
 )
 from research_service.api.contracts.diagnostics import ChartEventsBundle, SignalTraceBundle
+from research_service.api.contracts.managed_policy_events import ManagedPolicyEventTrace
 from research_service.api.contracts.catalog import ComponentCatalog
 from research_service.api.contracts.config import (
     ConfigStateResponse,
@@ -25,6 +26,7 @@ from research_service.api.contracts.config import (
 )
 from research_service.application.backtests import SingleInstanceBacktestRequest
 from research_service.domain.errors import InvalidRequest, RunAlreadyExists
+from research_service.execution.managed_policy_events import ManagedPolicyEvent
 from research_service.runtime.services import services
 
 router = APIRouter(prefix="/api/research", tags=["research"])
@@ -94,11 +96,16 @@ def run_backtest(
 ) -> BacktestRunResponse:
     """Run and atomically persist one authoritative single-instance backtest."""
 
-    result = services(request).run_single_instance_backtest.execute(payload)
+    managed_policy_events: list[ManagedPolicyEvent] = []
+    result = services(request).run_single_instance_backtest.execute(
+        payload,
+        managed_policy_events_sink=managed_policy_events,
+    )
     try:
         persisted = services(request).persist_single_instance_backtest.execute(
             payload,
             result,
+            tuple(managed_policy_events),
         )
     except FileExistsError as exc:
         raise RunAlreadyExists(payload.run_id) from exc
@@ -183,4 +190,16 @@ def get_run_chart_events(
         from_ms=from_ms,
         to_ms=end_ms,
         context_overlay_ref=context_overlay_ref,
+    )
+
+
+@router.get("/runs/{run_id}/managed-policy-events", response_model=ManagedPolicyEventTrace)
+def get_run_managed_policy_events(
+    request: Request,
+    run_id: str,
+    position_id: str | None = Query(None, min_length=1),
+) -> ManagedPolicyEventTrace:
+    return services(request).project_run_diagnostics.managed_policy_events(
+        run_id=run_id,
+        position_id=position_id,
     )
