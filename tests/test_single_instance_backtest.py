@@ -240,6 +240,7 @@ def test_single_instance_backtest_composes_all_layers() -> None:
     assert strategy.range_requests == [
         strategy_request().model_copy(update={"expected_market_data_hash": "market-hash"})
     ]
+    assert len(strategy.range_requests) == 1  # evaluate_range called exactly once
     assert market.requests == [strategy_request().market]
     assert result.contract_acceptance.bar_count == 3
     assert result.execution.positions[0].exit_fill is not None
@@ -294,6 +295,30 @@ def test_market_mismatch_stops_before_execution() -> None:
                 managed_policy_enabled=False,
             )
         )
+
+
+def test_window_resolution_failure_never_reaches_engine_or_continuation() -> None:
+    # Phase-A failure (window/MDS audit), before evaluate_range or the
+    # continuation seam is ever entered -- proves run_id generation (now
+    # owned by MaterializeBacktestOutcome) is unreachable on this path.
+    class DiscontinuousMarketData(FakeMarketData):
+        def audit_range(self, market: MarketRange) -> ContinuityAudit:
+            audit = super().audit_range(market)
+            return audit.model_copy(update={"is_continuous": False, "gaps": ()})
+
+    strategy = FakeStrategyEngine(strategy_result())
+    use_case = RunSingleInstanceBacktest(strategy, DiscontinuousMarketData(market_frame()))
+
+    with pytest.raises(InvalidRequest, match="not continuous"):
+        use_case.execute(
+            SingleInstanceBacktestRequest(
+                strategy=strategy_identity(),
+                range=ExplicitRange(from_ms=0, to_ms=900_000),
+                managed_policy_enabled=False,
+            )
+        )
+    assert strategy.range_requests == []
+    assert strategy.managed_requests == []
 
 
 def test_full_available_resolved_market_reaches_every_downstream_stage() -> None:
