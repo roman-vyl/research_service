@@ -69,7 +69,11 @@ class ReadResearchRuns:
 
     def detail(self, run_id: str) -> RunDetail:
         documents = self._documents(run_id)
-        return RunDetail(manifest=documents.manifest, result=documents.result)
+        return RunDetail(
+            manifest=documents.manifest,
+            result=documents.result,
+            strategy_spec=documents.request.strategy.strategy_spec,
+        )
 
     def compact_summary(self, run_id: str) -> RunCompactSummary:
         documents = self._documents(run_id)

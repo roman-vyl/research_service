@@ -81,6 +81,7 @@ def test_runs_list_and_latest_use_new_artifact_bundles(tmp_path: Path) -> None:
     assert latest.json()["contract_version"] == "research_run_detail.v1"
     assert latest.json()["manifest"]["run_id"] == "newer-run"
     assert latest.json()["result"]["run_id"] == "newer-run"
+    assert latest.json()["strategy_spec"] == {"anchor": {"period": 200}}
 
 
 def test_run_detail_and_summary_project_versioned_artifacts(tmp_path: Path) -> None:
@@ -95,6 +96,8 @@ def test_run_detail_and_summary_project_versioned_artifacts(tmp_path: Path) -> N
     assert detail.status_code == 200
     assert detail.json()["manifest"]["contract_version"] == "research_run_artifacts.v1"
     assert detail.json()["result"]["contract_version"] == "research_single_instance_backtest.v1"
+    assert detail.json()["strategy_spec"] == {"anchor": {"period": 200}}
+    assert set(detail.json().keys()) == {"contract_version", "manifest", "result", "strategy_spec"}
     assert summary.status_code == 200
     assert summary.json()["contract_version"] == "research_run_compact_summary.v1"
     assert summary.json()["summary"]["realised_trade_count"] == 1

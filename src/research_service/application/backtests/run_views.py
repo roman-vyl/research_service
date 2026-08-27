@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -48,6 +48,11 @@ class RunDetail(BaseModel):
     contract_version: Literal["research_run_detail.v1"] = "research_run_detail.v1"
     manifest: RunArtifactManifest
     result: SingleInstanceBacktestResult
+    # Sourced from the persisted request.json (request.strategy.strategy_spec) —
+    # the authoritative strategy spec for one run. Only this field is surfaced;
+    # the rest of the persisted request envelope (execution/accounting policy,
+    # range_policy, compatibility_profile, etc.) is deliberately not exposed.
+    strategy_spec: dict[str, Any]
 
 
 class RunTrades(BaseModel):
