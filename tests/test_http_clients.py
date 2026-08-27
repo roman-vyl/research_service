@@ -175,8 +175,6 @@ def test_strategy_engine_client_maps_result_and_errors() -> None:
             json={
                 "contract_version": "strategy_evaluation.v1",
                 "strategy_id": "ema_pullback",
-                "strategy_version": "v1",
-                "instance_id": "x",
                 "config_hash": "cfg",
                 "market": {
                     "ticker": "BTCUSDT.P",
@@ -252,7 +250,7 @@ def test_strategy_engine_client_reads_composer_catalog() -> None:
         return httpx.Response(
             200,
             json={
-                "family": "ema_pullback",
+                "strategy_id": "ema_pullback",
                 "schema_version": 1,
                 "sections": [],
                 "components": [],
@@ -266,4 +264,4 @@ def test_strategy_engine_client_reads_composer_catalog() -> None:
         transport=httpx.MockTransport(handler), base_url="http://strategy"
     )
     body = client.get_composer_catalog("ema_pullback")
-    assert body["family"] == "ema_pullback"
+    assert body["strategy_id"] == "ema_pullback"

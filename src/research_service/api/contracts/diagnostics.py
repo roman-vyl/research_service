@@ -23,7 +23,7 @@ class SignalTraceComponentIds(BaseModel):
 
 class SignalTraceMeta(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
-    variant: str
+    instance_id: str
     component_ids: SignalTraceComponentIds
     setup_params: tuple[dict[str, Any], ...] = ()
     trigger_params: dict[str, Any] = Field(default_factory=dict)

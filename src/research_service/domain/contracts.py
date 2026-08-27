@@ -54,6 +54,27 @@ class MarketRange(BaseModel):
         return _TIMEFRAME_MS[self.timeframe]
 
 
+class ExplicitRange(BaseModel):
+    """A caller-supplied `from_ms`/`to_ms` pair, without ticker/timeframe.
+
+    Used only for `range_policy=explicit_range` requests — the strategy
+    identity subset already carries `ticker`/`base_timeframe`, so this type
+    intentionally does not repeat them. `range_policy=full_available`
+    requests carry no range at all, not an instance of this type.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    from_ms: int = Field(ge=0)
+    to_ms: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def validate_ordering(self) -> "ExplicitRange":
+        if self.from_ms >= self.to_ms:
+            raise ValueError("from_ms must be less than to_ms")
+        return self
+
+
 class Candle(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -86,14 +107,21 @@ class MarketFrame(BaseModel):
 
 
 class StrategyEvaluationRequest(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    """Strategy Engine wire request. Internal-only since
+    `canonical-strategy-instance-v1`: Research constructs this itself from a
+    `StrategyInstanceIdentity` plus its own derived `instance_id`. Only
+    `strategy_id`/`strategy_spec` (Engine's `raw_spec`) cross the Engine
+    evaluation boundary (`strategy-evaluation-canonical-boundary-v1`);
+    `instance_id` is carried here purely as Research-owned provenance so the
+    Engine client can stamp it onto `StrategyEvaluationResult` — Engine
+    itself never receives or echoes it."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     strategy_id: str
-    strategy_version: str = "v1"
     instance_id: str
     strategy_spec: dict[str, object]
     market: MarketRange
-    compatibility_profile: str = "bbb_v1"
     include_features: bool = True
     include_contexts: bool = True
     include_component_evidence: bool = True
@@ -105,7 +133,6 @@ class StrategyEvaluationResult(BaseModel):
 
     contract_version: str
     strategy_id: str
-    strategy_version: str
     instance_id: str
     config_hash: str
     market: MarketRange
@@ -137,19 +164,73 @@ class StrategyEvaluationResult(BaseModel):
         return self
 
 
+class StrategyEvaluationBatchVariant(BaseModel):
+    """One candidate's entry in a shared Strategy Engine `/range-batch`
+    call. Only `strategy_id`/`strategy_spec` (Engine's `raw_spec`) and the
+    ephemeral wire correlation key `variant_id` cross the Engine boundary
+    (`strategy-evaluation-canonical-boundary-v1`); `instance_id` is carried
+    here purely as Research-owned provenance so the Engine client can stamp
+    it onto the matching `StrategyEvaluationResult` — Engine itself never
+    receives or echoes it. `variant_id` equals the candidate's own
+    `candidate_id` (`research-batch-experiments-v1`); it is a wire-only
+    correlation key and never persisted."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    variant_id: str
+    instance_id: str
+    strategy_id: str
+    strategy_spec: dict[str, object]
+
+
+class StrategyEvaluationBatchRequest(BaseModel):
+    """One shared market window and N variants, evaluated by Strategy
+    Engine in a single call over one shared-L0 market acquisition.
+    `expected_market_data_hash` gives that shared acquisition the same
+    fail-closed provenance contract single-range evaluation already has —
+    Engine verifies it against the shared dataset before evaluating any
+    variant, rather than trusting whatever Market Data Service returns."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    market: MarketRange
+    variants: tuple[StrategyEvaluationBatchVariant, ...] = Field(min_length=1)
+    expected_market_data_hash: str | None = None
+
+
+class StrategyEvaluationBatchVariantOutcome(BaseModel):
+    """One variant's outcome from a `/range-batch` call: either a parsed,
+    instance_id-stamped result, or an Engine-reported per-variant error —
+    never both, never neither."""
+
+    model_config = ConfigDict(frozen=True)
+
+    variant_id: str
+    result: StrategyEvaluationResult | None = None
+    error: dict[str, object] | None = None
+
+    @model_validator(mode="after")
+    def validate_exactly_one_outcome(self) -> "StrategyEvaluationBatchVariantOutcome":
+        if (self.result is None) == (self.error is None):
+            raise ValueError("batch variant outcome must have exactly one of result/error")
+        return self
+
+
 class ManagedReplayRequest(BaseModel):
+    """Strategy Engine wire request. Only `strategy_id`/`strategy_spec`
+    (Engine's `raw_spec`) cross the Engine boundary
+    (`strategy-evaluation-canonical-boundary-v1`); managed-replay's response
+    carries no instance identity, so this request needs none either."""
+
     model_config = ConfigDict(frozen=True)
 
     strategy_id: str
-    strategy_version: str = "v1"
-    instance_id: str
     strategy_spec: dict[str, object]
     market: MarketRange
     trade_id: str
     side: str
     entry_time_ms: int
     entry_price: Decimal
-    compatibility_profile: str = "bbb_v1"
 
     @field_validator("side")
     @classmethod

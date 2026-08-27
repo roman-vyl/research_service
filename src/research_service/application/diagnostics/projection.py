@@ -16,6 +16,7 @@ from research_service.api.contracts.diagnostics import (
     SignalTraceComponentIds,
     SignalTraceMeta,
 )
+from research_service.api.contracts.managed_policy_events import ManagedPolicyEventTrace
 from research_service.application.backtests.read_artifacts import ReadResearchRuns
 from research_service.domain.errors import InvalidRequest
 
@@ -71,7 +72,7 @@ def _spec_meta(raw_spec: Mapping[str, Any], instance_id: str) -> SignalTraceMeta
             }
         )
     return SignalTraceMeta(
-        variant=instance_id,
+        instance_id=instance_id,
         component_ids=SignalTraceComponentIds(
             direction=direction,
             setups=tuple(setups),
@@ -270,17 +271,17 @@ class ProjectRunDiagnostics:
         self,
         *,
         run_id: str,
-        variant: str,
+        instance_id: str,
         from_ms: int,
         to_ms: int,
         context_overlay_ref: str | None = None,
     ) -> SignalTraceBundle:
         detail = self._runs.detail(run_id)
         result = detail.result
-        if variant != result.instance_id:
+        if instance_id != result.instance_id:
             raise InvalidRequest(
-                "variant does not match the single-instance run",
-                {"variant": variant, "instance_id": result.instance_id},
+                "instance_id does not match the single-instance run",
+                {"instance_id": instance_id, "run_instance_id": result.instance_id},
             )
         if from_ms >= to_ms:
             raise InvalidRequest("from must be less than to")
@@ -357,14 +358,14 @@ class ProjectRunDiagnostics:
         self,
         *,
         run_id: str,
-        variant: str,
+        instance_id: str,
         from_ms: int,
         to_ms: int,
         context_overlay_ref: str | None = None,
     ) -> ChartEventsBundle:
         trace = self.signal_trace(
             run_id=run_id,
-            variant=variant,
+            instance_id=instance_id,
             from_ms=from_ms,
             to_ms=to_ms,
             context_overlay_ref=context_overlay_ref,
@@ -387,4 +388,33 @@ class ProjectRunDiagnostics:
                 truncated=bool(trace.times)
                 and (actual_from > requested_from or actual_to < requested_to),
             ),
+        )
+
+    def managed_policy_events(
+        self,
+        *,
+        run_id: str,
+        position_id: str | None = None,
+    ) -> ManagedPolicyEventTrace:
+        detail = self._runs.detail(run_id)
+        trace = self._runs.managed_policy_events(run_id)
+        if position_id is None:
+            return trace
+        known_position_ids = {
+            position_execution.position.position_id
+            for position_execution in detail.result.execution.positions
+        }
+        if detail.result.execution.final_open_position is not None:
+            known_position_ids.add(detail.result.execution.final_open_position.position_id)
+        if position_id not in known_position_ids:
+            raise InvalidRequest(
+                "position_id does not belong to this run",
+                {"run_id": run_id, "position_id": position_id},
+            )
+        return trace.model_copy(
+            update={
+                "events": tuple(
+                    event for event in trace.events if event.position_id == position_id
+                ),
+            }
         )

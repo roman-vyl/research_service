@@ -23,7 +23,6 @@ def _evaluation(
     return StrategyEvaluationResult(
         contract_version="strategy_evaluation.v1",
         strategy_id="ema_pullback",
-        strategy_version="v1",
         instance_id="instance-1",
         config_hash="cfg",
         market=market,

@@ -22,14 +22,28 @@ class ValidateStrategyConfig:
                     message="must be a non-empty string",
                 )
             )
-        family = draft.family.strip()
-        if family != "ema_pullback":
+        strategy_id = draft.strategy_id.strip()
+        if strategy_id != "ema_pullback":
             errors.append(
                 ValidationErrorItem(
-                    path="family",
-                    message="unsupported family; supported: ema_pullback",
+                    path="strategy_id",
+                    message="unsupported strategy_id; supported: ema_pullback",
                 )
             )
+        # An experiment/config explores one strategy type: every candidate
+        # instance in it MUST be that same strategy_id. Mixing strategy
+        # types inside one experiment is not a supported grouping.
+        for index, instance in enumerate(draft.instances):
+            if instance.strategy_id != draft.strategy_id:
+                errors.append(
+                    ValidationErrorItem(
+                        path=f"instances[{index}].strategy_id",
+                        message=(
+                            f"must match draft.strategy_id ({draft.strategy_id!r}); "
+                            f"got {instance.strategy_id!r}"
+                        ),
+                    )
+                )
         execution = draft.execution
         if execution.init_cash is not None and execution.init_cash <= 0:
             errors.append(
@@ -49,9 +63,16 @@ class ValidateStrategyConfig:
                 )
         if errors:
             return ValidationResult(ok=False, errors=errors)
+        # Each `draft.instances` entry is already a validated
+        # `DeployableStrategyInstance` by the time it reaches this method —
+        # `extra="forbid"` on that type rejects `family`/`variant`/
+        # `strategy_version`/`instance_id` and requires `strategy_id`
+        # before this code runs at all (canonical-strategy-instance-v1,
+        # "Canonical instance shape per draft entry"). `enabled` does not
+        # affect this delegated Strategy Engine validation either way.
         upstream = self._strategy_engine.validate_authoring_config(
-            family,
-            draft.instances,
+            strategy_id,
+            [instance.model_dump(mode="json") for instance in draft.instances],
         )
         return ValidationResult(
             ok=upstream.valid,

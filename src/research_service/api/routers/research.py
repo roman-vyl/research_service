@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Query, Request, status
 
-from research_service.api.contracts.backtests import BacktestRunResponse
+from research_service.api.contracts.backtests import BacktestRunRequest, BacktestRunResponse
 from research_service.api.contracts.runs import (
     RunCompactSummary,
     RunDetail,
@@ -13,6 +13,7 @@ from research_service.api.contracts.runs import (
     RunTrades,
 )
 from research_service.api.contracts.diagnostics import ChartEventsBundle, SignalTraceBundle
+from research_service.api.contracts.managed_policy_events import ManagedPolicyEventTrace
 from research_service.api.contracts.catalog import ComponentCatalog
 from research_service.api.contracts.config import (
     ConfigStateResponse,
@@ -23,7 +24,6 @@ from research_service.api.contracts.config import (
     StrategyConfigDraft,
     ValidationResult,
 )
-from research_service.application.backtests import SingleInstanceBacktestRequest
 from research_service.domain.errors import InvalidRequest, RunAlreadyExists
 from research_service.runtime.services import services
 
@@ -43,9 +43,9 @@ def _resolve_end_ms(to_ms: int | None, to_open_time_ms: int | None) -> int:
 @router.get("/component-catalog", response_model=ComponentCatalog)
 def component_catalog(
     request: Request,
-    family: str = Query(default="ema_pullback"),
+    strategy_id: str = Query(default="ema_pullback"),
 ) -> ComponentCatalog:
-    return services(request).component_catalog.execute(family=family)
+    return services(request).component_catalog.execute(strategy_id=strategy_id)
 
 
 @router.post("/config/validate", response_model=ValidationResult)
@@ -70,9 +70,9 @@ def save_config(request: Request, payload: SaveConfigRequest) -> SaveConfigResul
 @router.get("/configs/state", response_model=ConfigStateResponse)
 def config_state(
     request: Request,
-    family: str = Query(default="ema_pullback"),
+    strategy_id: str = Query(default="ema_pullback"),
 ) -> ConfigStateResponse:
-    return services(request).research_configs.state(family)
+    return services(request).research_configs.state(strategy_id)
 
 
 @router.put("/configs/selected", response_model=ConfigStateResponse)
@@ -90,18 +90,32 @@ def select_config(
 )
 def run_backtest(
     request: Request,
-    payload: SingleInstanceBacktestRequest,
+    payload: BacktestRunRequest,
 ) -> BacktestRunResponse:
-    """Run and atomically persist one authoritative single-instance backtest."""
+    """Run and atomically persist one authoritative single-instance backtest.
 
-    result = services(request).run_single_instance_backtest.execute(payload)
+    Accepts a canonical deployable strategy instance (including `enabled`)
+    at the HTTP boundary; `BacktestRunRequest.to_application()` projects it
+    to the internal `SingleInstanceBacktestRequest` via `build_backtest_request()`
+    before orchestration begins.
+    """
+
+    application_request = payload.to_application()
+    outcome = services(request).run_single_instance_backtest.execute(application_request)
+    result = outcome.result
     try:
         persisted = services(request).persist_single_instance_backtest.execute(
-            payload,
+            application_request,
             result,
+            outcome.managed_policy_events,
         )
     except FileExistsError as exc:
-        raise RunAlreadyExists(payload.run_id) from exc
+        # run_id is Research-generated, not caller-supplied — a collision
+        # here is an internal generation concern, not a caller-triggerable
+        # duplicate-run submission (canonical-strategy-instance-v1, REMOVED
+        # "Duplicate run rejection"). Still surfaced as 409 against the
+        # generated identity, since the artifact path is genuinely taken.
+        raise RunAlreadyExists(result.run_id) from exc
 
     return BacktestRunResponse(
         run_id=result.run_id,
@@ -150,7 +164,7 @@ def get_run_metrics(request: Request, run_id: str) -> RunMetrics:
 def get_run_signal_trace(
     request: Request,
     run_id: str,
-    variant: str = Query(..., min_length=1),
+    instance_id: str = Query(..., min_length=1),
     from_ms: int = Query(..., alias="from", ge=0),
     to_ms: int | None = Query(None, alias="to", ge=1),
     to_open_time_ms: int | None = Query(None, ge=0),
@@ -159,7 +173,7 @@ def get_run_signal_trace(
     end_ms = _resolve_end_ms(to_ms, to_open_time_ms)
     return services(request).project_run_diagnostics.signal_trace(
         run_id=run_id,
-        variant=variant,
+        instance_id=instance_id,
         from_ms=from_ms,
         to_ms=end_ms,
         context_overlay_ref=context_overlay_ref,
@@ -170,7 +184,7 @@ def get_run_signal_trace(
 def get_run_chart_events(
     request: Request,
     run_id: str,
-    variant: str = Query(..., min_length=1),
+    instance_id: str = Query(..., min_length=1),
     from_ms: int = Query(..., alias="from", ge=0),
     to_ms: int | None = Query(None, alias="to", ge=1),
     to_open_time_ms: int | None = Query(None, ge=0),
@@ -179,8 +193,20 @@ def get_run_chart_events(
     end_ms = _resolve_end_ms(to_ms, to_open_time_ms)
     return services(request).project_run_diagnostics.chart_events(
         run_id=run_id,
-        variant=variant,
+        instance_id=instance_id,
         from_ms=from_ms,
         to_ms=end_ms,
         context_overlay_ref=context_overlay_ref,
+    )
+
+
+@router.get("/runs/{run_id}/managed-policy-events", response_model=ManagedPolicyEventTrace)
+def get_run_managed_policy_events(
+    request: Request,
+    run_id: str,
+    position_id: str | None = Query(None, min_length=1),
+) -> ManagedPolicyEventTrace:
+    return services(request).project_run_diagnostics.managed_policy_events(
+        run_id=run_id,
+        position_id=position_id,
     )

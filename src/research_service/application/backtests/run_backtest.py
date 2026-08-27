@@ -2,28 +2,26 @@
 
 from __future__ import annotations
 
-from research_service.accounting.service import account_execution_loop
-from research_service.application.backtests.contracts import (
-    SingleInstanceBacktestRequest,
-    SingleInstanceBacktestResult,
-)
+from research_service.application.backtests.contracts import SingleInstanceBacktestRequest
 from research_service.application.backtests.history_window import ResolveBacktestWindow
-from research_service.application.backtests.strategy_contract import (
-    accept_strategy_execution_contract,
+from research_service.application.backtests.materialize_backtest_outcome import (
+    MaterializeBacktestOutcome,
+    SingleInstanceBacktestOutcome,
 )
-from research_service.domain.contracts import (
-    ManagedReplayRequest,
-    ManagedReplayResult,
-    MarketRange,
-)
-from research_service.domain.execution import PositionState
-from research_service.execution.loop import ManagedReplayProvider, run_unified_execution_loop
+from research_service.domain.contracts import StrategyEvaluationRequest
+from research_service.domain.strategy_instance import derive_strategy_instance_id
 from research_service.ports.market_data import MarketDataPort
 from research_service.ports.strategy_engine import StrategyEnginePort
 
+__all__ = ["RunSingleInstanceBacktest", "SingleInstanceBacktestOutcome"]
+
 
 class RunSingleInstanceBacktest:
-    """Compose Strategy Engine, MDS, execution and accounting for one instance."""
+    """Resolve the market window, acquire one Strategy Engine evaluation, and
+    delegate the rest (execution/managed-replay/accounting/result
+    construction) to `MaterializeBacktestOutcome` — the Phase-B continuation
+    seam that a future batch path can call directly with an
+    Engine-evaluation-per-candidate it already has in hand."""
 
     def __init__(
         self,
@@ -33,77 +31,36 @@ class RunSingleInstanceBacktest:
         self._strategy_engine = strategy_engine
         self._market_data = market_data
         self._window_planner = ResolveBacktestWindow(market_data)
+        self._materialize = MaterializeBacktestOutcome(strategy_engine)
 
     def execute(
         self,
         request: SingleInstanceBacktestRequest,
-    ) -> SingleInstanceBacktestResult:
-        window = self._window_planner.execute(
-            request.strategy.market,
-            request.range_policy,
+    ) -> SingleInstanceBacktestOutcome:
+        instance_id = derive_strategy_instance_id(
+            strategy_id=request.strategy.strategy_id,
+            ticker=request.strategy.ticker,
+            base_timeframe=request.strategy.base_timeframe,
+            raw_spec=request.strategy.raw_spec,
         )
-        strategy_request = request.strategy.model_copy(
-            update={
-                "market": window.market,
-                "expected_market_data_hash": window.market_data_hash,
-            }
+
+        window = self._window_planner.execute(
+            ticker=request.strategy.ticker,
+            timeframe=request.strategy.base_timeframe,
+            explicit_range=request.range,
+            range_policy=request.range_policy,
+        )
+        strategy_request = StrategyEvaluationRequest(
+            strategy_id=request.strategy.strategy_id,
+            instance_id=instance_id,
+            strategy_spec=request.strategy.raw_spec,
+            market=window.market,
+            expected_market_data_hash=window.market_data_hash,
         )
         evaluation = self._strategy_engine.evaluate_range(strategy_request)
         market_frame = self._market_data.read_historical_range(
             window.market,
             expected_market_data_hash=window.market_data_hash,
         )
-        acceptance = accept_strategy_execution_contract(evaluation, market_frame)
 
-        managed_provider = (
-            self._managed_provider(request, window.market)
-            if request.managed_policy_enabled
-            else None
-        )
-        execution = run_unified_execution_loop(
-            evaluation,
-            market_frame,
-            request.execution,
-            managed_replay_provider=managed_provider,
-        )
-        accounting = account_execution_loop(execution, market_frame, request.accounting)
-
-        return SingleInstanceBacktestResult(
-            run_id=request.run_id,
-            instance_id=request.strategy.instance_id,
-            strategy_evaluation=evaluation,
-            contract_acceptance=acceptance,
-            execution=execution,
-            accounting=accounting,
-        )
-
-    def _managed_provider(
-        self,
-        request: SingleInstanceBacktestRequest,
-        resolved_market: MarketRange,
-    ) -> ManagedReplayProvider:
-        def evaluate(position: PositionState) -> ManagedReplayResult:
-            # BBB v1 managed policy was anchored to the signal-bar close. The
-            # entry fill may include Research-owned slippage, so pass the
-            # reference price rather than the adjusted fill price.
-            #
-            # `resolved_market` (not `request.strategy.market`) so managed
-            # replay uses the same effective range as range evaluation and
-            # historical candle acquisition — under `full_available` those
-            # differ from the originally requested range.
-            return self._strategy_engine.evaluate_managed_replay(
-                ManagedReplayRequest(
-                    strategy_id=request.strategy.strategy_id,
-                    strategy_version=request.strategy.strategy_version,
-                    instance_id=request.strategy.instance_id,
-                    strategy_spec=request.strategy.strategy_spec,
-                    market=resolved_market,
-                    trade_id=position.position_id,
-                    side=position.side,
-                    entry_time_ms=position.entry_fill.time_ms,
-                    entry_price=position.entry_fill.reference_price,
-                    compatibility_profile=request.strategy.compatibility_profile,
-                )
-            )
-
-        return evaluate
+        return self._materialize.execute(request, evaluation, market_frame)

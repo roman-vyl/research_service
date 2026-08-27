@@ -22,7 +22,12 @@ from research_service.application.backtests.contracts import (
     SingleInstanceBacktestRequest,
     SingleInstanceBacktestResult,
 )
-from research_service.domain.errors import InvalidRunArtifact, RunNotFound
+from research_service.domain.errors import (
+    InvalidRunArtifact,
+    ManagedPolicyTraceUnavailable,
+    RunNotFound,
+)
+from research_service.execution.managed_policy_events import ManagedPolicyEventTrace
 from research_service.ports.artifacts import RunArtifactReader
 
 
@@ -32,6 +37,7 @@ class _RunDocuments:
     request: SingleInstanceBacktestRequest
     result: SingleInstanceBacktestResult
     metrics: dict[str, Any]
+    managed_policy_events_raw: bytes | None
 
 
 def _decimal(metrics: dict[str, Any], key: str) -> Decimal:
@@ -69,7 +75,11 @@ class ReadResearchRuns:
 
     def detail(self, run_id: str) -> RunDetail:
         documents = self._documents(run_id)
-        return RunDetail(manifest=documents.manifest, result=documents.result)
+        return RunDetail(
+            manifest=documents.manifest,
+            result=documents.result,
+            strategy_spec=documents.request.strategy.raw_spec,
+        )
 
     def compact_summary(self, run_id: str) -> RunCompactSummary:
         documents = self._documents(run_id)
@@ -83,6 +93,12 @@ class ReadResearchRuns:
     def trades(self, run_id: str) -> RunTrades:
         documents = self._documents(run_id)
         return RunTrades(run_id=run_id, trades=documents.result.accounting.trades)
+
+    def managed_policy_events(self, run_id: str) -> ManagedPolicyEventTrace:
+        documents = self._documents(run_id)
+        if documents.managed_policy_events_raw is None:
+            raise ManagedPolicyTraceUnavailable(run_id)
+        return ManagedPolicyEventTrace.model_validate_json(documents.managed_policy_events_raw)
 
     def metrics(self, run_id: str) -> RunMetrics:
         documents = self._documents(run_id)
@@ -121,6 +137,7 @@ class ReadResearchRuns:
                 raise InvalidRunArtifact(f"artifact hash mismatch: {record.path}", run_id=run_id)
             payloads[record.path] = payload
 
+        managed_policy_events_raw = payloads.get("managed_policy_events.json")
         try:
             request_raw = payloads["request.json"]
             result_raw = payloads["result.json"]
@@ -130,9 +147,17 @@ class ReadResearchRuns:
             metrics = json.loads(metrics_raw)
         except (KeyError, ValidationError, json.JSONDecodeError, TypeError, ValueError) as exc:
             raise InvalidRunArtifact(str(exc), run_id=run_id) from exc
-        if manifest.run_id != run_id or request.run_id != run_id or result.run_id != run_id:
+        # request.run_id no longer exists (run_id is Research-generated, not
+        # a request field) — only manifest/result identity is cross-checked.
+        if manifest.run_id != run_id or result.run_id != run_id:
             raise InvalidRunArtifact("run identity differs across artifact files", run_id=run_id)
-        return _RunDocuments(manifest=manifest, request=request, result=result, metrics=metrics)
+        return _RunDocuments(
+            manifest=manifest,
+            request=request,
+            result=result,
+            metrics=metrics,
+            managed_policy_events_raw=managed_policy_events_raw,
+        )
 
     @staticmethod
     def _summary(documents: _RunDocuments) -> RunSummary:
@@ -146,7 +171,6 @@ class ReadResearchRuns:
             created_at_utc=documents.manifest.created_at_utc,
             instance_id=documents.manifest.instance_id,
             strategy_id=strategy.strategy_id,
-            strategy_version=strategy.strategy_version,
             ticker=market.ticker,
             timeframe=market.timeframe,
             from_ms=market.from_ms,

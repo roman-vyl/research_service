@@ -13,6 +13,11 @@ from research_service.application.backtests.contracts import (
     SingleInstanceBacktestRequest,
     SingleInstanceBacktestResult,
 )
+from research_service.domain.strategy_instance import derive_strategy_instance_id
+from research_service.execution.managed_policy_events import (
+    ManagedPolicyEvent,
+    ManagedPolicyEventTrace,
+)
 from research_service.ports.artifacts import RunArtifactStore
 
 
@@ -73,11 +78,20 @@ class PersistSingleInstanceBacktest:
         self,
         request: SingleInstanceBacktestRequest,
         result: SingleInstanceBacktestResult,
+        managed_policy_events: tuple[ManagedPolicyEvent, ...] = (),
     ) -> PersistedRunArtifacts:
-        if request.run_id != result.run_id:
-            raise ValueError("request and result run_id differ")
-        if request.strategy.instance_id != result.instance_id:
-            raise ValueError("request and result instance_id differ")
+        # run_id is Research-generated (no longer a request field) — nothing
+        # to cross-check it against. instance_id, however, is still an
+        # invariant worth defending: it must be exactly what derives from
+        # the request's own identity subset.
+        expected_instance_id = derive_strategy_instance_id(
+            strategy_id=request.strategy.strategy_id,
+            ticker=request.strategy.ticker,
+            base_timeframe=request.strategy.base_timeframe,
+            raw_spec=request.strategy.raw_spec,
+        )
+        if expected_instance_id != result.instance_id:
+            raise ValueError("result instance_id does not match request identity subset")
 
         payloads: dict[str, bytes] = {
             "request.json": _model_json_bytes(request),
@@ -98,6 +112,11 @@ class PersistSingleInstanceBacktest:
                     "fees_paid": str(result.accounting.fees_paid),
                     "net_pnl": str(result.accounting.net_pnl),
                 }
+            ),
+            # Always written, even when empty (no managed policy, or no rules
+            # fired) — an empty trace is a valid outcome, not an omission.
+            "managed_policy_events.json": _model_json_bytes(
+                ManagedPolicyEventTrace(run_id=result.run_id, events=managed_policy_events)
             ),
             "result.json": _model_json_bytes(result),
         }

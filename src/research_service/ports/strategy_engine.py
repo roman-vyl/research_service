@@ -7,6 +7,8 @@ from typing import Any, Protocol
 
 from research_service.domain.contracts import (
     MarketRange,
+    StrategyEvaluationBatchRequest,
+    StrategyEvaluationBatchVariantOutcome,
     StrategyEvaluationRequest,
     StrategyEvaluationResult,
     ManagedReplayRequest,
@@ -27,6 +29,11 @@ class StrategyEnginePort(Protocol):
         self,
         request: StrategyEvaluationRequest,
     ) -> StrategyEvaluationResult: ...
+
+    def evaluate_range_batch(
+        self,
+        request: StrategyEvaluationBatchRequest,
+    ) -> tuple[StrategyEvaluationBatchVariantOutcome, ...]: ...
 
     def evaluate_managed_replay(
         self,

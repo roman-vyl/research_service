@@ -12,6 +12,7 @@ from research_service.adapters.config import FilesystemConfigStore
 from research_service.api.errors import install_error_handlers
 from research_service.api.routers import market, research, system
 from research_service.application.backtests import (
+    MaterializeBacktestOutcome,
     PersistSingleInstanceBacktest,
     ReadResearchRuns,
     RunSingleInstanceBacktest,
@@ -85,7 +86,9 @@ def _build_services(settings: Settings, container: Container) -> AppServices:
         read_research_runs=read_research_runs,
         project_run_diagnostics=ProjectRunDiagnostics(read_research_runs),
         run_batch_experiment=RunBatchExperiment(
-            run_single_instance_backtest,
+            container.strategy_engine,
+            container.market_data,
+            MaterializeBacktestOutcome(container.strategy_engine),
             persist_single_instance_backtest,
         ),
         persist_batch_experiment=PersistBatchExperiment(container.artifacts),
