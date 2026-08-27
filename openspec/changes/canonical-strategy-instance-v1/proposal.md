@@ -105,8 +105,17 @@ work proceeds.
 - `research-batch-experiments-v1`: candidate pre-execution uniqueness and
   result correlation move from caller-supplied `run_id` to `candidate_id`;
   `run_id` becomes a Research-generated result field present only on
-  successful candidates. Each candidate wraps one canonical
-  strategy-instance identity subset, same as a standalone backtest.
+  successful candidates. Each candidate wraps one canonical deployable
+  strategy instance, same shape as a standalone backtest's identity.
+  **Later in this change (Step 3)**: the batch contract itself is
+  rebuilt — a candidate no longer embeds a standalone
+  `SingleInstanceBacktestRequest` (**BREAKING**, no alias); an experiment
+  owns one shared `strategy_id`/`range_policy`/range, every candidate
+  must share `ticker`/`base_timeframe`, and Research evaluates all
+  candidates through one shared Strategy Engine `/range-batch` call
+  (`candidate_id` used directly as the Engine `variant_id`) instead of N
+  sequential standalone `/range` calls. See design.md Decision 16 and the
+  delta spec's new requirements.
 - `research-component-catalog-v1`: catalog selector moves from `family`
   to `strategy_id`, matching the backtest/config boundary.
 

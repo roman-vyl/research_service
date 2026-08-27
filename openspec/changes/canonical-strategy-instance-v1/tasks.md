@@ -312,11 +312,73 @@ before, via `RunSingleInstanceBacktest`.
       discovery/reload interaction, and a Composer "Deploy" UI step after
       Validate/Backtest. This change's only contribution to that future
       work is making the deployable document already the right shape.
-- [ ] 12.2 (Not started, not designed here) Batch evaluation optimization
-      enabled by §11's seam: shared window resolution, one Engine
-      `/range-batch` call, and N `MaterializeBacktestOutcome.execute()`
-      calls in place of `RunBatchExperiment`'s current N sequential
-      `RunSingleInstanceBacktest.execute()` calls. Requires its own
-      design pass (Engine wire client, candidate_id/variant_id
-      correlation, shared-L0 semantics) — not designed or implemented
-      here.
+- [x] 12.2 Done — see §13. Batch evaluation optimization enabled by §11's
+      seam: shared window resolution, one Engine `/range-batch` call, and
+      N `MaterializeBacktestOutcome.execute()` calls in place of
+      `RunBatchExperiment`'s prior N sequential
+      `RunSingleInstanceBacktest.execute()` calls.
+
+## 13. Batch experiment rebuild on the shared-evaluation seam (Step 3)
+
+Clean-cutover rebuild of `RunBatchExperiment`, added after §11's
+Phase-A/Phase-B seam landed. `BatchCandidateRequest.backtest` (a nested
+standalone `SingleInstanceBacktestRequest`) is retired entirely — no
+alias, no dual-schema acceptance, old shape fails closed.
+
+- [x] 13.1 Rebuild `BatchExperimentRequest`/`BatchCandidateRequest`
+      (`application/experiments/contracts.py`): experiment owns
+      `strategy_id`/`range_policy`/`range` once; each candidate carries a
+      `DeployableStrategyInstance` + its own execution/accounting/
+      managed_policy_enabled/metadata. `model_validator` rejects: mismatched
+      range shape, duplicate `candidate_id`, any candidate whose
+      `strategy.strategy_id` differs from the experiment's, and any
+      ticker/base_timeframe divergence across candidates — all before any
+      external call.
+- [x] 13.2 Add `StrategyEvaluationBatchVariant`/
+      `StrategyEvaluationBatchRequest`/`StrategyEvaluationBatchVariantOutcome`
+      (`domain/contracts.py`) and `StrategyEnginePort.evaluate_range_batch`
+      (`ports/strategy_engine.py`).
+- [x] 13.3 Implement `HttpStrategyEngineClient.evaluate_range_batch`
+      (`adapters/http/strategy_engine_client.py`): wire request carries
+      only `{market, variants:[{variant_id, strategy:{strategy_id,
+      raw_spec}}], options}` — no `enabled`/`instance_id`/`run_id`.
+      Response correlation is by `variant_id` key (via a dict), never
+      array position; an unrequested, duplicate, or missing `variant_id`
+      raises `UpstreamServiceError` before any candidate is touched.
+      Factored the shared per-result body parser
+      (`_parse_evaluation_result`) out of `evaluate_range` for reuse.
+- [x] 13.4 Rebuild `RunBatchExperiment.execute()`
+      (`application/experiments/run_batch.py`): shared Phase A (one
+      `ResolveBacktestWindow.execute()`, one `evaluate_range_batch()`, one
+      `read_historical_range()`) runs once before any candidate loop;
+      per-candidate Phase B calls `MaterializeBacktestOutcome.execute()` +
+      `PersistSingleInstanceBacktest.execute()` per successful variant,
+      isolated by the three failure levels in
+      `research-batch-experiments-v1`. Never calls
+      `RunSingleInstanceBacktest` or `evaluate_range()`.
+      `application/backtests/from_deployable_instance.py`'s existing
+      `build_backtest_request()` projects each candidate's canonical
+      strategy + the experiment's shared range into the
+      `SingleInstanceBacktestRequest` `MaterializeBacktestOutcome`/
+      `PersistSingleInstanceBacktest` need — no second builder.
+- [x] 13.5 Wire `RunBatchExperiment` in `api/app.py` with
+      `container.strategy_engine`/`container.market_data`/a
+      `MaterializeBacktestOutcome` instance/`persist_single_instance_backtest`
+      — no service-locator, explicit constructor injection.
+- [x] 13.6 Tests: contract-level rejection (legacy shape, dummy
+      full_available range, missing explicit_range, mismatched
+      strategy_id/ticker/base_timeframe); shared-acquisition call counts
+      (N candidates → one window resolution, one historical read, one
+      `evaluate_range_batch`, zero `evaluate_range`); Engine wire shape
+      assertions at the HTTP-client level; response correlation
+      (shuffled order, unknown/duplicate/missing `variant_id`); per-result
+      `instance_id` stamping; all three failure levels, including that a
+      Level-3 failure does not roll back already-persisted siblings;
+      managed-policy-events batch regression re-authored (not deleted)
+      against the new architecture; standalone single-backtest regression
+      unchanged.
+- [x] 13.7 HTTP API exposure: unchanged — `RunBatchExperiment` is still
+      not exposed via a public Research HTTP route. Not added here; this
+      slice is scoped to the application/Engine-integration rebuild only,
+      per the same non-goal as the rest of this change's frontend/HTTP
+      surface work.

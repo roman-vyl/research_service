@@ -356,6 +356,39 @@ the "why"; this section states only what constrains the "how"):
     is enabled by this seam but explicitly not implemented here — tracked
     as a following, separate slice.
 
+16. **Batch experiments move from N sequential standalone backtests to one
+    shared Strategy Engine `/range-batch` call + N reuses of
+    `MaterializeBacktestOutcome`, with a clean-cutover batch contract
+    break.** `BatchCandidateRequest.backtest` (a nested
+    `SingleInstanceBacktestRequest`) is retired — no alias, no
+    dual-schema acceptance. An experiment now owns one `strategy_id`, one
+    `range_policy`/shared `range`, and every candidate's `ticker`/
+    `base_timeframe` must match; only `raw_spec`, execution/accounting
+    policy, `managed_policy_enabled`, and metadata vary per candidate —
+    matching how a human actually reads "compare configurations of one
+    strategy over one instrument/window," not an arbitrary array of
+    unrelated backtests. `candidate_id` is used directly as the Engine
+    `/range-batch` wire `variant_id` (no separate correlation
+    abstraction); response correlation is by `variant_id` key, never
+    array order, and a malformed correlation (unknown/duplicate/missing
+    `variant_id`) fails the whole experiment before any candidate is
+    touched. Failure handling is explicitly three-tiered: whole-experiment
+    (shared window/Engine-call/correlation failures, before any candidate
+    loop starts), per-variant (an Engine-reported error for one candidate,
+    no materialization attempted), and per-candidate (materialization or
+    persistence failure for one candidate, isolated, siblings already
+    persisted are untouched). Every successful candidate is materialized
+    via the existing `MaterializeBacktestOutcome` seam (Decision 15) and
+    persisted via the existing `PersistSingleInstanceBacktest` — no
+    execution/accounting logic duplicated in the batch path.
+    `RunBatchExperiment` never calls `RunSingleInstanceBacktest` or
+    `evaluate_range()`. `application/backtests/from_deployable_instance.py`'s
+    existing `build_backtest_request()` projector is reused, not
+    duplicated, to build each candidate's `SingleInstanceBacktestRequest`
+    from its canonical strategy instance plus the experiment's shared
+    range. Batch HTTP exposure remains a non-goal here, unchanged from
+    the rest of this change's frontend/HTTP-surface scope.
+
 ## Risks / Trade-offs
 
 - [Risk] Overlap with the still-active `research-history-window-planning-v1`
