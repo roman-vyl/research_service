@@ -431,3 +431,46 @@ Explicitly unchanged (scope guard): Strategy Engine, batch
 (`RunBatchExperiment` already called `build_backtest_request()` itself,
 untouched), config API, diagnostics `variant` query param naming
 (tracked separately, not this slice).
+
+## 15. Corrective cleanup: diagnostics vocabulary + stale prose (pre-Deploy hardening)
+
+Closes the `variant` naming debt flagged in Slice 14 and re-confirmed by
+semantic grep before starting the Deploy architecture work. This touches
+the `research-diagnostics-projection-v1` baseline capability, not
+previously declared under this change — see the new delta spec.
+
+- [x] 15.1 `/runs/{run_id}/signal-trace` and `/runs/{run_id}/chart-events`:
+      the `variant` query parameter is renamed to `instance_id`
+      (`api/routers/research.py`), threaded through as `instance_id`
+      through `ProjectRunDiagnostics.signal_trace`/`.chart_events`
+      (`application/diagnostics/projection.py`), and the response's
+      `SignalTraceMeta.variant` field is renamed to `instance_id`
+      (`api/contracts/diagnostics.py`). Clean break: `variant` is no
+      longer an accepted query parameter or response field, no alias.
+- [x] 15.2 Frontend: `fetchSignalTrace`/`fetchChartEvents` (`api/client.ts`)
+      send `instance_id` on the wire instead of `variant`;
+      `SignalTraceMeta.variant` (`api/types.ts`) renamed to
+      `instance_id`. The internal chart-runtime pipeline's own `variant`
+      naming (a different, internal-only concern already bridged to
+      `instanceId` at the API-client boundary in
+      `workbenchTraceNetworkLoad.ts`) is explicitly NOT renamed here —
+      out of scope, not a public wire concept.
+- [x] 15.3 Stale-prose fix: `ExecutionPolicy`'s docstring
+      (`domain/execution.py`) described the signal-bar-close anchor as
+      being "under the bbb_v1 compatibility profile" — a real behavior,
+      worded as if still conditional/selectable after
+      `compatibility_profile` was fully retired. Reworded to state it is
+      the only supported anchor, unconditionally; the historical `bbb_v1`
+      provenance note itself is kept (real, not stale).
+- [x] 15.4 Semantic grep confirmed no other stale `family`/`variant`/
+      `strategy_version`/`compatibility_profile`/`bbb_v1` prose and no
+      unexpected live legacy behavior beyond 15.1/15.3 — all other
+      matches are either comments/docstrings correctly documenting
+      retired fields, or OpenSpec history, or unrelated concepts
+      (`feature_family`, Engine batch `variant_id`, component-level
+      `instance_id` inside `raw_spec`, legacy-field-rejection test
+      fixtures).
+- [ ] 15.5 Not done here, explicitly out of scope: Deploy endpoint,
+      Runtime filesystem writer/discovery, any new execution/accounting
+      DTO, range picker, quantity UI. Tracked for the following, separate
+      Deploy architecture change.
