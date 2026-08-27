@@ -18,18 +18,19 @@ from fastapi.testclient import TestClient
 from research_service.accounting import AccountingPolicy
 from research_service.adapters.artifacts.filesystem import FilesystemArtifactStore
 from research_service.api.app import create_app
+from research_service.domain.contracts import ExplicitRange
 from research_service.domain.execution import ExecutionPolicy
 from research_service.ports.strategy_engine import StrategyAuthoringValidationResult
 from research_service.runtime.settings import Settings
 from research_service.runtime.wiring import Container
-from test_single_instance_backtest import FakeMarketData, FakeStrategyEngine, market_frame, strategy_request
+from test_single_instance_backtest import FakeMarketData, FakeStrategyEngine, market_frame, strategy_identity
 
 
 class ValidatingStrategyEngine:
     """Only implements what config validation needs."""
 
     def validate_authoring_config(
-        self, family: str, instances: list[dict[str, Any]]
+        self, strategy_id: str, instances: list[dict[str, Any]]
     ) -> StrategyAuthoringValidationResult:
         return StrategyAuthoringValidationResult(valid=True, errors=())
 
@@ -51,8 +52,8 @@ def test_persisted_run_survives_container_recreate(tmp_path: Path) -> None:
     response = old_client.post(
         "/api/research/backtests",
         json={
-            "run_id": "survives-recreate",
-            "strategy": strategy_request().model_dump(mode="json"),
+            "strategy": strategy_identity().model_dump(mode="json"),
+            "range": ExplicitRange(from_ms=0, to_ms=900_000).model_dump(mode="json"),
             "execution": ExecutionPolicy(quantity=Decimal("1")).model_dump(mode="json"),
             "accounting": AccountingPolicy(
                 initial_equity=Decimal("100"),
@@ -63,6 +64,7 @@ def test_persisted_run_survives_container_recreate(tmp_path: Path) -> None:
         },
     )
     assert response.status_code == 201
+    run_id = response.json()["run_id"]
 
     # New container: fresh process wiring, same host-mounted directories.
     new_container = Container(
@@ -72,10 +74,10 @@ def test_persisted_run_survives_container_recreate(tmp_path: Path) -> None:
         artifacts=FilesystemArtifactStore(tmp_path / "runs"),
     )
     new_client = TestClient(create_app(new_container.settings, new_container))
-    detail = new_client.get("/api/research/runs/survives-recreate")
+    detail = new_client.get(f"/api/research/runs/{run_id}")
 
     assert detail.status_code == 200
-    assert detail.json()["manifest"]["run_id"] == "survives-recreate"
+    assert detail.json()["manifest"]["run_id"] == run_id
 
 
 def test_saved_config_survives_container_recreate(tmp_path: Path) -> None:
@@ -90,9 +92,17 @@ def test_saved_config_survives_container_recreate(tmp_path: Path) -> None:
     draft_payload = {
         "config_version": 1,
         "experiment_id": "baseline",
-        "family": "ema_pullback",
+        "strategy_id": "ema_pullback",
         "execution": {"init_cash": 10000.0, "fees": 0.0004},
-        "instances": [{"instance_id": "baseline", "strategy": {}}],
+        "instances": [
+            {
+                "enabled": True,
+                "strategy_id": "ema_pullback",
+                "ticker": "BTCUSDT.P",
+                "base_timeframe": "5m",
+                "raw_spec": {},
+            }
+        ],
     }
     save_response = old_client.post("/api/research/config/save", json={"draft": draft_payload})
     assert save_response.json()["ok"] is True
@@ -104,7 +114,7 @@ def test_saved_config_survives_container_recreate(tmp_path: Path) -> None:
         artifacts=FilesystemArtifactStore(tmp_path / "runs"),
     )
     new_client = TestClient(create_app(new_container.settings, new_container))
-    state = new_client.get("/api/research/configs/state", params={"family": "ema_pullback"})
+    state = new_client.get("/api/research/configs/state", params={"strategy_id": "ema_pullback"})
 
     assert state.status_code == 200
     assert state.json()["selected_experiment_id"] == "baseline"

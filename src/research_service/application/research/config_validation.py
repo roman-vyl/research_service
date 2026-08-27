@@ -22,12 +22,12 @@ class ValidateStrategyConfig:
                     message="must be a non-empty string",
                 )
             )
-        family = draft.family.strip()
-        if family != "ema_pullback":
+        strategy_id = draft.strategy_id.strip()
+        if strategy_id != "ema_pullback":
             errors.append(
                 ValidationErrorItem(
-                    path="family",
-                    message="unsupported family; supported: ema_pullback",
+                    path="strategy_id",
+                    message="unsupported strategy_id; supported: ema_pullback",
                 )
             )
         execution = draft.execution
@@ -49,9 +49,16 @@ class ValidateStrategyConfig:
                 )
         if errors:
             return ValidationResult(ok=False, errors=errors)
+        # Each `draft.instances` entry is already a validated
+        # `DeployableStrategyInstance` by the time it reaches this method —
+        # `extra="forbid"` on that type rejects `family`/`variant`/
+        # `strategy_version`/`instance_id` and requires `strategy_id`
+        # before this code runs at all (canonical-strategy-instance-v1,
+        # "Canonical instance shape per draft entry"). `enabled` does not
+        # affect this delegated Strategy Engine validation either way.
         upstream = self._strategy_engine.validate_authoring_config(
-            family,
-            draft.instances,
+            strategy_id,
+            [instance.model_dump(mode="json") for instance in draft.instances],
         )
         return ValidationResult(
             ok=upstream.valid,

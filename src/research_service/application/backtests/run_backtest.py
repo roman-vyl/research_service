@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from dataclasses import dataclass
 
 from research_service.accounting.service import account_execution_loop
@@ -17,8 +18,10 @@ from research_service.domain.contracts import (
     ManagedReplayRequest,
     ManagedReplayResult,
     MarketRange,
+    StrategyEvaluationRequest,
 )
 from research_service.domain.execution import PositionState
+from research_service.domain.strategy_instance import derive_strategy_instance_id
 from research_service.execution.loop import ManagedReplayProvider, run_unified_execution_loop
 from research_service.execution.managed_policy_events import (
     ManagedPolicyEvent,
@@ -26,6 +29,18 @@ from research_service.execution.managed_policy_events import (
 )
 from research_service.ports.market_data import MarketDataPort
 from research_service.ports.strategy_engine import StrategyEnginePort
+
+# Constants Research still sends on the wire to Strategy Engine internally.
+# Neither is exposed as a field Research requires from its own callers —
+# `strategy_version` has exactly one value across the whole system today
+# (canonical-strategy-instance-v1, Decision 5), and `compatibility_profile`
+# was already Research-owned/defaulted, never caller-supplied.
+_ENGINE_STRATEGY_VERSION = "v1"
+_ENGINE_COMPATIBILITY_PROFILE = "bbb_v1"
+
+
+def _generate_run_id() -> str:
+    return f"run_{uuid.uuid4().hex}"
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,15 +73,31 @@ class RunSingleInstanceBacktest:
         self,
         request: SingleInstanceBacktestRequest,
     ) -> SingleInstanceBacktestOutcome:
-        window = self._window_planner.execute(
-            request.strategy.market,
-            request.range_policy,
+        # Every accepted request creates a new immutable run — no
+        # idempotency/dedup lookup (canonical-strategy-instance-v1,
+        # "Each accepted request creates a new immutable run").
+        run_id = _generate_run_id()
+        instance_id = derive_strategy_instance_id(
+            strategy_id=request.strategy.strategy_id,
+            ticker=request.strategy.ticker,
+            base_timeframe=request.strategy.base_timeframe,
+            raw_spec=request.strategy.raw_spec,
         )
-        strategy_request = request.strategy.model_copy(
-            update={
-                "market": window.market,
-                "expected_market_data_hash": window.market_data_hash,
-            }
+
+        window = self._window_planner.execute(
+            ticker=request.strategy.ticker,
+            timeframe=request.strategy.base_timeframe,
+            explicit_range=request.range,
+            range_policy=request.range_policy,
+        )
+        strategy_request = StrategyEvaluationRequest(
+            strategy_id=request.strategy.strategy_id,
+            strategy_version=_ENGINE_STRATEGY_VERSION,
+            instance_id=instance_id,
+            strategy_spec=request.strategy.raw_spec,
+            market=window.market,
+            compatibility_profile=_ENGINE_COMPATIBILITY_PROFILE,
+            expected_market_data_hash=window.market_data_hash,
         )
         evaluation = self._strategy_engine.evaluate_range(strategy_request)
         market_frame = self._market_data.read_historical_range(
@@ -81,7 +112,12 @@ class RunSingleInstanceBacktest:
         # a caller has to remember to wire up.
         managed_policy_events: list[ManagedPolicyEvent] = []
         managed_provider = (
-            self._managed_provider(request, window.market, managed_policy_events)
+            self._managed_provider(
+                request,
+                instance_id,
+                window.market,
+                managed_policy_events,
+            )
             if request.managed_policy_enabled
             else None
         )
@@ -94,8 +130,8 @@ class RunSingleInstanceBacktest:
         accounting = account_execution_loop(execution, market_frame, request.accounting)
 
         result = SingleInstanceBacktestResult(
-            run_id=request.run_id,
-            instance_id=request.strategy.instance_id,
+            run_id=run_id,
+            instance_id=instance_id,
             strategy_evaluation=evaluation,
             contract_acceptance=acceptance,
             execution=execution,
@@ -109,6 +145,7 @@ class RunSingleInstanceBacktest:
     def _managed_provider(
         self,
         request: SingleInstanceBacktestRequest,
+        instance_id: str,
         resolved_market: MarketRange,
         managed_policy_events: list[ManagedPolicyEvent],
     ) -> ManagedReplayProvider:
@@ -117,22 +154,23 @@ class RunSingleInstanceBacktest:
             # entry fill may include Research-owned slippage, so pass the
             # reference price rather than the adjusted fill price.
             #
-            # `resolved_market` (not `request.strategy.market`) so managed
-            # replay uses the same effective range as range evaluation and
-            # historical candle acquisition — under `full_available` those
-            # differ from the originally requested range.
+            # `resolved_market` (not the originally requested range) so
+            # managed replay uses the same effective range as range
+            # evaluation and historical candle acquisition — under
+            # `full_available` those differ from the originally requested
+            # range.
             replay = self._strategy_engine.evaluate_managed_replay(
                 ManagedReplayRequest(
                     strategy_id=request.strategy.strategy_id,
-                    strategy_version=request.strategy.strategy_version,
-                    instance_id=request.strategy.instance_id,
-                    strategy_spec=request.strategy.strategy_spec,
+                    strategy_version=_ENGINE_STRATEGY_VERSION,
+                    instance_id=instance_id,
+                    strategy_spec=request.strategy.raw_spec,
                     market=resolved_market,
                     trade_id=position.position_id,
                     side=position.side,
                     entry_time_ms=position.entry_fill.time_ms,
                     entry_price=position.entry_fill.reference_price,
-                    compatibility_profile=request.strategy.compatibility_profile,
+                    compatibility_profile=_ENGINE_COMPATIBILITY_PROFILE,
                 )
             )
             # Capture here, before the loop's ManagedPolicyTimeline (built from

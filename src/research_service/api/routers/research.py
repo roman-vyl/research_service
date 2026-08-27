@@ -44,9 +44,9 @@ def _resolve_end_ms(to_ms: int | None, to_open_time_ms: int | None) -> int:
 @router.get("/component-catalog", response_model=ComponentCatalog)
 def component_catalog(
     request: Request,
-    family: str = Query(default="ema_pullback"),
+    strategy_id: str = Query(default="ema_pullback"),
 ) -> ComponentCatalog:
-    return services(request).component_catalog.execute(family=family)
+    return services(request).component_catalog.execute(strategy_id=strategy_id)
 
 
 @router.post("/config/validate", response_model=ValidationResult)
@@ -71,9 +71,9 @@ def save_config(request: Request, payload: SaveConfigRequest) -> SaveConfigResul
 @router.get("/configs/state", response_model=ConfigStateResponse)
 def config_state(
     request: Request,
-    family: str = Query(default="ema_pullback"),
+    strategy_id: str = Query(default="ema_pullback"),
 ) -> ConfigStateResponse:
-    return services(request).research_configs.state(family)
+    return services(request).research_configs.state(strategy_id)
 
 
 @router.put("/configs/selected", response_model=ConfigStateResponse)
@@ -104,7 +104,12 @@ def run_backtest(
             outcome.managed_policy_events,
         )
     except FileExistsError as exc:
-        raise RunAlreadyExists(payload.run_id) from exc
+        # run_id is Research-generated, not caller-supplied — a collision
+        # here is an internal generation concern, not a caller-triggerable
+        # duplicate-run submission (canonical-strategy-instance-v1, REMOVED
+        # "Duplicate run rejection"). Still surfaced as 409 against the
+        # generated identity, since the artifact path is genuinely taken.
+        raise RunAlreadyExists(result.run_id) from exc
 
     return BacktestRunResponse(
         run_id=result.run_id,

@@ -27,12 +27,13 @@ class BatchExperimentRequest(BaseModel):
 
     @model_validator(mode="after")
     def validate_unique_identity(self) -> "BatchExperimentRequest":
+        # run_id no longer exists on a candidate request (Research-generated,
+        # only known after execution) — candidate_id is the sole
+        # pre-execution correlation identity (research-batch-experiments-v1,
+        # "Candidate validity").
         candidate_ids = [item.candidate_id for item in self.candidates]
-        run_ids = [item.backtest.run_id for item in self.candidates]
         if len(candidate_ids) != len(set(candidate_ids)):
             raise ValueError("candidate_id values must be unique within a batch")
-        if len(run_ids) != len(set(run_ids)):
-            raise ValueError("run_id values must be unique within a batch")
         return self
 
 
@@ -40,7 +41,12 @@ class BatchCandidateResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     candidate_id: str
-    run_id: str
+    # Present only when status == "completed" — a failed candidate never
+    # had a run created, so it never got a generated run_id
+    # (research-batch-experiments-v1, "Run identity generated only on
+    # success"). instance_id, unlike run_id, is a pure function of the
+    # candidate's identity subset and is always known, even on failure.
+    run_id: str | None = None
     instance_id: str
     status: Literal["completed", "failed"]
     artifact_path: str | None = None

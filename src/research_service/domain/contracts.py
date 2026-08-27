@@ -54,6 +54,27 @@ class MarketRange(BaseModel):
         return _TIMEFRAME_MS[self.timeframe]
 
 
+class ExplicitRange(BaseModel):
+    """A caller-supplied `from_ms`/`to_ms` pair, without ticker/timeframe.
+
+    Used only for `range_policy=explicit_range` requests — the strategy
+    identity subset already carries `ticker`/`base_timeframe`, so this type
+    intentionally does not repeat them. `range_policy=full_available`
+    requests carry no range at all, not an instance of this type.
+    """
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    from_ms: int = Field(ge=0)
+    to_ms: int = Field(gt=0)
+
+    @model_validator(mode="after")
+    def validate_ordering(self) -> "ExplicitRange":
+        if self.from_ms >= self.to_ms:
+            raise ValueError("from_ms must be less than to_ms")
+        return self
+
+
 class Candle(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -86,7 +107,13 @@ class MarketFrame(BaseModel):
 
 
 class StrategyEvaluationRequest(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    """Strategy Engine wire request. Internal-only since
+    `canonical-strategy-instance-v1`: Research constructs this itself from a
+    `StrategyInstanceIdentity` plus internally-owned `strategy_version`/
+    `instance_id`/`compatibility_profile` — it is never built directly from
+    caller input."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
     strategy_id: str
     strategy_version: str = "v1"

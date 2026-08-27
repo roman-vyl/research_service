@@ -85,10 +85,10 @@ def test_component_catalog_is_cached_per_application(tmp_path: Path) -> None:
     assert strategy.calls == ["ema_pullback"]
 
 
-def test_component_catalog_rejects_unknown_family_without_upstream_call(tmp_path: Path) -> None:
+def test_component_catalog_rejects_unknown_strategy_id_without_upstream_call(tmp_path: Path) -> None:
     strategy = FakeStrategyEngine()
     response = make_client(tmp_path, strategy).get(
-        "/api/research/component-catalog", params={"family": "unknown"}
+        "/api/research/component-catalog", params={"strategy_id": "unknown"}
     )
     assert response.status_code == 400
     assert response.json()["error"] == "invalid_request"

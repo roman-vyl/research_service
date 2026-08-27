@@ -18,21 +18,31 @@ from research_service.application.experiments import (
     PersistBatchExperiment,
     RunBatchExperiment,
 )
+from research_service.domain.contracts import ExplicitRange
 from research_service.domain.execution import ExecutionPolicy
 from test_managed_policy_events import ManagedEventsStrategyEngine
 from test_single_instance_backtest import (
     FakeMarketData,
     FakeStrategyEngine,
     market_frame,
-    strategy_request,
+    strategy_identity,
     strategy_result,
 )
 
+# A batch has no pre-execution run_id anymore (run_id is Research-generated
+# only after a candidate runs) — candidates are distinguished here by a test-
+# only marker embedded in raw_spec instead, purely for these fakes to
+# correlate calls; it plays no role in the real identity derivation logic
+# other than (deliberately) making each candidate's instance_id distinct.
 
-def make_backtest_request(run_id: str) -> SingleInstanceBacktestRequest:
+
+def make_backtest_request(marker: str) -> SingleInstanceBacktestRequest:
+    identity = strategy_identity()
     return SingleInstanceBacktestRequest(
-        run_id=run_id,
-        strategy=strategy_request(),
+        strategy=identity.model_copy(
+            update={"raw_spec": {**identity.raw_spec, "_test_marker": marker}}
+        ),
+        range=ExplicitRange(from_ms=0, to_ms=900_000),
         execution=ExecutionPolicy(quantity=Decimal("2")),
         accounting=AccountingPolicy(
             initial_equity=Decimal("1000"),
@@ -43,19 +53,24 @@ def make_backtest_request(run_id: str) -> SingleInstanceBacktestRequest:
     )
 
 
+def _marker(request: SingleInstanceBacktestRequest) -> str:
+    return str(request.strategy.raw_spec["_test_marker"])
+
+
 class FakeRunBacktest:
-    def __init__(self, failing_run_ids: set[str] | None = None) -> None:
+    def __init__(self, failing_markers: set[str] | None = None) -> None:
         self.calls: list[str] = []
-        self.failing_run_ids = failing_run_ids or set()
+        self.failing_markers = failing_markers or set()
         self.delegate = RunSingleInstanceBacktest(
             FakeStrategyEngine(strategy_result()),
             FakeMarketData(market_frame()),
         )
 
     def execute(self, request):
-        self.calls.append(request.run_id)
-        if request.run_id in self.failing_run_ids:
-            raise RuntimeError(f"boom:{request.run_id}")
+        marker = _marker(request)
+        self.calls.append(marker)
+        if marker in self.failing_markers:
+            raise RuntimeError(f"boom:{marker}")
         return self.delegate.execute(request)
 
 
@@ -66,9 +81,9 @@ class FakePersistBacktest:
         self.managed_policy_events_calls: list[tuple] = []
 
     def execute(self, request, result, managed_policy_events=()):
-        self.calls.append(request.run_id)
+        self.calls.append(result.run_id)
         self.managed_policy_events_calls.append(managed_policy_events)
-        destination = self.root / request.run_id
+        destination = self.root / result.run_id
         destination.mkdir(parents=True, exist_ok=False)
         return PersistedRunArtifacts(
             run_id=result.run_id,
@@ -94,17 +109,17 @@ def make_request() -> BatchExperimentRequest:
         candidates=(
             BatchCandidateRequest(
                 candidate_id="a",
-                backtest=make_backtest_request("run-a"),
+                backtest=make_backtest_request("a"),
                 metadata={"rank": 1},
             ),
             BatchCandidateRequest(
                 candidate_id="b",
-                backtest=make_backtest_request("run-b"),
+                backtest=make_backtest_request("b"),
                 metadata={"rank": 2},
             ),
             BatchCandidateRequest(
                 candidate_id="c",
-                backtest=make_backtest_request("run-c"),
+                backtest=make_backtest_request("c"),
                 metadata={"rank": 3},
             ),
         ),
@@ -117,31 +132,38 @@ def test_batch_runs_strictly_in_declared_order(tmp_path: Path) -> None:
 
     result = RunBatchExperiment(runner, persister).execute(make_request())
 
-    assert runner.calls == ["run-a", "run-b", "run-c"]
-    assert persister.calls == ["run-a", "run-b", "run-c"]
+    assert runner.calls == ["a", "b", "c"]
+    assert len(persister.calls) == 3
     assert result.status == "completed"
     assert result.completed_count == 3
     assert result.failed_count == 0
     assert [item.candidate_id for item in result.candidates] == ["a", "b", "c"]
     assert all(item.status == "completed" for item in result.candidates)
+    assert all(item.run_id for item in result.candidates)
 
 
 def test_candidate_failure_is_isolated_and_later_candidates_continue(tmp_path: Path) -> None:
-    runner = FakeRunBacktest({"run-b"})
+    runner = FakeRunBacktest({"b"})
     persister = FakePersistBacktest(tmp_path)
 
     result = RunBatchExperiment(runner, persister).execute(make_request())
 
-    assert runner.calls == ["run-a", "run-b", "run-c"]
-    assert persister.calls == ["run-a", "run-c"]
+    assert runner.calls == ["a", "b", "c"]
+    assert len(persister.calls) == 2
     assert result.status == "completed_with_failures"
     assert result.completed_count == 2
     assert result.failed_count == 1
     failed = result.candidates[1]
     assert failed.status == "failed"
     assert failed.error_type == "RuntimeError"
-    assert failed.error_message == "boom:run-b"
+    assert failed.error_message == "boom:b"
+    # No run was created for a failed candidate, so it has no generated
+    # run_id (research-batch-experiments-v1, "Run identity generated only
+    # on success") — but its instance_id is still derivable pre-execution.
+    assert failed.run_id is None
+    assert failed.instance_id
     assert result.candidates[2].status == "completed"
+    assert result.candidates[2].run_id
 
 
 def test_batch_summary_uses_new_backtest_accounting(tmp_path: Path) -> None:
@@ -188,7 +210,7 @@ def test_batch_candidate_with_managed_policy_persists_real_events(tmp_path: Path
         candidates=(
             BatchCandidateRequest(
                 candidate_id="managed-a",
-                backtest=make_backtest_request("run-managed-a").model_copy(
+                backtest=make_backtest_request("managed-a").model_copy(
                     update={"managed_policy_enabled": True}
                 ),
             ),
@@ -199,10 +221,12 @@ def test_batch_candidate_with_managed_policy_persists_real_events(tmp_path: Path
 
     assert result.status == "completed"
     assert result.candidates[0].status == "completed"
+    run_id = result.candidates[0].run_id
+    assert run_id
 
-    events_path = tmp_path / "run-managed-a" / "managed_policy_events.json"
+    events_path = tmp_path / run_id / "managed_policy_events.json"
     trace = json.loads(events_path.read_text(encoding="utf-8"))
-    assert trace["run_id"] == "run-managed-a"
+    assert trace["run_id"] == run_id
     assert len(trace["events"]) == 2
     assert {event["event_type"] for event in trace["events"]} == {
         "phase_changed",

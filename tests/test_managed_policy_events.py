@@ -15,6 +15,7 @@ from research_service.application.backtests import (
     SingleInstanceBacktestRequest,
 )
 from research_service.domain.contracts import (
+    ExplicitRange,
     ManagedBarDecision,
     ManagedReplayRequest,
     ManagedReplayResult,
@@ -27,7 +28,7 @@ from test_single_instance_backtest import (
     FakeMarketData,
     FakeStrategyEngine,
     market_frame,
-    strategy_request,
+    strategy_identity,
     strategy_result,
 )
 
@@ -98,10 +99,10 @@ class ManagedEventsStrategyEngine(FakeStrategyEngine):
         )
 
 
-def _request(run_id: str, *, managed_policy_enabled: bool) -> SingleInstanceBacktestRequest:
+def _request(*, managed_policy_enabled: bool) -> SingleInstanceBacktestRequest:
     return SingleInstanceBacktestRequest(
-        run_id=run_id,
-        strategy=strategy_request(),
+        strategy=strategy_identity(),
+        range=ExplicitRange(from_ms=0, to_ms=900_000),
         execution=ExecutionPolicy(quantity=Decimal("2")),
         accounting=AccountingPolicy(
             initial_equity=Decimal("1000"),
@@ -120,7 +121,7 @@ def test_managed_replay_events_survive_execution_loop() -> None:
     engine = ManagedEventsStrategyEngine(strategy_result())
     use_case = RunSingleInstanceBacktest(engine, FakeMarketData(market_frame()))
 
-    outcome = use_case.execute(_request("run-loop-capture", managed_policy_enabled=True))
+    outcome = use_case.execute(_request(managed_policy_enabled=True))
 
     assert len(outcome.result.accounting.trades) == 1
     position_id = outcome.result.accounting.trades[0].position_id
@@ -183,25 +184,24 @@ def _container(tmp_path: Path, engine: Any) -> Container:
 
 def _persist_via_backtest_endpoint(
     tmp_path: Path,
-    run_id: str,
     *,
     managed_policy_enabled: bool,
-) -> TestClient:
+) -> tuple[TestClient, str]:
     engine = ManagedEventsStrategyEngine(strategy_result())
     container = _container(tmp_path, engine)
     client = TestClient(create_app(container.settings, container))
-    payload = _request(run_id, managed_policy_enabled=managed_policy_enabled)
+    payload = _request(managed_policy_enabled=managed_policy_enabled)
     response = client.post("/api/research/backtests", json=json.loads(payload.model_dump_json()))
     assert response.status_code == 201, response.json()
-    return client
+    return client, response.json()["run_id"]
 
 
 def test_artifact_is_published_and_hash_verified_via_manifest(tmp_path: Path) -> None:
     """2. Artifact publishes with the run and is hash-verified through the existing manifest mechanism."""
 
-    _persist_via_backtest_endpoint(tmp_path, "run-artifact-managed", managed_policy_enabled=True)
+    _client, run_id = _persist_via_backtest_endpoint(tmp_path, managed_policy_enabled=True)
 
-    run_dir = tmp_path / "run-artifact-managed"
+    run_dir = tmp_path / run_id
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
     record = next(f for f in manifest["files"] if f["path"] == "managed_policy_events.json")
     payload = (run_dir / "managed_policy_events.json").read_bytes()
@@ -213,32 +213,30 @@ def test_artifact_is_published_and_hash_verified_via_manifest(tmp_path: Path) ->
 
     trace = json.loads(payload)
     assert trace["contract_version"] == "research_managed_policy_events.v1"
-    assert trace["run_id"] == "run-artifact-managed"
+    assert trace["run_id"] == run_id
     assert len(trace["events"]) == 2
 
 
 def test_api_returns_events_for_correct_run_and_trade(tmp_path: Path) -> None:
     """3 + 4. API returns the right run/trade's events, correlated via position_id."""
 
-    client = _persist_via_backtest_endpoint(
-        tmp_path, "run-api-managed", managed_policy_enabled=True
-    )
+    client, run_id = _persist_via_backtest_endpoint(tmp_path, managed_policy_enabled=True)
 
-    trades = client.get("/api/research/runs/run-api-managed/trades").json()["trades"]
+    trades = client.get(f"/api/research/runs/{run_id}/trades").json()["trades"]
     assert len(trades) == 1
     position_id = trades[0]["position_id"]
     trade_id = trades[0]["trade_id"]
     assert trade_id != position_id  # trade_id is derived ("trade:{position_id}:{ordinal}")
 
-    full = client.get("/api/research/runs/run-api-managed/managed-policy-events")
+    full = client.get(f"/api/research/runs/{run_id}/managed-policy-events")
     assert full.status_code == 200
     assert full.json()["contract_version"] == "research_managed_policy_events.v1"
-    assert full.json()["run_id"] == "run-api-managed"
+    assert full.json()["run_id"] == run_id
     assert len(full.json()["events"]) == 2
     assert all(event["position_id"] == position_id for event in full.json()["events"])
 
     scoped = client.get(
-        "/api/research/runs/run-api-managed/managed-policy-events",
+        f"/api/research/runs/{run_id}/managed-policy-events",
         params={"position_id": position_id},
     )
     assert scoped.status_code == 200
@@ -246,7 +244,7 @@ def test_api_returns_events_for_correct_run_and_trade(tmp_path: Path) -> None:
 
     # Filtering by the derived trade_id (not position_id) must not accidentally match.
     wrong_key = client.get(
-        "/api/research/runs/run-api-managed/managed-policy-events",
+        f"/api/research/runs/{run_id}/managed-policy-events",
         params={"position_id": trade_id},
     )
     assert wrong_key.status_code == 400
@@ -256,11 +254,9 @@ def test_api_returns_events_for_correct_run_and_trade(tmp_path: Path) -> None:
 def test_run_without_managed_policy_returns_empty_trace(tmp_path: Path) -> None:
     """5. A run with managed policy disabled returns a valid empty trace, not an error."""
 
-    client = _persist_via_backtest_endpoint(
-        tmp_path, "run-no-managed-policy", managed_policy_enabled=False
-    )
+    client, run_id = _persist_via_backtest_endpoint(tmp_path, managed_policy_enabled=False)
 
-    response = client.get("/api/research/runs/run-no-managed-policy/managed-policy-events")
+    response = client.get(f"/api/research/runs/{run_id}/managed-policy-events")
 
     assert response.status_code == 200
     assert response.json()["events"] == []
@@ -269,16 +265,14 @@ def test_run_without_managed_policy_returns_empty_trace(tmp_path: Path) -> None:
 def test_invalid_run_and_trade_fail_closed(tmp_path: Path) -> None:
     """6. Unknown run -> 404 run_not_found; unknown trade in a known run -> 400 invalid_request."""
 
-    client = _persist_via_backtest_endpoint(
-        tmp_path, "run-fail-closed", managed_policy_enabled=True
-    )
+    client, run_id = _persist_via_backtest_endpoint(tmp_path, managed_policy_enabled=True)
 
     missing_run = client.get("/api/research/runs/does-not-exist/managed-policy-events")
     assert missing_run.status_code == 404
     assert missing_run.json()["error"] == "run_not_found"
 
     unknown_trade = client.get(
-        "/api/research/runs/run-fail-closed/managed-policy-events",
+        f"/api/research/runs/{run_id}/managed-policy-events",
         params={"position_id": "position-does-not-exist"},
     )
     assert unknown_trade.status_code == 400
@@ -288,17 +282,15 @@ def test_invalid_run_and_trade_fail_closed(tmp_path: Path) -> None:
 def test_existing_run_projections_are_unaffected(tmp_path: Path) -> None:
     """7. detail/trades/metrics contracts stay exactly as before this change."""
 
-    client = _persist_via_backtest_endpoint(
-        tmp_path, "run-contracts-unchanged", managed_policy_enabled=True
-    )
+    client, run_id = _persist_via_backtest_endpoint(tmp_path, managed_policy_enabled=True)
 
-    detail = client.get("/api/research/runs/run-contracts-unchanged").json()
+    detail = client.get(f"/api/research/runs/{run_id}").json()
     assert set(detail.keys()) == {"contract_version", "manifest", "result", "strategy_spec"}
 
-    trades = client.get("/api/research/runs/run-contracts-unchanged/trades").json()
+    trades = client.get(f"/api/research/runs/{run_id}/trades").json()
     assert trades["contract_version"] == "research_run_trades.v1"
 
-    metrics = client.get("/api/research/runs/run-contracts-unchanged/metrics").json()
+    metrics = client.get(f"/api/research/runs/{run_id}/metrics").json()
     assert metrics["contract_version"] == "research_run_metrics.v1"
 
 
@@ -308,8 +300,7 @@ def test_legacy_bundle_without_managed_policy_events_file_stays_readable(tmp_pat
     detail/trades/metrics stay servable; the managed-policy-events endpoint must say
     "trace unavailable for this legacy artifact", not silently claim an empty trace."""
 
-    run_id = "run-legacy-bundle"
-    client = _persist_via_backtest_endpoint(tmp_path, run_id, managed_policy_enabled=True)
+    client, run_id = _persist_via_backtest_endpoint(tmp_path, managed_policy_enabled=True)
 
     run_dir = tmp_path / run_id
     manifest_path = run_dir / "manifest.json"

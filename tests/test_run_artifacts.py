@@ -13,20 +13,21 @@ from research_service.application.backtests import (
     RunSingleInstanceBacktest,
     SingleInstanceBacktestRequest,
 )
+from research_service.domain.contracts import ExplicitRange
 from research_service.domain.execution import ExecutionPolicy
 from test_single_instance_backtest import (
     FakeMarketData,
     FakeStrategyEngine,
     market_frame,
-    strategy_request,
+    strategy_identity,
     strategy_result,
 )
 
 
-def completed_backtest(run_id: str = "run-artifact-1"):
+def completed_backtest():
     request = SingleInstanceBacktestRequest(
-        run_id=run_id,
-        strategy=strategy_request(),
+        strategy=strategy_identity(),
+        range=ExplicitRange(from_ms=0, to_ms=900_000),
         execution=ExecutionPolicy(quantity=Decimal("2")),
         accounting=AccountingPolicy(
             initial_equity=Decimal("1000"),
@@ -48,7 +49,7 @@ def test_persist_backtest_writes_versioned_atomic_bundle(tmp_path) -> None:
         request, result
     )
 
-    run_dir = tmp_path / request.run_id
+    run_dir = tmp_path / result.run_id
     assert persisted.artifact_path == str(run_dir)
     assert run_dir.is_dir()
     assert {path.name for path in run_dir.iterdir()} == {
@@ -64,7 +65,7 @@ def test_persist_backtest_writes_versioned_atomic_bundle(tmp_path) -> None:
 
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["contract_version"] == "research_run_artifacts.v1"
-    assert manifest["run_id"] == request.run_id
+    assert manifest["run_id"] == result.run_id
     assert manifest["market_data_hash"] == "market-hash"
     assert len(manifest["files"]) == 7
     for record in manifest["files"]:
@@ -82,12 +83,12 @@ def test_persist_backtest_writes_versioned_atomic_bundle(tmp_path) -> None:
         (run_dir / "managed_policy_events.json").read_text(encoding="utf-8")
     )
     assert managed_events["contract_version"] == "research_managed_policy_events.v1"
-    assert managed_events["run_id"] == request.run_id
+    assert managed_events["run_id"] == result.run_id
     assert managed_events["events"] == []
 
 
 def test_existing_run_is_immutable(tmp_path) -> None:
-    request, result = completed_backtest("immutable-run")
+    request, result = completed_backtest()
     use_case = PersistSingleInstanceBacktest(FilesystemArtifactStore(tmp_path))
     use_case.execute(request, result)
 
@@ -106,10 +107,13 @@ def test_failed_bundle_is_not_published(tmp_path) -> None:
 
 
 def test_request_result_identity_is_required(tmp_path) -> None:
-    request, result = completed_backtest("identity-a")
-    mismatched = result.model_copy(update={"run_id": "identity-b"})
+    request, result = completed_backtest()
+    # run_id is no longer cross-checked against the request (Research-
+    # generated, not a request field) — instance_id, derived from the
+    # request's own identity subset, is still an enforced invariant.
+    mismatched = result.model_copy(update={"instance_id": "ema_pullback:0000000000000000000000"})
 
-    with pytest.raises(ValueError, match="run_id differ"):
+    with pytest.raises(ValueError, match="instance_id does not match"):
         PersistSingleInstanceBacktest(FilesystemArtifactStore(tmp_path)).execute(
             request,
             mismatched,

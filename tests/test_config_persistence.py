@@ -14,7 +14,7 @@ from research_service.runtime.settings import Settings
 
 class StubStrategyEngine:
     def validate_authoring_config(
-        self, family: str, instances: list[dict[str, object]]
+        self, strategy_id: str, instances: list[dict[str, object]]
     ) -> StrategyAuthoringValidationResult:
         return StrategyAuthoringValidationResult(valid=True, errors=())
 
@@ -29,9 +29,17 @@ def draft(experiment_id: str = "baseline") -> dict[str, object]:
     return {
         "config_version": 1,
         "experiment_id": experiment_id,
-        "family": "ema_pullback",
+        "strategy_id": "ema_pullback",
         "execution": {"init_cash": 10000.0, "fees": 0.0004},
-        "instances": [{"instance_id": "baseline", "strategy": {}}],
+        "instances": [
+            {
+                "enabled": True,
+                "strategy_id": "ema_pullback",
+                "ticker": "BTCUSDT.P",
+                "base_timeframe": "5m",
+                "raw_spec": {},
+            }
+        ],
     }
 
 
@@ -67,7 +75,7 @@ def test_serialize_and_save_round_trip(tmp_path: Path) -> None:
             "path": "ema_pullback/baseline.json",
             "errors": [],
         }
-        state = api.get("/api/research/configs/state?family=ema_pullback")
+        state = api.get("/api/research/configs/state?strategy_id=ema_pullback")
         assert state.status_code == 200
         body = state.json()
         assert body["selected_experiment_id"] == "baseline"
@@ -81,15 +89,15 @@ def test_select_switches_draft(tmp_path: Path) -> None:
         api.post("/api/research/config/save", json={"draft": draft("second")})
         selected = api.put(
             "/api/research/configs/selected",
-            json={"family": "ema_pullback", "experiment_id": "first"},
+            json={"strategy_id": "ema_pullback", "experiment_id": "first"},
         )
         assert selected.status_code == 200
         assert selected.json()["selected_experiment_id"] == "first"
 
 
-def test_bad_family_and_path_are_rejected(tmp_path: Path) -> None:
+def test_bad_strategy_id_and_path_are_rejected(tmp_path: Path) -> None:
     with client(tmp_path) as api:
-        response = api.get("/api/research/configs/state?family=../ema_pullback")
+        response = api.get("/api/research/configs/state?strategy_id=../ema_pullback")
         assert response.status_code == 400
         response = api.post(
             "/api/research/config/save",
@@ -100,14 +108,14 @@ def test_bad_family_and_path_are_rejected(tmp_path: Path) -> None:
 
 def test_invalid_saved_file_is_listed_but_not_loaded(tmp_path: Path) -> None:
     root = tmp_path / "configs"
-    family = root / "ema_pullback"
-    family.mkdir(parents=True)
-    (family / "broken.json").write_text("{broken", encoding="utf-8")
+    strategy_dir = root / "ema_pullback"
+    strategy_dir.mkdir(parents=True)
+    (strategy_dir / "broken.json").write_text("{broken", encoding="utf-8")
     (root / ".workbench_selection.json").write_text(
         json.dumps({"ema_pullback": "broken"}), encoding="utf-8"
     )
     with client(tmp_path) as api:
-        body = api.get("/api/research/configs/state?family=ema_pullback").json()
+        body = api.get("/api/research/configs/state?strategy_id=ema_pullback").json()
         assert body["selected_experiment_id"] == "broken"
         assert body["draft"] is None
         assert len(body["configs"]) == 1

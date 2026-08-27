@@ -10,6 +10,7 @@ from research_service.application.experiments.contracts import (
     BatchExperimentRequest,
     BatchExperimentResult,
 )
+from research_service.domain.strategy_instance import derive_strategy_instance_id
 
 
 class RunBatchExperiment:
@@ -65,10 +66,19 @@ class RunBatchExperiment:
                 metadata=candidate.metadata,
             )
         except Exception as exc:  # noqa: BLE001 -- failure isolation is the batch contract
+            # No run was created, so there is no generated run_id to report
+            # (research-batch-experiments-v1, "Run identity generated only
+            # on success"). instance_id is still derivable from the
+            # candidate's own identity subset regardless of the failure.
             return BatchCandidateResult(
                 candidate_id=candidate.candidate_id,
-                run_id=request.run_id,
-                instance_id=request.strategy.instance_id,
+                run_id=None,
+                instance_id=derive_strategy_instance_id(
+                    strategy_id=request.strategy.strategy_id,
+                    ticker=request.strategy.ticker,
+                    base_timeframe=request.strategy.base_timeframe,
+                    raw_spec=request.strategy.raw_spec,
+                ),
                 status="failed",
                 error_type=type(exc).__name__,
                 error_message=str(exc),

@@ -62,7 +62,7 @@ class SaveConfigResult(BaseModel):
 class ConfigStateResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    family: str
+    strategy_id: str
     selected_experiment_id: str | None = None
     selected_path: str | None = None
     draft: StrategyConfigDraft | None = None
@@ -72,5 +72,5 @@ class ConfigStateResponse(BaseModel):
 class SelectConfigRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    family: str
+    strategy_id: str
     experiment_id: str

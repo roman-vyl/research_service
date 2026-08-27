@@ -12,15 +12,24 @@ class GetComponentCatalog:
         self._strategy_engine = strategy_engine
         self._cache: dict[str, ComponentCatalog] = {}
 
-    def execute(self, *, family: str = "ema_pullback") -> ComponentCatalog:
-        if family != "ema_pullback":
-            raise InvalidRequest(f"unsupported family {family!r}; supported: ema_pullback")
-        cached = self._cache.get(family)
+    def execute(self, *, strategy_id: str = "ema_pullback") -> ComponentCatalog:
+        if strategy_id != "ema_pullback":
+            raise InvalidRequest(
+                f"unsupported strategy_id {strategy_id!r}; supported: ema_pullback"
+            )
+        cached = self._cache.get(strategy_id)
         if cached is not None:
             return cached
-        raw = self._strategy_engine.get_composer_catalog(family)
+        # Strategy Engine's own Composer Catalog API response still names its
+        # selector field `family` today (cross-repo seam, not renamed here —
+        # canonical-strategy-instance-v1, Decision 14). Research reads it
+        # under Engine's existing name without exposing `family` to its own
+        # callers.
+        raw = self._strategy_engine.get_composer_catalog(strategy_id)
         catalog = ComponentCatalog.model_validate(raw)
-        if catalog.family != family:
-            raise InvalidRequest("Strategy Engine composer catalog family does not match request")
-        self._cache[family] = catalog
+        if catalog.family != strategy_id:
+            raise InvalidRequest(
+                "Strategy Engine composer catalog family does not match strategy_id"
+            )
+        self._cache[strategy_id] = catalog
         return catalog

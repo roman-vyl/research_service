@@ -14,7 +14,7 @@ import yaml
 from research_service.domain.config import ConfigListEntry, StrategyConfigDraft
 from research_service.domain.errors import InvalidRequest
 
-_ALLOWED_FAMILIES = frozenset({"ema_pullback"})
+_ALLOWED_STRATEGY_IDS = frozenset({"ema_pullback"})
 _ALLOWED_SUFFIXES = frozenset({".json", ".yaml", ".yml"})
 _SAFE_NAME = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
 
@@ -28,10 +28,10 @@ class FilesystemConfigStore:
         self._root.mkdir(parents=True, exist_ok=True)
 
     @staticmethod
-    def validate_family(family: str) -> str:
-        value = family.strip()
-        if value not in _ALLOWED_FAMILIES:
-            raise InvalidRequest(f"unsupported family {family!r}; supported: ema_pullback")
+    def validate_strategy_id(strategy_id: str) -> str:
+        value = strategy_id.strip()
+        if value not in _ALLOWED_STRATEGY_IDS:
+            raise InvalidRequest(f"unsupported strategy_id {strategy_id!r}; supported: ema_pullback")
         return value
 
     @staticmethod
@@ -42,22 +42,22 @@ class FilesystemConfigStore:
         return value
 
     def save(self, draft: StrategyConfigDraft) -> str:
-        family = self.validate_family(draft.family)
+        strategy_id = self.validate_strategy_id(draft.strategy_id)
         experiment_id = self.validate_experiment_id(draft.experiment_id)
-        family_dir = self._root / family
-        family_dir.mkdir(parents=True, exist_ok=True)
-        target = family_dir / f"{experiment_id}.json"
+        strategy_dir = self._root / strategy_id
+        strategy_dir.mkdir(parents=True, exist_ok=True)
+        target = strategy_dir / f"{experiment_id}.json"
         self._atomic_write_text(target, self.serialize(draft, "json"))
-        self.select(family, experiment_id)
+        self.select(strategy_id, experiment_id)
         return str(target.relative_to(self._root))
 
-    def list(self, family: str) -> tuple[ConfigListEntry, ...]:
-        family_key = self.validate_family(family)
-        family_dir = self._root / family_key
-        if not family_dir.exists():
+    def list(self, strategy_id: str) -> tuple[ConfigListEntry, ...]:
+        strategy_key = self.validate_strategy_id(strategy_id)
+        strategy_dir = self._root / strategy_key
+        if not strategy_dir.exists():
             return ()
         entries: list[ConfigListEntry] = []
-        for path in sorted(family_dir.iterdir(), key=lambda item: item.name):
+        for path in sorted(strategy_dir.iterdir(), key=lambda item: item.name):
             if not path.is_file() or path.suffix.lower() not in _ALLOWED_SUFFIXES:
                 continue
             entries.append(
@@ -69,23 +69,23 @@ class FilesystemConfigStore:
             )
         return tuple(entries)
 
-    def selected(self, family: str) -> str | None:
-        family_key = self.validate_family(family)
+    def selected(self, strategy_id: str) -> str | None:
+        strategy_key = self.validate_strategy_id(strategy_id)
         if not self._selection_path.exists():
             return None
         try:
             payload = json.loads(self._selection_path.read_text(encoding="utf-8"))
         except (OSError, json.JSONDecodeError):
             return None
-        value = payload.get(family_key) if isinstance(payload, dict) else None
+        value = payload.get(strategy_key) if isinstance(payload, dict) else None
         return value if isinstance(value, str) and value.strip() else None
 
-    def select(self, family: str, experiment_id: str) -> None:
-        family_key = self.validate_family(family)
+    def select(self, strategy_id: str, experiment_id: str) -> None:
+        strategy_key = self.validate_strategy_id(strategy_id)
         experiment_key = self.validate_experiment_id(experiment_id)
-        if self.find(family_key, experiment_key) is None:
+        if self.find(strategy_key, experiment_key) is None:
             raise InvalidRequest(
-                f"no saved config for family={family_key!r} experiment_id={experiment_key!r}"
+                f"no saved config for strategy_id={strategy_key!r} experiment_id={experiment_key!r}"
             )
         payload: dict[str, str] = {}
         if self._selection_path.exists():
@@ -99,18 +99,18 @@ class FilesystemConfigStore:
                     }
             except (OSError, json.JSONDecodeError):
                 payload = {}
-        payload[family_key] = experiment_key
+        payload[strategy_key] = experiment_key
         self._atomic_write_text(
             self._selection_path,
             json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
         )
 
-    def find(self, family: str, experiment_id: str) -> Path | None:
-        family_key = self.validate_family(family)
+    def find(self, strategy_id: str, experiment_id: str) -> Path | None:
+        strategy_key = self.validate_strategy_id(strategy_id)
         experiment_key = self.validate_experiment_id(experiment_id)
-        family_dir = self._root / family_key
+        strategy_dir = self._root / strategy_key
         for suffix in (".json", ".yaml", ".yml"):
-            candidate = family_dir / f"{experiment_key}{suffix}"
+            candidate = strategy_dir / f"{experiment_key}{suffix}"
             if candidate.is_file():
                 return candidate
         return None
@@ -118,8 +118,8 @@ class FilesystemConfigStore:
     def relative_path(self, path: Path) -> str:
         return str(path.relative_to(self._root))
 
-    def load(self, family: str, experiment_id: str) -> StrategyConfigDraft | None:
-        path = self.find(family, experiment_id)
+    def load(self, strategy_id: str, experiment_id: str) -> StrategyConfigDraft | None:
+        path = self.find(strategy_id, experiment_id)
         if path is None:
             return None
         try:
@@ -132,7 +132,7 @@ class FilesystemConfigStore:
                 {
                     "config_version": raw.get("schema_version", raw.get("config_version", 1)),
                     "experiment_id": raw.get("experiment_id"),
-                    "family": raw.get("family"),
+                    "strategy_id": raw.get("strategy_id"),
                     "execution": raw.get("execution", {}),
                     "instances": raw.get("instances", []),
                 }
@@ -148,13 +148,13 @@ class FilesystemConfigStore:
         payload = {
             "schema_version": draft.config_version,
             "experiment_id": draft.experiment_id.strip(),
-            "family": draft.family.strip(),
+            "strategy_id": draft.strategy_id.strip(),
             "execution": {
                 key: value
                 for key, value in draft.execution.model_dump().items()
                 if value is not None
             },
-            "instances": draft.instances,
+            "instances": [instance.model_dump(mode="json") for instance in draft.instances],
         }
         if normalized == "json":
             return json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True) + "\n"

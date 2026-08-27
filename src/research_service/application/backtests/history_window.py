@@ -6,7 +6,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from research_service.domain.contracts import ContinuityAudit, MarketRange
+from research_service.domain.contracts import ContinuityAudit, ExplicitRange, MarketRange, timeframe_ms
 from research_service.domain.errors import InvalidRequest
 from research_service.ports.market_data import MarketDataPort
 
@@ -29,20 +29,30 @@ class ResolveBacktestWindow:
 
     def execute(
         self,
-        requested: MarketRange,
+        *,
+        ticker: str,
+        timeframe: str,
+        explicit_range: ExplicitRange | None,
         range_policy: Literal["explicit_range", "full_available"],
     ) -> ResolvedBacktestWindow:
-        market = requested
-        if range_policy == "full_available":
-            bounds = self._market_data.get_bounds(
-                ticker=requested.ticker,
-                timeframe=requested.timeframe,
+        if range_policy == "explicit_range":
+            if explicit_range is None:
+                raise InvalidRequest("range_policy=explicit_range requires from_ms/to_ms")
+            market = MarketRange(
+                ticker=ticker,
+                timeframe=timeframe,
+                from_ms=explicit_range.from_ms,
+                to_ms=explicit_range.to_ms,
             )
+        else:
+            if explicit_range is not None:
+                raise InvalidRequest("range_policy=full_available must not include a range")
+            bounds = self._market_data.get_bounds(ticker=ticker, timeframe=timeframe)
             market = MarketRange(
                 ticker=bounds.ticker,
                 timeframe=bounds.timeframe,
                 from_ms=bounds.earliest_open_time_ms,
-                to_ms=bounds.latest_open_time_ms + requested.step_ms,
+                to_ms=bounds.latest_open_time_ms + timeframe_ms(timeframe),
             )
         audit = self._market_data.audit_range(market)
         if audit.market != market:

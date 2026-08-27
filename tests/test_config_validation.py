@@ -44,9 +44,17 @@ def draft():
     return {
         "config_version": 1,
         "experiment_id": "x",
-        "family": "ema_pullback",
+        "strategy_id": "ema_pullback",
         "execution": {"init_cash": 10000, "fees": 0.0004, "slippage": 0},
-        "instances": [{"instance_id": "i", "market": {}, "strategy": {}}],
+        "instances": [
+            {
+                "enabled": True,
+                "strategy_id": "ema_pullback",
+                "ticker": "BTCUSDT.P",
+                "base_timeframe": "5m",
+                "raw_spec": {"anchor": {"period": 200}},
+            }
+        ],
     }
 
 

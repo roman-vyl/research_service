@@ -78,7 +78,7 @@ class ReadResearchRuns:
         return RunDetail(
             manifest=documents.manifest,
             result=documents.result,
-            strategy_spec=documents.request.strategy.strategy_spec,
+            strategy_spec=documents.request.strategy.raw_spec,
         )
 
     def compact_summary(self, run_id: str) -> RunCompactSummary:
@@ -147,7 +147,9 @@ class ReadResearchRuns:
             metrics = json.loads(metrics_raw)
         except (KeyError, ValidationError, json.JSONDecodeError, TypeError, ValueError) as exc:
             raise InvalidRunArtifact(str(exc), run_id=run_id) from exc
-        if manifest.run_id != run_id or request.run_id != run_id or result.run_id != run_id:
+        # request.run_id no longer exists (run_id is Research-generated, not
+        # a request field) — only manifest/result identity is cross-checked.
+        if manifest.run_id != run_id or result.run_id != run_id:
             raise InvalidRunArtifact("run identity differs across artifact files", run_id=run_id)
         return _RunDocuments(
             manifest=manifest,
@@ -164,12 +166,16 @@ class ReadResearchRuns:
         # summary must report what was actually evaluated and executed.
         market = documents.result.strategy_evaluation.market
         strategy = documents.request.strategy
+        evaluation = documents.result.strategy_evaluation
         return RunSummary(
             run_id=documents.manifest.run_id,
             created_at_utc=documents.manifest.created_at_utc,
             instance_id=documents.manifest.instance_id,
             strategy_id=strategy.strategy_id,
-            strategy_version=strategy.strategy_version,
+            # strategy_version no longer lives on the request (retired at
+            # the Research-facing boundary, canonical-strategy-instance-v1)
+            # — sourced from Strategy Engine's own echoed result instead.
+            strategy_version=evaluation.strategy_version,
             ticker=market.ticker,
             timeframe=market.timeframe,
             from_ms=market.from_ms,

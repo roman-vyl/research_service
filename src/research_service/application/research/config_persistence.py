@@ -44,19 +44,19 @@ class ManageResearchConfigs:
             return SaveConfigResult(ok=False, errors=result.errors)
         return SaveConfigResult(ok=True, path=self._store.save(draft))
 
-    def state(self, family: str) -> ConfigStateResponse:
-        family_key = self._store.validate_family(family)
-        entries = self._store.list(family_key)
-        selected = self._store.selected(family_key)
+    def state(self, strategy_id: str) -> ConfigStateResponse:
+        strategy_key = self._store.validate_strategy_id(strategy_id)
+        entries = self._store.list(strategy_key)
+        selected = self._store.selected(strategy_key)
         selected_path: str | None = None
         draft = None
         if selected is not None:
-            path = self._store.find(family_key, selected)
+            path = self._store.find(strategy_key, selected)
             if path is not None:
                 selected_path = self._store.relative_path(path)
-                draft = self._store.load(family_key, selected)
+                draft = self._store.load(strategy_key, selected)
         return ConfigStateResponse(
-            family=family_key,
+            strategy_id=strategy_key,
             selected_experiment_id=selected,
             selected_path=selected_path,
             draft=draft,
@@ -64,8 +64,8 @@ class ManageResearchConfigs:
         )
 
     def select(self, request: SelectConfigRequest) -> ConfigStateResponse:
-        self._store.select(request.family, request.experiment_id)
-        return self.state(request.family)
+        self._store.select(request.strategy_id, request.experiment_id)
+        return self.state(request.strategy_id)
 
 
 def _narrow_format(normalized: str) -> Literal["json", "yaml"]:
