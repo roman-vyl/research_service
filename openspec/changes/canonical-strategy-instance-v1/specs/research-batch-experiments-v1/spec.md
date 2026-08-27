@@ -96,6 +96,22 @@ a per-candidate Strategy Engine `/range` call for a batch experiment.
 - **THEN** Strategy Engine's range-batch evaluation is called exactly
   once, and its single-range evaluation is called zero times.
 
+### Requirement: Research supplies fail-closed market-data provenance to the shared Engine acquisition
+
+Research Service SHALL supply the resolved window's
+`expected_market_data_hash` on its `/range-batch` call, giving Strategy
+Engine's shared L0 acquisition the same fail-closed provenance guarantee
+standalone single-range evaluation already has — Engine verifies the
+shared acquisition against it before evaluating any variant, rather than
+Research trusting an unverified shared dataset.
+
+#### Scenario: Batch request carries the resolved window's hash
+
+- **WHEN** Research Service builds a Strategy Engine `/range-batch`
+  request for an experiment
+- **THEN** the request's `expected_market_data_hash` equals the
+  experiment's resolved window's `market_data_hash`.
+
 ### Requirement: Research resolves the shared market window once
 
 Research Service SHALL resolve the experiment's market window (via the

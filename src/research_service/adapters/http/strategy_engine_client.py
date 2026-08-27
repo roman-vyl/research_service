@@ -139,6 +139,7 @@ class HttpStrategyEngineClient:
                 "from_ms": request.market.from_ms,
                 "to_ms": request.market.to_ms,
             },
+            "expected_market_data_hash": request.expected_market_data_hash,
             "variants": [
                 {
                     "variant_id": variant.variant_id,

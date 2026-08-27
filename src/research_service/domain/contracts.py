@@ -185,12 +185,17 @@ class StrategyEvaluationBatchVariant(BaseModel):
 
 class StrategyEvaluationBatchRequest(BaseModel):
     """One shared market window and N variants, evaluated by Strategy
-    Engine in a single call over one shared-L0 market acquisition."""
+    Engine in a single call over one shared-L0 market acquisition.
+    `expected_market_data_hash` gives that shared acquisition the same
+    fail-closed provenance contract single-range evaluation already has —
+    Engine verifies it against the shared dataset before evaluating any
+    variant, rather than trusting whatever Market Data Service returns."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     market: MarketRange
     variants: tuple[StrategyEvaluationBatchVariant, ...] = Field(min_length=1)
+    expected_market_data_hash: str | None = None
 
 
 class StrategyEvaluationBatchVariantOutcome(BaseModel):

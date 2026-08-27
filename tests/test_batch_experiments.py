@@ -163,6 +163,7 @@ def test_engine_batch_wire_uses_candidate_id_as_variant_id_and_canonical_strateg
 
     sent = strategy.batch_requests[0]
     assert sent.market == market_frame().market
+    assert sent.expected_market_data_hash == "market-hash"
     assert [v.variant_id for v in sent.variants] == ["a", "b", "c"]
     for v in sent.variants:
         assert v.strategy_id == "ema_pullback"
@@ -227,6 +228,7 @@ def test_http_client_sends_no_enabled_instance_id_or_run_id_on_batch_wire() -> N
                     strategy_spec={"anchor": {"period": 200}},
                 ),
             ),
+            expected_market_data_hash="shared-hash",
         )
     )
 
@@ -238,6 +240,7 @@ def test_http_client_sends_no_enabled_instance_id_or_run_id_on_batch_wire() -> N
     assert "enabled" not in sent_variant
     assert "instance_id" not in sent_variant
     assert "run_id" not in body
+    assert body["expected_market_data_hash"] == "shared-hash"
     assert outcomes[0].result is not None
     assert outcomes[0].result.instance_id == "ema_pullback:should-not-appear-on-wire"
 

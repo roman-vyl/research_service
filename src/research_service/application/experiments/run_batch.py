@@ -90,6 +90,7 @@ class RunBatchExperiment:
                 )
                 for candidate in request.candidates
             ),
+            expected_market_data_hash=window.market_data_hash,
         )
         outcomes = self._strategy_engine.evaluate_range_batch(batch_request)
         outcomes_by_candidate = {outcome.variant_id: outcome for outcome in outcomes}

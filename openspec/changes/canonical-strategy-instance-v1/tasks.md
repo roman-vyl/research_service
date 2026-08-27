@@ -382,3 +382,12 @@ alias, no dual-schema acceptance, old shape fails closed.
       slice is scoped to the application/Engine-integration rebuild only,
       per the same non-goal as the rest of this change's frontend/HTTP
       surface work.
+- [x] 13.8 Corrective: `StrategyEvaluationBatchRequest` carries
+      `expected_market_data_hash`; `HttpStrategyEngineClient
+      .evaluate_range_batch` sends it; `RunBatchExperiment` supplies
+      `window.market_data_hash`. Requires the paired Engine-side
+      corrective (`strategy_engine` commit `94f1419`,
+      `strategy-evaluation-canonical-boundary-v1` Slice 10) that added
+      `expected_market_data_hash` to `/range-batch` and forwards it to the
+      shared L0 acquisition — batch's shared acquisition now has the same
+      fail-closed provenance guarantee single `/range` already had.
