@@ -300,3 +300,35 @@ def test_existing_run_projections_are_unaffected(tmp_path: Path) -> None:
 
     metrics = client.get("/api/research/runs/run-contracts-unchanged/metrics").json()
     assert metrics["contract_version"] == "research_run_metrics.v1"
+
+
+def test_legacy_bundle_without_managed_policy_events_file_stays_readable(tmp_path: Path) -> None:
+    """8. A bundle written before this projection existed (no managed_policy_events.json
+    on disk, and no record of it in manifest.json) must not become fully unreadable.
+    detail/trades/metrics stay servable; the managed-policy-events endpoint must say
+    "trace unavailable for this legacy artifact", not silently claim an empty trace."""
+
+    run_id = "run-legacy-bundle"
+    client = _persist_via_backtest_endpoint(tmp_path, run_id, managed_policy_enabled=True)
+
+    run_dir = tmp_path / run_id
+    manifest_path = run_dir / "manifest.json"
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["files"] = [
+        f for f in manifest["files"] if f["path"] != "managed_policy_events.json"
+    ]
+    manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+    (run_dir / "managed_policy_events.json").unlink()
+
+    detail = client.get(f"/api/research/runs/{run_id}")
+    assert detail.status_code == 200
+
+    trades = client.get(f"/api/research/runs/{run_id}/trades")
+    assert trades.status_code == 200
+
+    metrics = client.get(f"/api/research/runs/{run_id}/metrics")
+    assert metrics.status_code == 200
+
+    trace = client.get(f"/api/research/runs/{run_id}/managed-policy-events")
+    assert trace.status_code == 404
+    assert trace.json()["error"] == "managed_policy_trace_unavailable"

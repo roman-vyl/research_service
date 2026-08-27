@@ -86,3 +86,19 @@ class InvalidRunArtifact(ResearchServiceError):
             status_code=500,
             details=details,
         )
+
+
+class ManagedPolicyTraceUnavailable(ResearchServiceError):
+    """Run's artifact bundle predates managed_policy_events.json. Not "no
+    events" — a distinct "we cannot know" state for legacy bundles."""
+
+    def __init__(self, run_id: str) -> None:
+        super().__init__(
+            code="managed_policy_trace_unavailable",
+            message=(
+                f"managed-policy trace unavailable for run {run_id}: "
+                "artifact bundle predates managed_policy_events.json"
+            ),
+            status_code=404,
+            details={"run_id": run_id},
+        )

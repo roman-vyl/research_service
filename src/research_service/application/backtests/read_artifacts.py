@@ -22,7 +22,11 @@ from research_service.application.backtests.contracts import (
     SingleInstanceBacktestRequest,
     SingleInstanceBacktestResult,
 )
-from research_service.domain.errors import InvalidRunArtifact, RunNotFound
+from research_service.domain.errors import (
+    InvalidRunArtifact,
+    ManagedPolicyTraceUnavailable,
+    RunNotFound,
+)
 from research_service.execution.managed_policy_events import ManagedPolicyEventTrace
 from research_service.ports.artifacts import RunArtifactReader
 
@@ -33,7 +37,7 @@ class _RunDocuments:
     request: SingleInstanceBacktestRequest
     result: SingleInstanceBacktestResult
     metrics: dict[str, Any]
-    managed_policy_events_raw: bytes
+    managed_policy_events_raw: bytes | None
 
 
 def _decimal(metrics: dict[str, Any], key: str) -> Decimal:
@@ -92,6 +96,8 @@ class ReadResearchRuns:
 
     def managed_policy_events(self, run_id: str) -> ManagedPolicyEventTrace:
         documents = self._documents(run_id)
+        if documents.managed_policy_events_raw is None:
+            raise ManagedPolicyTraceUnavailable(run_id)
         return ManagedPolicyEventTrace.model_validate_json(documents.managed_policy_events_raw)
 
     def metrics(self, run_id: str) -> RunMetrics:
@@ -131,11 +137,11 @@ class ReadResearchRuns:
                 raise InvalidRunArtifact(f"artifact hash mismatch: {record.path}", run_id=run_id)
             payloads[record.path] = payload
 
+        managed_policy_events_raw = payloads.get("managed_policy_events.json")
         try:
             request_raw = payloads["request.json"]
             result_raw = payloads["result.json"]
             metrics_raw = payloads["metrics.json"]
-            managed_policy_events_raw = payloads["managed_policy_events.json"]
             request = SingleInstanceBacktestRequest.model_validate_json(request_raw)
             result = SingleInstanceBacktestResult.model_validate_json(result_raw)
             metrics = json.loads(metrics_raw)
