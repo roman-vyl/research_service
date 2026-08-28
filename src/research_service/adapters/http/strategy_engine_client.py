@@ -399,11 +399,27 @@ def _parse_evaluation_result(body: dict[str, object], *, instance_id: str) -> St
     )
 
 
+_HISTORICAL_EXECUTION_PROJECTION_CONTRACT_VERSION = "strategy_evaluation_execution.v2"
+
+
 def parse_historical_execution_projection(body: dict[str, object]) -> HistoricalExecutionProjectionDTO:
     """Strict decode of Strategy Engine's `HistoricalExecutionProjection`
     wire shape (`strategy-research-execution-contract-v1`, I3 consumer
-    foundation). No `raw=body` retention -- see
-    `HistoricalExecutionProjectionDTO`'s own docstring.
+    foundation, `contract_version = "strategy_evaluation_execution.v2"`
+    -- next version of the same envelope family
+    `serialize_strategy_evaluation_execution` already ships as `.v1`).
+    No `raw=body` retention -- see `HistoricalExecutionProjectionDTO`'s
+    own docstring.
+
+    The real wire envelope nests `bar_count`/`market_data_hash` inside
+    `market{...}` alongside `base_timeframe` (Strategy Engine's own key
+    name, not `timeframe`) -- this function translates that shape into
+    `HistoricalExecutionProjectionDTO`'s flat fields and Research's own
+    `MarketRange.timeframe`, exactly the way `_parse_evaluation_result`
+    above already translates the legacy `.v1` envelope. A naive
+    `HistoricalExecutionProjectionDTO.model_validate(body)` on the raw
+    body would reject every real Engine response -- this function must
+    not skip that translation step.
 
     Standalone rather than an `HttpStrategyEngineClient` method: Engine's
     `/range` route is not yet wired to this contract (route cutover is
@@ -413,8 +429,53 @@ def parse_historical_execution_projection(body: dict[str, object]) -> Historical
     the pattern of this module's other pure `_parse_*`/`_object` helpers.
     """
 
+    contract_version = body.get("contract_version")
+    if contract_version != _HISTORICAL_EXECUTION_PROJECTION_CONTRACT_VERSION:
+        raise UpstreamServiceError(
+            service="strategy_engine",
+            status_code=502,
+            message="Strategy Engine historical execution projection has an unsupported "
+            "contract_version",
+            details={
+                "expected": _HISTORICAL_EXECUTION_PROJECTION_CONTRACT_VERSION,
+                "actual": contract_version,
+            },
+        )
+
+    market_raw = body.get("market")
+    if not isinstance(market_raw, dict):
+        raise UpstreamServiceError(
+            service="strategy_engine",
+            status_code=502,
+            message="Strategy Engine historical execution projection field market is invalid",
+        )
+
     try:
-        return HistoricalExecutionProjectionDTO.model_validate(body)
+        market = MarketRange(
+            ticker=str(market_raw.get("ticker", "")),
+            timeframe=str(market_raw.get("base_timeframe", "")),
+            from_ms=_int(market_raw.get("from_ms", -1)),
+            to_ms=_int(market_raw.get("to_ms", -1)),
+        )
+    except (ValidationError, TypeError, ValueError) as exc:
+        raise UpstreamServiceError(
+            service="strategy_engine",
+            status_code=502,
+            message="Strategy Engine historical execution projection market is invalid",
+        ) from exc
+
+    payload = {
+        "strategy_id": body.get("strategy_id"),
+        "config_hash": body.get("config_hash"),
+        "market": market,
+        "market_data_hash": market_raw.get("market_data_hash"),
+        "bar_count": market_raw.get("bar_count"),
+        "entry_opportunities": body.get("entry_opportunities"),
+        "signal_exit_events": body.get("signal_exit_events"),
+        "warnings": body.get("warnings", []),
+    }
+    try:
+        return HistoricalExecutionProjectionDTO.model_validate(payload)
     except ValidationError as exc:
         raise UpstreamServiceError(
             service="strategy_engine",

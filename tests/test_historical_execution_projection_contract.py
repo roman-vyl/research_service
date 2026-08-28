@@ -27,7 +27,25 @@ from research_service.domain.contracts import (
 )
 from research_service.domain.errors import UpstreamServiceError
 
-_MARKET = {"ticker": "BTCUSDT.P", "timeframe": "5m", "from_ms": 0, "to_ms": 900_000}  # 3 bars
+_CONTRACT_VERSION = "strategy_evaluation_execution.v2"
+
+# The real Strategy Engine wire envelope
+# (`strategy_serialization.py::serialize_strategy_evaluation_execution`,
+# same family as `.v1`): `bar_count`/`market_data_hash` nested INSIDE
+# `market{...}`, key name `base_timeframe` (not `timeframe` -- that is
+# Research's own `MarketRange` field name, mapped during parse).
+_MARKET_WIRE = {
+    "ticker": "BTCUSDT.P",
+    "base_timeframe": "5m",
+    "from_ms": 0,
+    "to_ms": 900_000,  # 3 bars
+    "bar_count": 3,
+    "market_data_hash": "market-hash",
+}
+
+# `MarketRange(**_MARKET_RANGE_KWARGS)` -- Research's own domain type,
+# used for alignment-check expectations, distinct from the wire shape.
+_MARKET_RANGE_KWARGS = {"ticker": "BTCUSDT.P", "timeframe": "5m", "from_ms": 0, "to_ms": 900_000}
 
 
 def _attribution(kind: str, *, rule_id: str = "r1", component_id: str = "c1") -> dict[str, object]:
@@ -52,11 +70,10 @@ def _empty_profiles() -> dict[str, list[object]]:
 
 def _full_valid_body() -> dict[str, object]:
     return {
+        "contract_version": _CONTRACT_VERSION,
         "strategy_id": "ema_pullback",
         "config_hash": "cfg-hash",
-        "market": _MARKET,
-        "market_data_hash": "market-hash",
-        "bar_count": 3,
+        "market": dict(_MARKET_WIRE),
         "entry_opportunities": [
             {
                 "bar_index": 0,
@@ -230,6 +247,49 @@ def test_duplicate_entry_opportunity_same_bar_and_side_fails_closed() -> None:
         parse_historical_execution_projection(body)
 
 
+def test_simultaneous_long_and_short_entry_on_same_bar_fails_closed() -> None:
+    body = _full_valid_body()
+    body["entry_opportunities"].append(  # type: ignore[union-attr]
+        {
+            "bar_index": 0,
+            "side": "short",
+            "locked_exit_profile": "countertrend",
+            "initial_stop": _leg(100.0, "stop_loss", rule_id="sl_always"),
+            "initial_take": None,
+        }
+    )
+    with pytest.raises((ValidationError, UpstreamServiceError)):
+        parse_historical_execution_projection(body)
+
+
+def test_wrong_contract_version_fails_closed() -> None:
+    body = _full_valid_body()
+    body["contract_version"] = "strategy_evaluation_execution.v1"
+    with pytest.raises(UpstreamServiceError):
+        parse_historical_execution_projection(body)
+
+
+def test_missing_contract_version_fails_closed() -> None:
+    body = _full_valid_body()
+    del body["contract_version"]
+    with pytest.raises(UpstreamServiceError):
+        parse_historical_execution_projection(body)
+
+
+def test_real_wire_envelope_shape_decodes_bar_count_and_hash_from_nested_market() -> None:
+    # bar_count/market_data_hash must come from market{...}, not top-level
+    # -- this is the real strategy_serialization.py envelope shape.
+    body = _full_valid_body()
+    assert "bar_count" not in body
+    assert "market_data_hash" not in body
+    assert body["market"]["bar_count"] == 3  # type: ignore[index]
+    assert body["market"]["market_data_hash"] == "market-hash"  # type: ignore[index]
+    projection = parse_historical_execution_projection(body)
+    assert projection.bar_count == 3
+    assert projection.market_data_hash == "market-hash"
+    assert projection.market.timeframe == "5m"  # translated from base_timeframe
+
+
 def test_duplicate_signal_event_bar_index_within_one_profile_fails_closed() -> None:
     body = _full_valid_body()
     body["signal_exit_events"]["short"]["countertrend"] = [
@@ -247,7 +307,7 @@ def test_alignment_passes_on_exact_identity_hash_range_bar_count() -> None:
     projection = parse_historical_execution_projection(_full_valid_body())
     validate_projection_alignment(
         projection,
-        expected_market=MarketRange(**_MARKET),
+        expected_market=MarketRange(**_MARKET_RANGE_KWARGS),
         expected_market_data_hash="market-hash",
         expected_bar_count=3,
     )  # must not raise
@@ -255,7 +315,7 @@ def test_alignment_passes_on_exact_identity_hash_range_bar_count() -> None:
 
 def test_alignment_fails_on_ticker_mismatch() -> None:
     projection = parse_historical_execution_projection(_full_valid_body())
-    mismatched = dict(_MARKET, ticker="ETHUSDT.P")
+    mismatched = dict(_MARKET_RANGE_KWARGS, ticker="ETHUSDT.P")
     with pytest.raises(UpstreamServiceError):
         validate_projection_alignment(
             projection,
@@ -267,7 +327,7 @@ def test_alignment_fails_on_ticker_mismatch() -> None:
 
 def test_alignment_fails_on_range_mismatch() -> None:
     projection = parse_historical_execution_projection(_full_valid_body())
-    mismatched = dict(_MARKET, from_ms=300_000, to_ms=1_200_000)
+    mismatched = dict(_MARKET_RANGE_KWARGS, from_ms=300_000, to_ms=1_200_000)
     with pytest.raises(UpstreamServiceError):
         validate_projection_alignment(
             projection,
@@ -282,7 +342,7 @@ def test_alignment_fails_on_market_data_hash_mismatch() -> None:
     with pytest.raises(UpstreamServiceError):
         validate_projection_alignment(
             projection,
-            expected_market=MarketRange(**_MARKET),
+            expected_market=MarketRange(**_MARKET_RANGE_KWARGS),
             expected_market_data_hash="different-hash",
             expected_bar_count=3,
         )
@@ -293,7 +353,7 @@ def test_alignment_fails_on_bar_count_mismatch() -> None:
     with pytest.raises(UpstreamServiceError):
         validate_projection_alignment(
             projection,
-            expected_market=MarketRange(**_MARKET),
+            expected_market=MarketRange(**_MARKET_RANGE_KWARGS),
             expected_market_data_hash="market-hash",
             expected_bar_count=4,
         )
@@ -338,8 +398,7 @@ def test_index_lookup_is_o1_not_a_linear_scan() -> None:
     # a scan would still pass functionally, so this asserts the mechanism
     # directly rather than timing it.
     body = _full_valid_body()
-    body["bar_count"] = 100
-    body["market"] = dict(_MARKET, to_ms=30_000_000)
+    body["market"] = dict(_MARKET_WIRE, bar_count=100, to_ms=30_000_000)
     body["signal_exit_events"]["long"]["neutral"] = [
         _event(i, [_signal_candidate(rule_id=f"s{i}")]) for i in range(50)
     ]

@@ -464,10 +464,27 @@ class SignalExitProjectionDTO(BaseModel):
 class HistoricalExecutionProjectionDTO(BaseModel):
     """Research-owned decode of Strategy Engine's
     `HistoricalExecutionProjection` (`strategy-research-execution-
-    contract-v1`). Deliberately carries no `raw` field -- unlike the
-    legacy `StrategyEvaluationResult`, this DTO does not retain the
-    original response body (`compact-strategy-evaluation-boundary-v1`
-    I3: "raw=body retention removed" on this path)."""
+    contract-v1`), superseding the shipped sparse `StrategyDecisionEvent`
+    contract (`strategy_evaluation_execution.v1`) with
+    `strategy_evaluation_execution.v2` -- same envelope family
+    (`contract_version`/`strategy_id`/`config_hash`/`market{...}`/
+    `warnings`, matching `strategy_engine/adapters/http/
+    strategy_serialization.py`'s real wire shape), new payload shape.
+    Deliberately carries no `raw` field -- unlike the legacy
+    `StrategyEvaluationResult`, this DTO does not retain the original
+    response body (`compact-strategy-evaluation-boundary-v1` I3:
+    "raw=body retention removed" on this path).
+
+    `market_data_hash`/`bar_count` live on THIS DTO (Research's own flat
+    shape, matching `StrategyEvaluationResult`'s convention), NOT nested
+    under `market` -- the real Engine envelope nests them inside
+    `market{...}` alongside `base_timeframe` (see
+    `strategy_serialization.py::serialize_strategy_evaluation_execution`);
+    `parse_historical_execution_projection` is responsible for that
+    translation, the same way `_parse_evaluation_result` already
+    translates `market.base_timeframe` into `MarketRange.timeframe` for
+    the legacy contract. This DTO's own shape does not need to mirror
+    the wire's nesting to be a correct decode of it."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -509,6 +526,26 @@ class HistoricalExecutionProjectionDTO(BaseModel):
                     f"side={opportunity.side!r}"
                 )
             seen.add(key)
+        return self
+
+    @model_validator(mode="after")
+    def validate_no_simultaneous_long_and_short_entry(self) -> "HistoricalExecutionProjectionDTO":
+        """Mirrors `strategy_engine`'s I1 corrective-pass fail-loud
+        invariant (`historical_execution_projection.py`): a strategy
+        producing both a long and a short executable entry opportunity on
+        the same bar is an internal inconsistency, not a valid dual-
+        opportunity bar. Checked again here, defense-in-depth, since
+        Research decodes this contract independently over HTTP and must
+        not trust the wire to have preserved Engine's own invariant."""
+
+        long_bars = {o.bar_index for o in self.entry_opportunities if o.side == "long"}
+        short_bars = {o.bar_index for o in self.entry_opportunities if o.side == "short"}
+        overlap = long_bars & short_bars
+        if overlap:
+            raise ValueError(
+                "simultaneous long and short entry opportunity at bar_index(es): "
+                f"{sorted(overlap)}"
+            )
         return self
 
 
