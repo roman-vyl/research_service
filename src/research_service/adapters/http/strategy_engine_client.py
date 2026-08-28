@@ -465,6 +465,13 @@ def parse_historical_execution_projection(body: dict[str, object]) -> Historical
         ) from exc
 
     payload = {
+        # Passed through, not discarded: the boundary check above already
+        # rejected anything but the expected value, and
+        # HistoricalExecutionProjectionDTO.contract_version (a `Literal`)
+        # enforces it again on the DTO itself, matching the strict-DTO
+        # form -- version identity is a property of the decoded object,
+        # not just a parse-time gate.
+        "contract_version": contract_version,
         "strategy_id": body.get("strategy_id"),
         "config_hash": body.get("config_hash"),
         "market": market,

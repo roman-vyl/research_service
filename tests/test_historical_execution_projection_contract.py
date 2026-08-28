@@ -120,6 +120,7 @@ def _full_valid_body() -> dict[str, object]:
 
 def test_full_valid_projection_decodes() -> None:
     projection = parse_historical_execution_projection(_full_valid_body())
+    assert projection.contract_version == _CONTRACT_VERSION
     assert projection.strategy_id == "ema_pullback"
     assert len(projection.entry_opportunities) == 3
     both_sides = {o.side for o in projection.entry_opportunities}

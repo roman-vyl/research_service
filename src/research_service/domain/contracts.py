@@ -488,6 +488,7 @@ class HistoricalExecutionProjectionDTO(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
+    contract_version: Literal["strategy_evaluation_execution.v2"]
     strategy_id: str = Field(min_length=1)
     config_hash: str = Field(min_length=1)
     market: MarketRange
