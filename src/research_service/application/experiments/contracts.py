@@ -23,6 +23,12 @@ from research_service.domain.strategy_instance import DeployableStrategyInstance
 
 _CANDIDATE_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 
+# win_rate/profit_factor are legitimately nullable even on a completed
+# candidate (zero-trade / no-losing-trade semantics), so they are excluded
+# from the completion-required set below.
+_SUMMARY_FIELDS_REQUIRED_ON_COMPLETION = ("return_pct", "max_drawdown", "long", "short")
+_SUMMARY_FIELDS = ("return_pct", "win_rate", "profit_factor", "max_drawdown", "long", "short")
+
 
 class BatchCandidateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -129,6 +135,25 @@ class BatchCandidateResult(BaseModel):
     error_type: str | None = None
     error_message: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_summary_shape(self) -> "BatchCandidateResult":
+        if self.status == "completed":
+            missing = [
+                name for name in _SUMMARY_FIELDS_REQUIRED_ON_COMPLETION
+                if getattr(self, name) is None
+            ]
+            if missing:
+                raise ValueError(
+                    f"completed candidate missing required summary field(s): {missing}"
+                )
+        else:
+            populated = [name for name in _SUMMARY_FIELDS if getattr(self, name) is not None]
+            if populated:
+                raise ValueError(
+                    f"failed candidate must not populate summary field(s): {populated}"
+                )
+        return self
 
 
 class BatchExperimentResult(BaseModel):

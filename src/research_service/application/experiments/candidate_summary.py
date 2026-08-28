@@ -30,16 +30,19 @@ def _profit_factor(trades: tuple[TradeRecord, ...]) -> Decimal | None:
 
 
 def _max_drawdown(trades: tuple[TradeRecord, ...], initial_equity: Decimal) -> Decimal:
-    if not trades:
-        return Decimal("0")
+    """Walk the ordered closed-trade equity chain explicitly, visiting each
+    trade's `equity_before` then `equity_after` -- never assuming
+    `trade[i].equity_after == trade[i + 1].equity_before` (that continuity
+    is not a contract invariant)."""
     peak = initial_equity
     trough = Decimal("0")
     for trade in trades:
-        if trade.equity_after > peak:
-            peak = trade.equity_after
-        drawdown = trade.equity_after / peak - 1
-        if drawdown < trough:
-            trough = drawdown
+        for equity in (trade.equity_before, trade.equity_after):
+            if equity > peak:
+                peak = equity
+            drawdown = equity / peak - 1
+            if drawdown < trough:
+                trough = drawdown
     return trough
 
 

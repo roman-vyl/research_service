@@ -162,3 +162,49 @@ def test_side_split_isolates_long_and_short_trades() -> None:
     assert summary.short.net_pnl == Decimal("10")
     assert summary.short.win_rate == Decimal("1") / Decimal("2")
     assert summary.short.profit_factor == Decimal("3")
+
+
+def test_max_drawdown_uses_equity_before_not_only_equity_after() -> None:
+    # trade1: 1000 -> 1200 (new peak 1200)
+    # trade2: equity_before=400 (a dip not reflected in any equity_after,
+    #         i.e. equity_before != previous trade's equity_after) then
+    #         recovers to equity_after=1200 within the same trade.
+    # A drawdown implementation that only inspects equity_after per trade
+    # would report 0 here; the normative equity-chain walk must catch the
+    # 400/1200-1 dip at equity_before.
+    trades = (
+        trade(Decimal("200"), Decimal("1000")),  # equity_after = 1200
+        TradeRecord(
+            trade_id="t2",
+            position_id="t2",
+            instance_id="i",
+            side="long",
+            entry_bar_index=0,
+            exit_bar_index=1,
+            entry_time_ms=0,
+            exit_time_ms=1,
+            entry_price=Decimal("1"),
+            exit_price=Decimal("1"),
+            quantity=Decimal("1"),
+            entry_notional=Decimal("100"),
+            exit_notional=Decimal("100"),
+            gross_pnl=Decimal("800"),
+            entry_fee=Decimal("0"),
+            exit_fee=Decimal("0"),
+            fees_paid=Decimal("0"),
+            net_pnl=Decimal("800"),
+            gross_return_pct=Decimal("8"),
+            net_return_pct=Decimal("8"),
+            equity_before=Decimal("400"),
+            equity_after=Decimal("1200"),
+            hold_bars=1,
+            hold_ms=1,
+            exit_candidate_type="x",
+            exit_reason="x",
+            exit_layer="x",
+            path=_PATH,
+        ),
+    )
+    summary = derive_batch_candidate_summary(accounting(trades))
+
+    assert summary.max_drawdown == Decimal("400") / Decimal("1200") - 1
