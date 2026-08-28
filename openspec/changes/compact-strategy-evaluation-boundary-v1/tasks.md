@@ -42,7 +42,7 @@ after its predecessor's gate is confirmed.
       Research can parse/index a real projection response correctly.
       Gate: unit tests, correct indexing behavior, no route/production
       change.
-- [ ] **I4 — Research: Execution Parity (the decisive Research-side
+- [x] **I4 — Research: Execution Parity (the decisive Research-side
       gate).** `execution/protection.py`'s `PositionState` gains
       `locked_exit_profile` (captured once at fill time from the
       matching `entry_opportunity`) and enough initial-protection

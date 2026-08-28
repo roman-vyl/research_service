@@ -54,8 +54,34 @@ class EntryFill(BaseModel):
     slippage_rate: Decimal = Field(ge=0, lt=1)
 
 
+class InitialProtectionAttribution(BaseModel):
+    """Where one resolved initial-protection leg's ratio came from,
+    carried alongside the leg so a future exit fill can restore old-BBB
+    exit attribution instead of Research synthesizing a coarse
+    always_on-only category (`research-unified-execution-loop-v1`,
+    I4). `layer` is a Research-derived canonical constant, matching
+    Engine's `ExitAttribution` (which carries no `layer` field on the
+    wire): Research does not independently select it."""
+
+    model_config = ConfigDict(frozen=True)
+
+    rule_id: str = Field(min_length=1)
+    component_id: str = Field(min_length=1)
+    exit_kind: Literal["stop_loss", "take_profit", "signal"]
+    layer: Literal["exit_policy"] = "exit_policy"
+
+
 class InitialProtection(BaseModel):
-    """Initial static stop/take policy resolved at the entry bar."""
+    """Initial static stop/take policy resolved at the entry bar.
+
+    `stop_loss_attribution`/`take_profit_attribution` are populated only
+    by the projection-driven resolver (I4,
+    `execution/projection_entry.py`) -- the legacy dense-contract
+    resolver (`execution/protection.py::resolve_initial_protection`)
+    leaves them `None`, since the legacy `exit_policy` dict carries no
+    attribution to restore. Independently nullable, matching the
+    corresponding price field: a leg's price and its attribution are
+    set together or not at all by whichever resolver produced them."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -67,6 +93,8 @@ class InitialProtection(BaseModel):
     take_profit_ratio: Decimal | None = Field(default=None, ge=0)
     stop_loss_price: Decimal | None = Field(default=None, gt=0)
     take_profit_price: Decimal | None = Field(default=None, gt=0)
+    stop_loss_attribution: InitialProtectionAttribution | None = None
+    take_profit_attribution: InitialProtectionAttribution | None = None
     ready: Literal[True] = True
 
     @model_validator(mode="after")
@@ -145,6 +173,16 @@ class ExitFill(BaseModel):
 
 
 class PositionState(BaseModel):
+    """`locked_exit_profile` is set exactly once, at fill time, only by
+    the projection-driven entry path (I4) -- captured from the matching
+    `ExecutableEntryOpportunityDTO.locked_exit_profile`, never
+    recomputed or re-read on a later bar. The legacy dense-contract
+    entry path (`execution/entry.py::try_open_position`) leaves it
+    `None`: the legacy `exit_policy` dict carries no profile concept to
+    lock. Held fixed for the position's entire life either way --
+    nothing in this module ever reassigns it after construction (this
+    type is frozen)."""
+
     model_config = ConfigDict(frozen=True)
 
     position_id: str = Field(min_length=1)
@@ -153,6 +191,7 @@ class PositionState(BaseModel):
     status: Literal["open"] = "open"
     entry_fill: EntryFill
     initial_protection: InitialProtection
+    locked_exit_profile: Literal["aligned", "countertrend", "neutral"] | None = None
 
     @model_validator(mode="after")
     def validate_consistency(self) -> "PositionState":

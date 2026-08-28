@@ -1,0 +1,252 @@
+"""Projection-driven unified bar-by-bar execution loop (I4,
+`compact-strategy-evaluation-boundary-v1`).
+
+`run_projection_execution_loop` is the `HistoricalExecutionProjection`
+counterpart to `execution/loop.py::run_unified_execution_loop` --
+identical intra-bar ordering and same-bar arbitration priority
+(`stop_loss < managed_stop < take_profit < ... < signal`, reused
+unchanged from `execution/unified_exits.py`), different source of
+strategy facts (`HistoricalExecutionProjectionIndex` instead of a
+dense `StrategyEvaluationResult`).
+
+Not wired into production orchestration. Production `/range`
+consumption, `/range-batch`, and coordinated cutover remain I7 -- this
+is a parallel, in-process/fixture-driven entrypoint proving execution-
+loop-level semantic parity (I4's own gate), reachable today only from
+tests.
+"""
+
+from __future__ import annotations
+
+from collections.abc import Callable
+
+from research_service.domain.contracts import (
+    HistoricalExecutionProjectionIndex,
+    ManagedReplayResult,
+    MarketFrame,
+)
+from research_service.domain.errors import InvalidRequest
+from research_service.domain.execution import (
+    ExecutionEvent,
+    ExecutionLoopResult,
+    ExecutionPolicy,
+    ExitArbitrationResult,
+    ExitFill,
+    PositionExecution,
+    PositionState,
+)
+from research_service.execution.managed_policy import (
+    ManagedPolicyTimeline,
+    build_managed_policy_timeline,
+    collect_managed_exit_candidates,
+)
+from research_service.execution.projection_entry import try_open_projection_position
+from research_service.execution.projection_static_exits import (
+    collect_projection_static_exit_candidates,
+)
+from research_service.execution.unified_exits import (
+    arbitrate_unified_exit_candidates,
+    execute_unified_exit,
+)
+
+ManagedReplayProvider = Callable[[PositionState], ManagedReplayResult | None]
+
+
+def run_projection_execution_loop(
+    instance_id: str,
+    projection_index: HistoricalExecutionProjectionIndex,
+    market_frame: MarketFrame,
+    policy: ExecutionPolicy,
+    *,
+    managed_replay_provider: ManagedReplayProvider | None = None,
+) -> ExecutionLoopResult:
+    """Execute one strategy instance against a validated, indexed
+    `HistoricalExecutionProjection` across an aligned market range.
+
+    Ordering mirrors `run_unified_execution_loop` exactly:
+
+    1. a position that existed at bar open may exit on that bar;
+    2. a bar that began with an open position cannot also open a
+       replacement;
+    3. a position opened on the current close cannot exit on the same
+       bar;
+    4. managed decisions are consumed only through their next-bar
+       timeline.
+
+    Callers are responsible for having already run
+    `validate_projection_alignment` on `projection_index.projection`
+    against this exact `market_frame`/`instance_id`'s strategy identity
+    before calling this function -- this loop trusts an already-aligned
+    index, matching how `run_unified_execution_loop` trusts an already-
+    validated `StrategyEvaluationResult`.
+    """
+
+    if projection_index.projection.bar_count != len(market_frame.candles):
+        raise InvalidRequest("Historical execution projection bar count differs from market frame")
+
+    current_position: PositionState | None = None
+    current_timeline: ManagedPolicyTimeline | None = None
+    completed: list[PositionExecution] = []
+    events: list[ExecutionEvent] = []
+
+    for bar_index, candle in enumerate(market_frame.candles):
+        position_was_open_at_bar_start = current_position is not None
+
+        if current_position is not None:
+            managed_state = (
+                current_timeline.state_for_time(candle.open_time_ms)
+                if current_timeline is not None
+                else None
+            )
+            static_candidates = collect_projection_static_exit_candidates(
+                projection_index,
+                current_position,
+                candle,
+                bar_index=bar_index,
+            )
+            managed_candidates = collect_managed_exit_candidates(
+                current_position,
+                candle,
+                managed_state,
+                bar_index=bar_index,
+            )
+            arbitration = arbitrate_unified_exit_candidates(
+                (*static_candidates, *managed_candidates)
+            )
+            exit_fill = execute_unified_exit(current_position, arbitration)
+            if exit_fill is not None:
+                completed.append(
+                    PositionExecution(
+                        position=current_position,
+                        status="closed",
+                        exit_fill=exit_fill,
+                        exit_arbitration=arbitration,
+                    )
+                )
+                events.append(
+                    _exit_event(current_position, exit_fill=exit_fill, arbitration=arbitration)
+                )
+                current_position = None
+                current_timeline = None
+
+        # Same legacy invariant as run_unified_execution_loop: a position
+        # present at bar open blocks replacement entry on that same bar,
+        # even when it was closed during arbitration above.
+        if not position_was_open_at_bar_start:
+            opened = try_open_projection_position(
+                projection_index,
+                market_frame,
+                policy,
+                instance_id=instance_id,
+                bar_index=bar_index,
+                current_position=current_position,
+            )
+            if opened is not None and opened is not current_position:
+                current_position = opened
+                current_timeline = _resolve_managed_timeline(
+                    opened, managed_replay_provider=managed_replay_provider
+                )
+                events.append(_entry_event(opened))
+
+    if current_position is not None:
+        completed.append(PositionExecution(position=current_position, status="open"))
+        last_candle = market_frame.candles[-1]
+        events.append(
+            ExecutionEvent(
+                event_id=f"open:{current_position.position_id}:{last_candle.open_time_ms}",
+                event_type="position_left_open",
+                instance_id=current_position.instance_id,
+                position_id=current_position.position_id,
+                side=current_position.side,
+                bar_index=len(market_frame.candles) - 1,
+                time_ms=last_candle.open_time_ms,
+                metadata={
+                    "last_close": str(last_candle.close),
+                    "entry_bar_index": current_position.entry_fill.bar_index,
+                    "locked_exit_profile": current_position.locked_exit_profile,
+                },
+            )
+        )
+
+    return ExecutionLoopResult(
+        instance_id=instance_id,
+        market=market_frame.market,
+        positions=tuple(completed),
+        events=tuple(events),
+        final_open_position=current_position,
+    )
+
+
+def _resolve_managed_timeline(
+    position: PositionState,
+    *,
+    managed_replay_provider: ManagedReplayProvider | None,
+) -> ManagedPolicyTimeline | None:
+    if managed_replay_provider is None:
+        return None
+    replay = managed_replay_provider(position)
+    if replay is None:
+        return None
+    return build_managed_policy_timeline(replay, position)
+
+
+def _entry_event(position: PositionState) -> ExecutionEvent:
+    fill = position.entry_fill
+    return ExecutionEvent(
+        event_id=f"event:{fill.fill_id}",
+        event_type="entry_filled",
+        instance_id=position.instance_id,
+        position_id=position.position_id,
+        side=position.side,
+        bar_index=fill.bar_index,
+        time_ms=fill.time_ms,
+        fill_id=fill.fill_id,
+        metadata={
+            "reference_price": str(fill.reference_price),
+            "fill_price": str(fill.fill_price),
+            "quantity": str(fill.quantity),
+            "stop_loss_price": _decimal_text(position.initial_protection.stop_loss_price),
+            "take_profit_price": _decimal_text(position.initial_protection.take_profit_price),
+            "locked_exit_profile": position.locked_exit_profile,
+        },
+    )
+
+
+def _exit_event(
+    position: PositionState,
+    *,
+    exit_fill: ExitFill,
+    arbitration: ExitArbitrationResult,
+) -> ExecutionEvent:
+    winner = arbitration.winner
+    assert winner is not None
+    return ExecutionEvent(
+        event_id=f"event:{exit_fill.fill_id}",
+        event_type="exit_filled",
+        instance_id=position.instance_id,
+        position_id=position.position_id,
+        side=position.side,
+        bar_index=exit_fill.bar_index,
+        time_ms=exit_fill.time_ms,
+        fill_id=exit_fill.fill_id,
+        metadata={
+            "candidate_type": exit_fill.candidate_type,
+            "layer": exit_fill.layer,
+            "reason": exit_fill.reason,
+            "reference_level": str(exit_fill.reference_level),
+            "fill_price": str(exit_fill.fill_price),
+            "rule_id": exit_fill.rule_id,
+            "component_id": exit_fill.component_id,
+            "exit_kind": exit_fill.exit_kind,
+            "exit_layer": exit_fill.layer,
+            "locked_exit_profile": position.locked_exit_profile,
+            "losing_candidate_types": [
+                candidate.candidate_type for candidate in arbitration.losing_candidates
+            ],
+            "winner_reason": winner.reason,
+        },
+    )
+
+
+def _decimal_text(value: object) -> str | None:
+    return None if value is None else str(value)
