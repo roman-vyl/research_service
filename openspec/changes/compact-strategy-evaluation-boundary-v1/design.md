@@ -54,7 +54,9 @@ being looked up is corrected):
   point-queries. Each opportunity carries `locked_exit_profile` (the
   profile active at that bar — the value Research locks in if it treats
   this bar as the real entry) and attributed `initial_stop`/
-  `initial_take` (`{ratio, rule_id, component_id}`).
+  `initial_take` (`{ratio, attribution: ExitAttribution} | null` — see
+  companion `strategy_engine` capability for `ExitAttribution` shape and
+  leg-nullability rule).
 - **Per-side, per-profile signal-exit event lists** replace the flat
   `signal_exit[side][bar]` point-query. Once Research has locked a
   profile for an open position, subsequent-bar lookups are against that
@@ -67,16 +69,31 @@ being looked up is corrected):
 
 ## `PositionState.locked_exit_profile` (the core Research-side fix)
 
+`PositionState` lives in `domain/execution.py` (not `execution/
+protection.py` — that module holds the resolution *function*,
+`resolve_initial_protection`, not the state type; corrected from an
+earlier draft of this document that cited the wrong module).
+
 ```
 entry_opportunity (side, locked_exit_profile, initial_stop, initial_take)
   → Research fill
+  → resolve_initial_protection(entry_opportunity, fill)  # ONCE, at fill
   → PositionState(side, locked_exit_profile, initial_protection, ...)
 
 every subsequent open bar:
-  position.locked_exit_profile
-    → HistoricalExecutionProjection.signal_exit_events[side][locked_profile]
-    → candidates for THAT profile, never today's active profile
+  stop/take check: against PositionState.initial_protection already
+    stored at fill time — NOT re-looked-up from the projection
+  signal-exit check only:
+    position.locked_exit_profile
+      → HistoricalExecutionProjection.signal_exit_events[side][locked_profile]
+      → candidates for THAT profile, never today's active profile
 ```
+
+The initial-protection resolution is entry-bar-only, matching the
+reference model exactly — it is not re-queried on later bars under any
+circumstance. Only signal-exit lookup is per-bar and profile-keyed;
+protection-level checking on later bars uses the values already stored
+at fill time.
 
 This is the Research-side half of the reference pattern already proven
 on the live boundary: Engine has no trade-lifecycle state, so it can
