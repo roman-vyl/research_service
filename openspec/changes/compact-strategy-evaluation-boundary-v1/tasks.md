@@ -61,14 +61,52 @@ after its predecessor's gate is confirmed.
       loop level (locked profile held correctly across a profile-drift
       scenario; correct attribution on the resulting `TradeRecord`).
 - [ ] **I5 — N=1 End-to-End Proof (joint with `strategy_engine`, the
-      single most important gate in this plan).** One real
-      `full_available` BTCUSDT.P/5m run, old/reference semantics vs. the
-      new Engine→Research path end to end. Full "Parity means" list in
-      design.md, including the profile-transition adversarial case
-      through the full real pipeline (not just Engine-level as in I2).
-      Gate: zero semantic diffs on both the always-on spec and the
-      profile-sensitive adversarial spec. Nothing past this point starts
-      until this is green.
+      single most important gate in this plan).** Normative requirements:
+      `research-historical-execution-parity-v1`. Nothing past this point
+      (I6/I7/I8) starts until this is green. Sub-tasks:
+  - [ ] **I5.A — Proof harness foundation.** `strategy_engine`-side
+        proof-only `v2` envelope serializer (mirrors `strategy_
+        serialization.py::serialize_strategy_evaluation_execution`'s
+        structure for the `v2` shape; not `src/`, not route-wired) and
+        the in-process invocation of `EmaPullbackRangeEvaluator._
+        evaluate_frame_native` + `build_historical_execution_projection`
+        that feeds it. Research-side proof-only script/acceptance test
+        that reads the resulting JSON file, decodes it via the real
+        `parse_historical_execution_projection`/`validate_projection_
+        alignment`/`HistoricalExecutionProjectionIndex.build`, and can
+        drive `run_projection_execution_loop`. No production code
+        changes on either side.
+  - [ ] **I5.B — Lane A reference + new path.** Real `full_available`
+        `BTCUSDT.P`/`5m`, canonical always-on spec, resolved once via
+        `ResolveBacktestWindow` and shared by both paths. Reference:
+        existing legacy `run_unified_execution_loop` (unmodified). New
+        path: the I5.A harness → `run_projection_execution_loop` →
+        `account_execution_loop` (unmodified).
+  - [ ] **I5.C — Lane B profile-sensitive proof.** Independent old-BBB
+        trade-lifecycle reference (extends `strategy_engine`'s I2
+        verbatim reference to a full lifecycle — entry/lock/drift/exit/
+        attribution) vs. the same I5.A harness → new path, on the
+        profile-sensitive adversarial spec (I2's scenario shape).
+        Includes the mandatory negative-control evidence (locked vs.
+        current-profile interpretation diverge).
+  - [ ] **I5.D — Semantic diff engine.** Structured comparison over the
+        "Zero-diff comparison surface" fields (entry, locked profile,
+        initial protection + attribution, signal stream while open,
+        exit + attribution, `TradeRecord`, `TradeAccountingResult`,
+        provenance) — exact equality throughout except the one carried-
+        over Engine `ratio` epsilon (see design.md).
+  - [ ] **I5.E — Real full_available acceptance run.** Execute I5.B and
+        I5.C against real Market Data Service data (not `FakeMarketData`
+        fixtures), matching the precedent set by `strategy_engine`'s
+        `scratch/parity_proof.py`. Record results (bar count, diff
+        count, wall time) analogous to that precedent's own reporting.
+  - [ ] **I5.F — Regression fences / final gate.** Confirm during I5
+        work: Strategy Engine `/range`/`/range-batch` unchanged;
+        Research's production `/range` consumer
+        (`RunSingleInstanceBacktest`) still calls the legacy `.v1`
+        contract; no persistence/diagnostics/accounting-formula changes;
+        Runtime untouched. Gate: I5.B and I5.C both report zero semantic
+        diffs.
 - [ ] **I6 — Persistence / Diagnostics Split.** Now safe (parity
       proven): `strategy_evaluation.json` becomes the canonical
       `HistoricalExecutionProjection`; `result.json` references it by

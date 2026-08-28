@@ -209,6 +209,104 @@ profile, the market's current profile drifts to a different one while
 the position stays open) is mandatory parity evidence at I5 — not
 optional, not satisfiable by re-running an always-on-only spec.
 
+## I5 implementation strategy (Explore findings, this revision)
+
+Normative requirements live in the `research-historical-execution-
+parity-v1` capability; this section records the architectural choices
+Explore established, and why each reference is independent (not a
+self-comparison), so a future implementer does not have to re-derive
+them from this chat.
+
+**Lane A oracle**: Research's own existing, unmodified legacy path —
+`RunSingleInstanceBacktest`/`MaterializeBacktestOutcome` calling
+`execution/loop.py::run_unified_execution_loop` (via `execution/entry.
+py`/`execution/protection.py`/`execution/static_exits.py`, fed by
+`adapters/http/strategy_engine_client.py::evaluate_range`'s legacy
+`.v1` contract). Independent because it is a materially different
+implementation of entry/protection/candidate-collection than the new
+`execution/projection_entry.py`/`projection_static_exits.py`/
+`projection_loop.py` (I4) — the two paths share only `execution/
+unified_exits.py`'s arbitration primitives and `accounting/service.
+py::account_execution_loop`, neither of which is what Lane A is
+proving. Valid only for an always-on canonical spec (it has no
+`locked_exit_profile` concept at all) — this is exactly why Lane B
+needs a different oracle.
+
+**Lane B oracle**: extend `strategy_engine`'s already-established
+verbatim old-BBB reference (`tests/_old_bbb_exit_attribution_reference.
+py`, `roman-vyl/_bbb_new_gen` commit
+`cddc83663911f646c9bcf2ecfb37b3bed6f4b1d4`) to a full trade-lifecycle
+simulator — entry, locked-profile capture, profile-drift-aware signal
+lookup, exit, attribution — built from literal old-BBB functions, never
+by calling `execution/projection_*.py` or the legacy path (the legacy
+path is not independent evidence for locked-profile behavior, since it
+does not implement it).
+
+**Engine new-path invocation**: no new Engine production code is
+needed. `EmaPullbackRangeEvaluator._evaluate_frame_native(request)`
+(the same native pipeline `evaluate_execution` already calls) produces
+`(frame, evaluation)`; `build_historical_execution_projection` is
+called with the identical provenance derivation `evaluate_execution`
+already uses (`strategy_id=request.strategy.strategy_id`, `config_
+hash=strategy_config_hash(request.strategy)`, `market_data_hash=frame.
+market_data_hash`, `bar_count=len(frame.time_ms)`) — both already
+shipped, I1-proven functions, called in-process, no route involved.
+
+**Transport-equivalent mechanism**: no `v2` serializer exists in
+Strategy Engine's shipped code yet (confirmed by Explore: only the
+`.v1` `serialize_strategy_evaluation_execution` exists, `adapters/http/
+strategy_serialization.py`). I5 needs a proof-only serializer in
+`strategy_engine` mirroring that function's exact structure but for the
+`v2` shape already normatively fixed in `strategy-research-execution-
+contract-v1` (commit `dae5b4e`) — not production/route code, analogous
+to `strategy_engine`'s own `scratch/parity_proof.py` precedent there (a
+real-MDS, throwaway measurement script, not `src/`). Because Strategy
+Engine and
+Research Service are separate processes, this proof is necessarily
+two-phase and file-mediated: an Engine-side script writes a real `v2`
+JSON envelope to a file; a Research-side script reads that file and
+feeds it, unmodified, to `parse_historical_execution_projection`. Exact
+file paths/directory layout are an I5 implementation decision, not
+fixed by this design document.
+
+**Research downstream reuse**: `ResolveBacktestWindow`/`full_available`
+window resolution (`history_window.py`, unchanged — used by *both*
+lanes' *both* paths so every path resolves the identical `market_data_
+hash`/range from the same real MDS call, never independently
+re-resolved) and `account_execution_loop`/`TradeAccountingResult`/
+`TradeRecord` (`accounting/`, unchanged). Only the execution source
+changes: `run_projection_execution_loop` (I4) instead of `run_unified_
+execution_loop` for the new path.
+
+**MDS/`full_available` mechanism**: `ResolveBacktestWindow.execute(
+range_policy="full_available")` — `MarketDataPort.get_bounds`/`audit_
+range`, exactly Research's existing production mechanism, matching the
+precedent already used by `strategy_engine`'s own prior `full_available`
+measurement (`scratch/parity_proof.py`, `GET /v1/streams/{ticker}/
+{timeframe}/bounds` against a real local MDS at `127.0.0.1:8080`,
+675,986 bars measured for `BTCUSDT.P`/`5m` at that time — the range
+grows over time, so I5 re-resolves it at run time rather than pinning
+that historical bar count).
+
+**Parity comparison surface**: enumerated exactly, field-by-field, in
+`research-historical-execution-parity-v1`'s "Zero-diff comparison
+surface" requirement — sourced from `EntryFill`/`PositionState`/
+`InitialProtection`/`ExitFill`/`TradeRecord`/`TradePathMetrics`/
+`TradeAccountingResult`, all already-shipped models, no new fields
+introduced. Explore confirmed there is no long/short-split aggregate at
+N=1 scope in this codebase (`application/experiments/candidate_summary.
+py`'s split is a batch-only artifact) — I5 does not invent one.
+Tolerance: exact equality throughout, except reusing (not introducing)
+`strategy_engine` I1's own `eps = 1e-9 * max(1.0, abs(value))` where a
+wire `ratio: float` itself is compared, before its one-time Decimal
+conversion.
+
+**Harness location**: split across repos, bridged by a materialized
+JSON file (not a live HTTP call, not shared process memory) — a
+Strategy Engine proof-only script and a Research Service proof-only
+script/acceptance test. Neither location nor file layout is normative;
+the capability spec fixes behavior, not paths.
+
 ## Master Plan reference (supersedes the old "Migration order" section)
 
 This design is I0 (Spec Freeze). Full checkpoint definitions live in the

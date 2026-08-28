@@ -77,6 +77,29 @@ joint with `strategy_engine`), I6 (persistence/diagnostics split), I7
 joint, only after I7) are separate, future authorizations; this
 proposal does not authorize any of them.
 
+### Why I5 is a mandatory safety gate, not a formality
+
+I3 and I4 (unit/fixture-level, `test_i3_*`/`test_i4_execution_parity.py`)
+already prove the new consumer/execution code is internally correct
+against synthetic and hand-built adversarial fixtures. Neither proves it
+against real Strategy Engine computation at real historical scale, nor
+against data that neither the builder's own author nor the execution
+loop's own author constructed by hand. I5 (`research-historical-
+execution-parity-v1`, added by this revision) closes that gap: real
+Engine computation, a real serialized `v2` envelope, the real Research
+parser, and an independent (not self-comparing) reference, on both a
+real `full_available` run and the profile-sensitive adversarial
+scenario. I6 (persistence shape change) and I7 (production route
+cutover) are explicitly gated on I5 passing — reshaping the persisted
+artifact or cutting production traffic over to a path whose real-data
+correctness has only been unit-tested would be premature. I5 remains a
+proof-only checkpoint: it does not itself change Strategy Engine's
+`/range` route, Research's production `/range` consumer, `/range-batch`,
+persistence, or accounting math (see `research-historical-execution-
+parity-v1`'s "Production routes and batch remain out of scope"
+requirement) — passing it authorizes I6/I7 to be proposed next, it does
+not perform them.
+
 ## What Changes (target model, I3+ implementation)
 
 - **Consume Strategy Engine's `HistoricalExecutionProjection`**
@@ -163,7 +186,9 @@ proposal does not authorize any of them.
   `locked_exit_profile`/attribution restoration requirements, checks
   `market_data_hash`/`bar_count`/range/`bar_index` instead of removed
   `time_ms`), `research-batch-experiments-v1` (no requirement changes —
-  context only).
+  context only), `research-historical-execution-parity-v1` (ADDED —
+  I5's N=1 end-to-end proof-only gate; a new capability, not a
+  modification of production behavior).
 - Affected code, I3+ (deferred, not part of this I0 proposal):
   `adapters/http/strategy_engine_client.py`, `domain/contracts.py`
   (consume the new projection shape), `execution/loop.py`,
