@@ -125,37 +125,71 @@ starting — don't assume; read the current code.
 ## Phase sequence (do not skip or reorder without a documented reason)
 
 ```
-Phase A  naked anchor-touch baseline
-Phase B  symmetric SL/TP calibration              (gate: must pass before C proceeds far)
-Phase C  signal/noise structural filtering          (anchor_stack_width_setup, untouched_anchor_setup, ema_bounce_counter_setup)
-Phase D  symmetric-edge verdict                     (gate: must pass before E)
-Phase E  asymmetric SL/TP payoff optimization
-Phase F  secondary filters (RSI / ADX-DMI / HTF context / other blockers)
-Phase G  managed-exit research                      (only after a frozen static candidate exists)
-Phase H  validation
-Phase I  final research report
+Phase A  naked anchor symmetric baseline            (one FIXED symmetric SL/TP, not swept)
+Phase B  structural entry discovery                 (SL/TP stays FIXED from Phase A)
+Phase C  entry candidate selection                   (gate: must pass before D)
+Phase D  SL/TP optimization                          (symmetric first, then asymmetric)
+Phase E  secondary filters (RSI / ADX-DMI / HTF context / other blockers)
+Phase F  managed-exit research                      (only after a frozen static candidate exists)
+Phase G  validation
+Phase H  final research report
 ```
 
 Every phase transition is a decision, not a formality. State the decision and its
 justification in the journal (see below) before moving on. It is entirely valid
 for a phase to end in a stop condition instead of an advance.
 
-### Phase A — naked anchor-touch baseline
+**Causality this sequence enforces, and why it must not be reordered:**
+
+```
+naked anchor
+  ↓
+ONE fixed neutral symmetric exit          (Phase A)
+  ↓
+find WHICH anchor-touch is a quality entry
+  freshness / repeat-touch lookback, stack width, optional bounce count
+  (Phase B — SL/TP still fixed)
+  ↓
+select stable, profitable, lower-DD entry candidates   (Phase C)
+  ↓
+ONLY THEN optimize execution geometry: SL/TP            (Phase D)
+  ↓
+secondary filters / managed exits, later                (Phase E/F)
+```
+
+**DO NOT optimize SL/TP before structural entry discovery is complete. During
+structural discovery (Phase B), SL/TP MUST remain fixed at the Phase A value.**
+Sweeping SL/TP before the entry itself is understood optimizes the exit of a mix
+of good and bad entries indiscriminately — it can make a weak entry *look* good
+by pure payout skew, which is exactly the failure mode this ordering exists to
+prevent.
+
+### Phase A — naked anchor symmetric baseline
 
 Build the simplest possible `ema_pullback` instance around the supplied
 fast/anchor/slow EMA stack and the existing canonical anchor-touch trigger
 component (find its exact `component_id` in the live catalog — likely something
 like an anchor-touch/reclaim trigger family; do not guess the name, read it).
-No setups, no blockers, no context filters, no managed exits. Use whatever
-minimal static exit the catalog effectively requires just to close a position
-(document the choice; it is a placeholder, not a result).
+No setups, no blockers, no context filters, no managed exits.
 
-Measure, from the trade list:
+Use **one fixed symmetric static exit** — the existing ATR-based stop-loss and
+take-profit components, with **equal** SL and TP distance (same ATR period,
+same multiplier, same everything except which side of price they sit on). Pick
+this single distance from the ATR component's schema (min/max/allowed
+granularity), the base timeframe, and reasoned judgment about typical
+bar-to-bar/swing-scale volatility for this instrument — state and justify the
+choice in the journal. This is a fixed reference exit for the rest of Phase A
+and all of Phase B, not something to sweep here; sweeping SL/TP is Phase D's
+job, done later, on selected structural entry candidates only.
+
+Purpose of this phase: confirm the setup is not dead, and establish the
+baseline everything in Phase B is measured against. Measure, from the trade
+list:
 - trade count (and whether it's non-trivial at all — a handful of trades over a
   multi-year window is not evidence of anything);
 - gross result vs. net (after-fee) result — these are different conclusions;
 - fees as a fraction of gross;
-- win rate;
+- win rate, profit factor;
 - long vs. short trade count and PnL, separately;
 - a simple drawdown measure from the reconstructed equity curve;
 - turnover (trades per unit time, or notional traded relative to equity).
@@ -167,44 +201,26 @@ Explicitly distinguish and record which of these you found:
 - **full after-fee edge** — net positive with a trade count you consider
   meaningful.
 
-Do not add anything beyond the naked trigger in this phase, even if it's
-tempting.
+Do not add anything beyond the naked trigger plus its one fixed symmetric exit
+in this phase, even if it's tempting. Freeze this exact configuration (raw
+trigger + fixed symmetric SL/TP) as the Phase B parent baseline before moving
+on.
 
-### Phase B — symmetric SL/TP calibration
+### Phase B — structural entry discovery
 
-Purpose: separate "is the entry any good" from "did we get lucky with reward/risk."
-Use symmetric static exits — the existing ATR-based stop-loss and take-profit
-components, with **equal** SL and TP distance (same ATR period, same multiplier,
-same everything except which side of price they sit on).
+Purpose: find out *which* anchor touches are quality entries — not yet how to
+exit them. **Keep the Phase A symmetric SL/TP completely fixed** through this
+entire phase; every candidate here varies only the entry-side structural
+filter(s), never the exit.
 
-Derive a coarse initial multiplier range yourself from: the ATR component's
-schema (min/max/allowed granularity), the base timeframe, and what you observe
-about typical bar-to-bar and swing-scale volatility for this instrument in Phase
-A's trade data. State the chosen coarse range and *why* before running it — this
-justification is part of the journal entry, not optional. Do not narrow toward
-any value you already "know" is favorable.
+Investigate one axis at a time — do not combine these into one giant grid
+before understanding each independently:
 
-Run the coarse sweep as one batch experiment (all symmetric-multiplier
-candidates, same window, same everything else). Analyze PF, net PnL, trade
-count, fees, win rate, long PF, short PF, and drawdown across the sweep surface
-— not just the single best point. Identify any candidate parameter is a *region*
-where results, not a fluke.
-
-If a promising region exists, refine with a second, narrower batch experiment
-centered on it, and check neighborhood stability (do the immediate neighbors of
-the apparent best point also look good, or does performance collapse one step
-away?).
-
-The goal here is not maximum PnL. The goal is answering: is there a symmetric-RR
-region where entry has positive after-fee expectancy? One positive point is not
-an answer.
-
-### Phase C — signal/noise structural filtering
-
-Only after Phase B, and one axis at a time — do not combine these into one giant
-grid before understanding each independently.
-
-1. **`anchor_stack_width_setup`** (or the catalog's current equivalent name —
+1. **`untouched_anchor_setup`** (or the catalog's current equivalent — verify):
+   does the time since the anchor was last touched (freshness of the anchor
+   level, repeat-touch lookback) predict touch quality? Sweep its lookback/
+   freshness parameter(s) as their own axis, coarse → refine → ridge.
+2. **`anchor_stack_width_setup`** (or the catalog's current equivalent name —
    verify): investigate, in this order:
    - current stack width (fast-to-slow or anchor-to-slow separation, per the
      component's actual parameters) alone;
@@ -214,66 +230,82 @@ grid before understanding each independently.
      regions found for each.
    Research question: does a wider/more-expanded EMA stack at touch time predict
    a better subsequent touch?
-2. **`untouched_anchor_setup`**: does the time since the anchor was last touched
-   (freshness of the anchor level) predict touch quality? Sweep its lookback/
-   freshness parameter(s) as their own axis.
 3. **`ema_bounce_counter_setup`** (if its current schema/semantics fit this
-   question — confirm from the catalog before using it): does the count/
-   frequency of recent prior anchor interactions predict the next touch's
-   quality? Investigate independently before mixing with width or freshness.
+   question — confirm from the catalog before using it) — an optional
+   additional axis, investigated only after the two primary axes above are
+   each independently understood: does the count/frequency of recent prior
+   anchor interactions predict the next touch's quality?
 
-For each component/axis: run its own coarse→refine batch experiment(s) against
-the Phase B symmetric-exit frozen baseline, and explicitly answer "does this
-component add incremental value over the frozen parent, on its own?" before
-moving to the next axis or to combinations.
+For each component/axis: run its own coarse→refine→ridge batch experiment(s)
+against the exact Phase A frozen baseline (fixed symmetric exit unchanged), and
+explicitly answer "does this structural condition improve on the naked
+baseline — profitability, and especially drawdown — on its own?" before moving
+to the next axis or to combinations. Objective throughout: a profitable,
+materially lower-drawdown, sufficiently populated, *stable* entry region — not
+the single highest-PF point. Analyze total/long/short for every axis and every
+promising region.
 
-### Phase D — symmetric-edge verdict (gate)
+### Phase C — entry candidate selection (gate)
 
-Before Phase E is permitted, the accumulated symmetric-exit evidence (Phase B,
-refined by whichever Phase C filters showed real incremental value) must show,
-together:
+Before Phase D is permitted, select several robust structural entry candidates
+from Phase B's findings (a single component/axis result, or a considered
+combination of the axes that each showed real independent value). Do not
+optimize SL/TP here — this phase is about which entries to carry forward, still
+under the Phase A fixed symmetric exit.
+
+Each selected candidate must show, under the still-fixed Phase A symmetric
+exit:
 
 - positive after-fee net PnL;
 - PF > 1 driven by the distribution of trades, not by one outsized trade;
+- a materially lower drawdown than the Phase A naked baseline (state what
+  "materially lower" means for this run, and why);
 - a trade count you consider statistically non-trivial for the window used;
-- an acceptable drawdown (state what "acceptable" means for this run, and why);
-- a contiguous region of good neighboring parameters, not an isolated point;
-- a clear understanding of whether the edge is `BOTH_SIDES_EDGE`,
+- a contiguous region of good neighboring parameters, not an isolated point —
+  reject isolated parameter spikes even if their raw score looked best;
+- a clear understanding of whether the candidate's edge is `BOTH_SIDES_EDGE`,
   `LONG_ONLY_EDGE`, `SHORT_ONLY_EDGE`, or effectively `NO_STABLE_EDGE` (see
-  "Long/short independence" below) — you do not need long and short to be
-  equally profitable, but you must know which side(s) actually produce the
-  result.
+  "Long/short independence" below).
 
-If this bar isn't cleared: either go back into Phase C with a different
-structural axis or combination, or conclude the branch with `NO_EDGE_FOUND` (or
-`STOP_OVERFIT_RISK` if the only positive results were isolated spikes — see Stop
-conditions). Do not proceed to asymmetric optimization on a weak or unconfirmed
-symmetric result; asymmetric SL/TP can make a weak entry *look* good by pure
-payout skew, which is exactly the failure mode Phase B/D exist to prevent.
+If nothing in Phase B clears this bar: either go back into Phase B with a
+different structural axis or combination, or conclude the branch with
+`NO_EDGE_FOUND` (or `STOP_OVERFIT_RISK` if the only positive results were
+isolated spikes — see Stop conditions).
 
-### Phase E — asymmetric SL/TP payoff optimization
+### Phase D — SL/TP optimization
 
-Only after Phase D passes. Vary SL distance and TP distance independently
-(reward/risk ratio becomes a derived quantity, not an input you pick first).
-Coarse sweep first, batch experiment, then refine around promising regions —
-same ridge-not-point discipline as every other phase. Always keep the Phase D
-symmetric finalist as a labeled control candidate in these comparisons, so you
-can tell whether asymmetric payout added real value or just increased variance
-around the same underlying edge. Evaluate trade count, PF, net PnL, drawdown,
-fees, and long/short split for every candidate under consideration, not just
-PnL.
+Only on the structural entry candidates selected in Phase C — never on the
+naked baseline, and never before Phase C's selection. Two sub-steps, in order:
 
-### Phase F — secondary filters
+1. **Symmetric distance exploration first.** For each selected structural
+   candidate, sweep symmetric SL==TP distance (coarse → refine → ridge, same
+   discipline as every other phase) around the Phase A fixed value, to see
+   whether a different symmetric distance materially changes the picture for
+   this specific entry. This re-confirms (or revises) the symmetric edge now
+   that the entry itself is understood, before touching payout skew.
+2. **Asymmetric SL/TP payoff optimization.** Only after step 1. Vary SL
+   distance and TP distance independently (reward/risk ratio becomes a derived
+   quantity, not an input you pick first). Coarse sweep first, batch
+   experiment, then refine around promising regions. Always keep the step-1
+   symmetric finalist as a labeled control candidate in these comparisons, so
+   you can tell whether asymmetric payout added real value or just increased
+   variance around the same underlying edge.
 
-Only after a frozen static (symmetric-or-asymmetric, whichever the evidence
-supports) candidate exists. Existing components only — RSI-based blockers,
-ADX/DMI-based conditions, HTF contexts, other entry blockers or signal-exit
-components already in the catalog. Add **one at a time** as an incremental
-change against the exact frozen parent baseline; do not run a combinatorial
-sweep of several new filters simultaneously before understanding each one's own
-marginal contribution.
+Evaluate trade count, PF, net PnL, drawdown, fees, and long/short split for
+every candidate under consideration in both steps, not just PnL. Seek a broad
+stable region, not a single optimum.
 
-### Phase G — managed-exit research (late, separate)
+### Phase E — secondary filters
+
+Only after a frozen static (symmetric-or-asymmetric, whichever Phase D's
+evidence supports) candidate exists. Existing components only — RSI-based
+blockers, ADX/DMI-based conditions, HTF contexts, other entry blockers or
+signal-exit components already in the catalog. Add **one at a time** as an
+incremental change against the exact frozen parent baseline; do not run a
+combinatorial sweep of several new filters simultaneously before understanding
+each one's own marginal contribution.
+
+### Phase F — managed-exit research (late, separate)
 
 Break-even shifts, protected phase, runner behavior, active stop/take
 switching, and other managed-exit machinery must never be used to *establish*
@@ -286,7 +318,7 @@ ENTRY EDGE FOUND  →  STATIC EXIT CANDIDATE FROZEN  →  MANAGED EXIT RESEARCH
 
 Do not let a managed exit's complexity mask a weak entry earlier in the chain.
 
-### Phase H — validation
+### Phase G — validation
 
 Before calling anything final: check the finalist against parameter
 perturbations one step away in every varied dimension; check performance on
@@ -297,7 +329,7 @@ it's reasonable to check, do so; sanity-check sensitivity to the fee/slippage
 assumptions used throughout. A single full-history winner is not, by itself,
 sufficient evidence of robustness.
 
-### Phase I — final research report
+### Phase H — final research report
 
 Summarize the whole chain: hypothesis, what was tested at each phase, what was
 rejected and why, the final candidate (or the `NO_EDGE_FOUND` conclusion),
@@ -308,8 +340,8 @@ clean final version here.
 
 ## Long/short independence
 
-At every phase that matters (Phase A baseline, Phase B/D verdict, Phase E, Phase
-F), report aggregate, long-only, and short-only results as three separate rows,
+At every phase that matters (Phase A baseline, Phase B/C structural findings,
+Phase D verdict, Phase E), report aggregate, long-only, and short-only results as three separate rows,
 not one blended number. A positive aggregate result driven entirely by one
 long-only bull-regime stretch of history is not evidence of a general edge.
 Label each meaningful result with one of: `BOTH_SIDES_EDGE`, `LONG_ONLY_EDGE`,
@@ -363,11 +395,11 @@ subtly different market data if anything changes between calls.
 ## Full history by default
 
 Use `range_policy="full_available"` for the main discovery search in every
-phase through Phase G. Every candidate inside one experiment is already forced
+phase through Phase F. Every candidate inside one experiment is already forced
 to share one window by `BatchExperimentRequest`'s own invariants — this rule is
-about *experiment-to-experiment* consistency: don't compare a Phase C result
-computed over one window against a Phase E result computed over a different
-one. Subperiod / walk-forward / out-of-sample slicing is Phase H validation
+about *experiment-to-experiment* consistency: don't compare a Phase B result
+computed over one window against a Phase D result computed over a different
+one. Subperiod / walk-forward / out-of-sample slicing is Phase G validation
 work, done deliberately and labeled as such, after discovery is complete —
 never mixed into the discovery loop itself.
 
@@ -457,15 +489,18 @@ didn't hold up, even when — especially when — the result was negative.
 Use these labels (or, if repository/journal conventions have since introduced
 different names, use those instead — but preserve the underlying meaning):
 
-- **`NO_EDGE_FOUND`** — several consecutive structural/filter searches (Phase
-  C, or Phase F once reached) fail to produce a stable after-fee symmetric edge.
+- **`NO_EDGE_FOUND`** — several consecutive Phase B structural searches fail to
+  produce a candidate that clears Phase C's gate, or Phase E filters fail to
+  rescue a marginal candidate.
 - **`STOP_OVERFIT_RISK`** — a positive result exists only at one narrow point
   and collapses at its immediate parameter neighbors.
-- **`SYMMETRIC_EDGE_CONFIRMED`** — Phase D's gate criteria are met.
-- **`STATIC_STRATEGY_CANDIDATE_FOUND`** — after Phase E (and, if used, Phase
-  F), a robust, validated static candidate exists.
+- **`SYMMETRIC_EDGE_CONFIRMED`** — Phase C's gate criteria are met: at least
+  one structural entry candidate, under the fixed Phase A symmetric exit, is
+  profitable, materially lower-drawdown, and stable.
+- **`STATIC_STRATEGY_CANDIDATE_FOUND`** — after Phase D (and, if used, Phase
+  E), a robust, validated static candidate exists.
 - **`READY_FOR_MANAGED_EXIT_RESEARCH`** — the static candidate is stable enough
-  that Phase G is a reasonable next investment.
+  that Phase F is a reasonable next investment.
 
 Any of these is a legitimate, complete terminal (or phase-terminal) outcome.
 `NO_EDGE_FOUND` is not a failure of the research process — it's the process
