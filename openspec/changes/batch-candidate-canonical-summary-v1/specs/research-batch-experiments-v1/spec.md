@@ -15,9 +15,10 @@ succeeded for that candidate.
 #### Scenario: No independent execution logic
 
 - **WHEN** a candidate succeeds
-- **THEN** its result was produced by the same single-instance backtest
-  use case and persisted through the same atomic artifact path used
-  outside batches.
+- **THEN** its result was produced through the same
+  `MaterializeBacktestOutcome` → `PersistSingleInstanceBacktest` path
+  used outside batches, with no batch-specific execution or accounting
+  logic.
 
 #### Scenario: Successful row summarizes a persisted run, not an in-flight evaluation
 
@@ -40,8 +41,9 @@ succeeded for that candidate.
 Batch output MUST retain candidate order and expose completed/failed
 counts. A successful candidate's row MUST additionally expose derived
 research-comparison metrics computed from that candidate's own
-already-persisted trade list, so candidates can be compared without
-opening each full run artifact individually.
+in-memory materialized canonical result, immediately after successful
+persistence and with no disk reread, so candidates can be compared
+without opening each full run artifact individually.
 
 #### Scenario: Batch summary contents
 
@@ -105,8 +107,9 @@ opening each full run artifact individually.
 - **WHEN** a successful candidate's row is inspected
 - **THEN** it does not include a Sharpe ratio, trade-quality counters
   (e.g. high-MFE-capture or stop-loss-after-low-MFE counts), or any
-  exit-reason/profile breakdown — these remain available only by reading
-  the candidate's full persisted run artifact by `run_id`.
+  exit-reason/profile breakdown — none of these aggregates exist in the
+  current persisted run artifact (which retains raw per-trade facts
+  only), and producing them is outside this batch-summary change.
 
 ## ADDED Requirements
 

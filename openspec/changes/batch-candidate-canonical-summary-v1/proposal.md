@@ -12,18 +12,19 @@ A legacy monolithic research system already solved this shape once: its
 batch rows carried exactly these derived metrics, computed from
 already-closed trade PnL after fees, with a later revision adding a
 long/short split. Its trade-quality/exit-reason breakdowns, by contrast,
-were never recomputed in the batch row itself — they were projected from
-an already-materialized full-run artifact on demand. That split is the
-right precedent: cheap, unambiguous per-trade aggregates belong in the
-compact batch row; anything needing extra config (quality thresholds) or
-full per-bar/per-component detail stays in the full run artifact, read by
-`run_id` when needed.
+were never recomputed in the batch row itself. That split is the right
+precedent: cheap, unambiguous per-trade aggregates belong in the compact
+batch row; anything needing extra config (quality thresholds) or
+per-bar/per-component detail is out of scope for this change and may be
+derived by future or on-demand diagnostics work, not by this
+batch-summary contract.
 
 This change extends the existing `research-batch-experiments-v1`
 capability's `BatchCandidateResult` shape with that same class of
-derived, unambiguous metrics — computed strictly from the trade list of
-an already-persisted canonical `SingleInstanceBacktestResult`, never from
-Engine's raw evaluation output.
+derived, unambiguous metrics — computed strictly from the trade list on
+the in-memory materialized canonical result, immediately after
+successful persistence, never from Engine's raw evaluation output and
+never by rereading anything from disk.
 
 ## What Changes
 
@@ -53,8 +54,10 @@ Engine's raw evaluation output.
   a scalar or small nested scalar object.
 - No Sharpe ratio, no trade-quality counters (`high_mfe_*`,
   `stop_loss_after_*`), no exit-reason/profile breakdown, no path
-  diagnostics — these remain full-run-only, read on demand via existing
-  diagnostics projection.
+  diagnostics — these are outside this batch-summary change; the
+  persisted canonical run retains only raw per-trade facts today, and
+  any such aggregate would have to be derived by future or on-demand
+  diagnostics work, not by this contract.
 - No change to Strategy Engine transport, `/range-batch` request/response
   shape, execution/accounting semantics, or frontend APIs.
 - No change to `research-history-window-planning-v1` or
@@ -68,5 +71,6 @@ Engine's raw evaluation output.
   this proposal): `application/experiments/contracts.py`
   (`BatchCandidateResult`, new `BatchSideSummary`),
   `application/experiments/run_batch.py` (`_settle_candidate` — derive the
-  new fields from `materialized.result.accounting.trades` after persist,
-  before the candidate's working set is released).
+  new fields from the in-memory `materialized.result.accounting.trades`
+  after successful persist, with no disk reread, before the candidate's
+  working set is released).

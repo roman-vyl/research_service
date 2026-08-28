@@ -3,10 +3,15 @@
 `RunBatchExperiment._settle_candidate` already produces, per candidate, a
 fully materialized and persisted `SingleInstanceBacktestResult` before it
 builds today's minimal `BatchCandidateResult`. The new fields below are
-derived from that result's `accounting.trades` — not from the Engine
-evaluation (`outcome`) and not read back from disk — so no dense data
-crosses the batch-row boundary and the existing candidate working-set
-release point is unaffected.
+derived from the in-memory materialized result's `accounting.trades`,
+immediately after successful persistence — not from the Engine
+evaluation (`outcome`), and not by rereading the artifact from disk — so
+no dense data crosses the batch-row boundary and the existing candidate
+working-set release point is unaffected. Batch does not call
+`RunSingleInstanceBacktest`; the canonical invariant this change relies
+on is that both the standalone and batch paths go through
+`MaterializeBacktestOutcome` → `PersistSingleInstanceBacktest`, with no
+batch-specific execution or accounting logic.
 
 ## Metric definitions (normative)
 
@@ -51,18 +56,20 @@ candidate. `trade.net_pnl` is always net-of-fees.
   into the accounting/batch layer. Introducing that config surface is a
   separate concern from this change.
 - **Exit-reason / profile breakdown, path-diagnostics percentiles.**
-  Full-run-only aggregates; they belong to the persisted run artifact and
-  existing diagnostics-projection read path, not a per-candidate index
-  row.
+  These aggregates do not exist in the current persisted run or in any
+  existing diagnostics projection — the canonical run retains raw
+  per-trade facts only. Producing such breakdowns is outside this
+  batch-summary change and, if ever needed, would be built by future or
+  on-demand diagnostics work, not folded into a per-candidate index row.
 - **Engine transport, `/range-batch` request/response shape.** Untouched.
 
 ## Where the row is built
 
 `_settle_candidate` (`run_batch.py`) builds the row immediately after
-`self._persist_backtest.execute(...)` succeeds, from
+`self._persist_backtest.execute(...)` succeeds, from the in-memory
 `materialized.result.accounting.trades` and
 `materialized.result.accounting.initial_equity` already in hand — no
-additional read, no additional Engine or storage call. On any exception
+disk reread, no additional Engine or storage call. On any exception
 during materialize/persist, the existing `status="failed"` branch is
 unchanged and none of the new fields are populated (they simply do not
 exist on a failed candidate row, per the "row summarizes an
