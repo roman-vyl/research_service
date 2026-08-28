@@ -23,6 +23,9 @@ from research_service.application.backtests.history_window import ResolveBacktes
 from research_service.application.backtests.materialize_backtest_outcome import (
     MaterializeBacktestOutcome,
 )
+from research_service.application.experiments.candidate_summary import (
+    derive_batch_candidate_summary,
+)
 from research_service.application.experiments.contracts import (
     BatchCandidateRequest,
     BatchCandidateResult,
@@ -172,6 +175,7 @@ class RunBatchExperiment:
             )
 
         accounting = materialized.result.accounting
+        summary = derive_batch_candidate_summary(accounting)
         return BatchCandidateResult(
             candidate_id=candidate.candidate_id,
             run_id=materialized.result.run_id,
@@ -185,5 +189,11 @@ class RunBatchExperiment:
             fees_paid=accounting.fees_paid,
             net_pnl=accounting.net_pnl,
             market_data_hash=materialized.result.strategy_evaluation.market_data_hash,
+            return_pct=summary.return_pct,
+            win_rate=summary.win_rate,
+            profit_factor=summary.profit_factor,
+            max_drawdown=summary.max_drawdown,
+            long=summary.long,
+            short=summary.short,
             metadata=candidate.metadata,
         )

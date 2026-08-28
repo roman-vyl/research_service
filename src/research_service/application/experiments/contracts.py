@@ -23,6 +23,12 @@ from research_service.domain.strategy_instance import DeployableStrategyInstance
 
 _CANDIDATE_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 
+# win_rate/profit_factor are legitimately nullable even on a completed
+# candidate (zero-trade / no-losing-trade semantics), so they are excluded
+# from the completion-required set below.
+_SUMMARY_FIELDS_REQUIRED_ON_COMPLETION = ("return_pct", "max_drawdown", "long", "short")
+_SUMMARY_FIELDS = ("return_pct", "win_rate", "profit_factor", "max_drawdown", "long", "short")
+
 
 class BatchCandidateRequest(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -81,6 +87,20 @@ class BatchExperimentRequest(BaseModel):
         return self
 
 
+class BatchSideSummary(BaseModel):
+    """Compact per-side (long/short) research-comparison metrics for one
+    successful batch candidate. No dense or per-trade data
+    (`research-batch-experiments-v1`, "BatchSideSummary shape")."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    trades: int = Field(ge=0)
+    net_pnl: Decimal
+    return_pct: Decimal
+    win_rate: Decimal | None = None
+    profit_factor: Decimal | None = None
+
+
 class BatchCandidateResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -101,9 +121,39 @@ class BatchCandidateResult(BaseModel):
     fees_paid: Decimal | None = None
     net_pnl: Decimal | None = None
     market_data_hash: str | None = None
+    # Research-comparison metrics, present only when status == "completed"
+    # — derived from the in-memory materialized canonical result's trade
+    # list immediately after successful persistence, never from Engine's
+    # raw evaluation output and never by rereading the artifact from disk
+    # (research-batch-experiments-v1, "Authoritative per-candidate path").
+    return_pct: Decimal | None = None
+    win_rate: Decimal | None = None
+    profit_factor: Decimal | None = None
+    max_drawdown: Decimal | None = None
+    long: BatchSideSummary | None = None
+    short: BatchSideSummary | None = None
     error_type: str | None = None
     error_message: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_summary_shape(self) -> "BatchCandidateResult":
+        if self.status == "completed":
+            missing = [
+                name for name in _SUMMARY_FIELDS_REQUIRED_ON_COMPLETION
+                if getattr(self, name) is None
+            ]
+            if missing:
+                raise ValueError(
+                    f"completed candidate missing required summary field(s): {missing}"
+                )
+        else:
+            populated = [name for name in _SUMMARY_FIELDS if getattr(self, name) is not None]
+            if populated:
+                raise ValueError(
+                    f"failed candidate must not populate summary field(s): {populated}"
+                )
+        return self
 
 
 class BatchExperimentResult(BaseModel):

@@ -1,38 +1,4 @@
-# Research Batch Experiments v1 Specification
-
-## Purpose
-
-Define sequential batch execution of multiple backtest candidates with
-per-candidate failure isolation and an immutable batch summary.
-## Requirements
-### Requirement: Candidate validity
-
-A batch MUST contain at least one candidate and unique candidate/run
-identities.
-
-#### Scenario: Duplicate candidate identity
-
-- **WHEN** a batch request contains two candidates with the same run
-  identity
-- **THEN** the batch is rejected before any candidate executes.
-
-### Requirement: Sequential execution order
-
-Candidates MUST execute in request order.
-
-#### Scenario: Execution order
-
-- **WHEN** a batch of candidates runs
-- **THEN** they execute in the exact order they appear in the request.
-
-### Requirement: Failure isolation
-
-One candidate failure MUST NOT prevent later candidates from running.
-
-#### Scenario: A candidate fails mid-batch
-
-- **WHEN** one candidate's backtest fails
-- **THEN** subsequent candidates in the batch still execute.
+## MODIFIED Requirements
 
 ### Requirement: Authoritative per-candidate path
 
@@ -145,16 +111,7 @@ without opening each full run artifact individually.
   current persisted run artifact (which retains raw per-trade facts
   only), and producing them is outside this batch-summary change.
 
-### Requirement: Atomic, immutable batch artifacts
-
-Batch artifacts MUST publish atomically and MUST be immutable for an
-experiment ID.
-
-#### Scenario: Re-running an experiment ID
-
-- **WHEN** a batch is submitted with an `experiment_id` that already has a
-  published summary
-- **THEN** the existing batch summary is not overwritten.
+## ADDED Requirements
 
 ### Requirement: BatchSideSummary shape
 
@@ -168,4 +125,3 @@ dense or per-trade data.
 - **WHEN** a candidate has zero trades on one side
 - **THEN** that side's summary reports `trades: 0`, `net_pnl: 0`,
   `return_pct: 0`, `win_rate: null`, `profit_factor: null`.
-
