@@ -1,11 +1,11 @@
 ## Why
 
 Companion to `strategy_engine`'s `compact-strategy-evaluation-boundary-v1`
-(read that proposal first — it covers the wire-contract proofs this
-change consumes). A cross-repo audit found the current persisted-run
-artifact conflates four things with no shared consumer into one dense
-object: an execution contract, a diagnostic trace, a persistence
-artifact, and an HTTP DTO. Concretely, today:
+(read that proposal first — it covers the wire-contract proofs and the
+corrected semantic model this change consumes). A cross-repo audit found
+the current persisted-run artifact conflates four things with no shared
+consumer into one dense object: an execution contract, a diagnostic
+trace, a persistence artifact, and an HTTP DTO. Concretely, today:
 
 - `strategy_evaluation.json` persists `StrategyEvaluationResult`, whose
   `raw` field is the entire original Engine JSON response body —
@@ -27,139 +27,150 @@ artifact, and an HTTP DTO. Concretely, today:
   simultaneously.
 - No current model validator or OpenSpec requirement mandates that these
   fields be co-located with the canonical trades/accounting result.
-  `research-run-artifacts-v1`'s "Bundle completeness" requirement
-  already treats the Strategy Engine evaluation as its own file,
-  separate from `result.json` — the double-embedding inside
-  `result.json` is a code choice, not a spec requirement.
-  `research-diagnostics-projection-v1`'s "Strategy semantics source"
-  requirement only says diagnostic data must come from "the persisted
-  Strategy Engine evaluation, not recomputed" — satisfied identically
-  whether that evaluation is one dense file or a lean execution-contract
-  file plus a separate diagnostic artifact.
+
+**A second, deeper audit** (old BBB monolith execution core vs. current
+Research consumer map vs. the live `strategy_engine ↔ strategy_runtime`
+boundary) found a more serious gap than transport: **Research's
+execution loop today never implements locked-exit-profile semantics at
+all.** It reads only the `always_on` exit set from Engine's evaluation
+(`execution/protection.py:19`, `execution/static_exits.py:29` — the
+top-level `signal_exit`/`stop_loss_ratio`/`take_profit_ratio`/
+`stop_ready` keys only), unconditionally, for every trade — never the
+`profile_long`/`profile_short`/`by_profile.*` fields Engine's current
+dense contract already exposes. Old BBB's execution core (both its
+vectorbt/Numba path and its managed execution loop) locks an exit
+profile at entry and holds it for the trade's life, indexing signal-
+exit/SL-TP state by that locked profile on every later bar — a real
+trading-semantics behavior Research has never reproduced, not a
+performance question. Exit attribution (`rule_id`/`component_id`/
+`exit_kind`/`layer`) has the same gap: Research's execution loop never
+reads Engine's `component_evidence`/`rule_evidence` at all.
 
 This is a deliberate contract change, not a compatibility shim: today's
 `research-diagnostics-projection-v1` implicitly forces every one of N
 candidates in a research batch to produce and persist a full dense
-diagnostic artifact that is almost never opened. That is the wrong
-invariant for a batch-discovery workflow, and it is the reason fixing
-`/range-batch`'s transport alone would not make research batches cheap —
-every candidate would still pay the mandatory dense-diagnostics cost
-regardless of how batch orchestration is fixed.
+diagnostic artifact that is almost never opened — the wrong invariant
+for a batch-discovery workflow. And today's execution loop's silent
+always-on-only behavior is not a baseline to preserve — it is the
+specific defect this change and its companion exist to fix, restoring
+old-BBB semantics rather than the currently-degraded ones.
 
-## What Changes
+## Status: superseding the shipped consumption plan
 
-- **Consume Strategy Engine's new sparse decision-event contract**
-  (`strategy_engine`'s companion change) instead of dense per-bar
-  `entries`/`exit_policy` arrays. `MaterializeBacktestOutcome`/
-  `execution/loop.py`/`execution/entry.py`/`static_exits.py`/
-  `protection.py` are updated to read point-queries against the sparse
-  event list instead of dense array indexing — this is the same
-  information at the same call sites, proven lossless per-field in the
-  companion change's design doc, not a behavior change.
+This change's original consumption plan (point-query against Engine's
+dense `entries`/`exit_policy`, unchanged always-on-only execution
+semantics) was never implemented on this branch — the companion
+`strategy_engine` change shipped its wire contract, but this repo's
+tasks 1-6 (below) were not started. This proposal now targets the
+corrected `HistoricalExecutionProjection` model from the companion
+change instead of the superseded dense/sparse-flat model; no rework of
+already-shipped Research code is needed because none was shipped yet.
+
+## Master Plan reference
+
+This proposal is Spec Freeze (**I0**) of a 9-checkpoint cross-repo master
+plan. I0 is OpenSpec-only in both repos. I3 (Research consumer
+foundation), I4 (Research execution parity — `locked_exit_profile` on
+`PositionState`, attribution restoration), I5 (N=1 end-to-end proof,
+joint with `strategy_engine`), I6 (persistence/diagnostics split), I7
+(coordinated single-instance-only cutover, joint), I8 (batch lifetime,
+joint, only after I7) are separate, future authorizations; this
+proposal does not authorize any of them.
+
+## What Changes (target model, I3+ implementation)
+
+- **Consume Strategy Engine's `HistoricalExecutionProjection`**
+  (companion change) — executable entry opportunities (with
+  `locked_exit_profile` and attributed initial stop/take), per-side
+  per-profile signal-exit event streams (with attribution) — instead of
+  dense `entries`/`exit_policy` arrays or the flat sparse-event draft
+  the companion change's first shipped contract used. `Materialize
+  BacktestOutcome`/`execution/loop.py`/`execution/entry.py`/
+  `static_exits.py`/`protection.py` consume the new projection shape.
+- **Add `locked_exit_profile` to `PositionState`.** Captured once, at
+  fill time, from the matching `entry_opportunity`. Held fixed for the
+  position's entire life. Every subsequent open bar, signal-exit/SL-TP
+  candidate lookup is keyed by `position.locked_exit_profile`, never by
+  whichever profile is active on the current bar. This mirrors the live
+  `strategy_engine ↔ strategy_runtime` boundary's existing, correct
+  pattern (Engine stateless, caller holds and round-trips the locked
+  value) — ported to the historical path, not redesigned.
+- **Restore old-BBB attribution semantics on `TradeRecord`/execution
+  events.** `exit_reason`/`exit_rule_id`/`exit_component_id`/
+  `exit_kind`/`exit_layer` populated from Engine's attributed initial-
+  protection/signal-exit-candidate data, not synthesized as a coarse
+  always-on-only category as today. This is a hard invariant (per the
+  companion change's third correction): proving equal PnL without equal
+  attribution content is not sufficient parity.
 - **Stop embedding the Strategy Engine evaluation inside `result.json`.**
   `SingleInstanceBacktestResult` references its evaluation by identity
-  (e.g. `run_id`/`market_data_hash`) rather than re-nesting the full
-  object. The compact execution evaluation (now sparse, per the
-  companion change) is persisted once, as its own artifact.
+  rather than re-nesting the full object. The compact
+  `HistoricalExecutionProjection` is persisted once, as its own
+  artifact — packaging-only, safe only after I5 parity is proven (see
+  Master Plan).
 - **Stop retaining the raw Engine response body.** `raw=body` retention
-  on the Research HTTP client is removed — there is no `raw` field left
-  to populate once the mandatory contract no longer carries diagnostic
-  data.
+  removed — no `raw` field exists once the mandatory contract carries no
+  diagnostic data.
 - **Make dense diagnostics a separate, optional, on-demand capability.**
-  `component_evidence`/`features`/`contexts`/`potential_entries` are no
-  longer produced or persisted as a side effect of every backtest.
-  Instead: a run/candidate that needs diagnostics gets them via an
-  explicit request, which calls Strategy Engine's new diagnostic-
-  evaluation entrypoint (companion change, task 3.2) for the same
-  immutable strategy + `market_data_hash`/range, and persists the result
-  as its own separate diagnostic artifact. `application/diagnostics/
-  projection.py`'s existing "No read-time upstream calls" invariant is
-  preserved for *reading* an already-generated diagnostic artifact — the
-  generation step is a new, distinct write-path operation, not part of
-  the read path that invariant governs.
-- **Batch settlement gets a separate, binding follow-on phase — not an
-  automatic consequence of the sparse contract alone.**
-  `RunBatchExperiment`'s existing shared-L0 + per-candidate
-  materialize/persist/release loop (already correctly sequential since
-  `batch-candidate-canonical-summary-v1`) is Research-side and already
-  fine. What is **not** automatically fixed by Engine's sparse contract:
-  `EvaluateStrategyRangeBatch.execute` still accumulates all N
-  `BatchVariantOutcome`s before returning, and the `/range-batch` HTTP
-  response still covers all N variants in one payload — each variant's
-  payload shrinks from ~700MB to ~KB-scale, but N of them are still held
-  simultaneously during that one call. A distinct, binding phase (the
-  companion change's migration-order step 3) changes the aggregation
-  pattern itself — per-candidate evaluate→deliver/settle→release, never
-  N held resident simultaneously, shared-L0 retained — and only after
-  that phase does batch memory become approximately constant in N. No
-  new batch *execution model* is introduced (batch still evaluates
-  through the same single-evaluation contract, no separate strategy
-  semantics of its own) — but the *aggregation/transport pattern* is a
-  real, separate piece of work, not free.
+  Unchanged from the original proposal: a run/candidate that needs
+  diagnostics gets them via an explicit request to Strategy Engine's
+  diagnostic-evaluation entrypoint, persisted as a separate artifact,
+  fail-closed on provenance mismatch. `application/diagnostics/
+  projection.py`'s "No read-time upstream calls" invariant is preserved
+  for reading an already-generated artifact.
+- **Batch settlement remains a separate, binding follow-on phase (I8),
+  not automatic.** Unchanged from the original proposal's analysis:
+  `RunBatchExperiment`'s per-candidate loop is already correct on the
+  Research side; what's not yet fixed is the aggregation pattern that
+  still holds N results simultaneously during one `/range-batch` call.
+  This phase is explicitly gated behind I7 in the Master Plan, and I8
+  itself may reconsider whether `/range-batch` as one large
+  request/response is even the right shape — not just its aggregation
+  timing.
 
 ## What Does Not Change
 
-- No change to accounting/execution semantics, trade simulation logic,
-  or fee/PnL computation — only the shape of the data Engine hands
-  Research to drive that logic, proven lossless per-field in the
-  companion change.
-- No change to `research-batch-experiments-v1`'s existing requirements
-  (candidate validity, sequential order, failure isolation, atomic
-  artifacts, the `batch-candidate-canonical-summary-v1` summary fields)
-  — batch behavior is unchanged; its cost profile improves in two
-  stages: per-candidate payload size shrinks immediately once Engine's
-  sparse contract lands, and simultaneous-N memory is bounded only once
-  the separate per-candidate evaluate→deliver/settle→release phase
-  (companion change) also lands.
+- No change to fee/PnL/equity computation math — only the shape of the
+  data Engine hands Research, and the previously-missing locked-profile/
+  attribution logic that consumes it. Restoring locked-profile semantics
+  changes *which* exit rule applies on a given bar for a given trade
+  (a real, intended behavior fix versus today's always-on-only
+  execution) — it does not change how fills/fees/PnL are computed once
+  an exit is determined.
+- No change to `research-batch-experiments-v1`'s existing requirements.
 - No change to the public `/api/research/backtests`/`/api/research/runs/
   ...` HTTP surface shape for callers that only read trades/metrics/
-  summary — those never touched the dense fields (confirmed by audit).
-  Callers that read signal-trace/chart-events now go through the new
-  on-demand diagnostics-generation flow instead of always finding
-  diagnostics already present.
-- Migration order matches the companion change: single-instance parity
-  must be proven first — identical `TradeRecord` sequence, exact
-  accounting, exact exit reasons, semantically-equal provenance (not a
-  byte-identical full artifact diff, since `time_ms` is intentionally
-  removed) — between old and new contract on a real `full_available`
-  N=1 evaluation, before `/range-batch` adopts the same contract, and
-  before the per-candidate release phase is attempted.
+  summary.
+- **No change to Strategy Runtime or any live-facing contract** —
+  Research has no direct relationship to `strategy_runtime`'s live
+  boundary (that's entirely within `strategy_engine`'s scope), stated
+  here only to confirm this change does not indirectly touch it via any
+  shared code path.
+- Migration order is strictly gated (see Master Plan): no execution-loop
+  rework before Engine's projection is proven correct (I2) on a
+  profile-sensitive adversarial spec; no persistence-split work before
+  N=1 end-to-end parity (I5); no batch work before I7's single-instance
+  production cutover.
 
 ## Impact
 
-- Affected capabilities: `research-run-artifacts-v1` (MODIFIED —
-  bundle no longer double-embeds the evaluation, diagnostics no longer
+- Affected capabilities: `research-run-artifacts-v1` (MODIFIED — bundle
+  no longer double-embeds the evaluation, diagnostics no longer
   mandatory), `research-diagnostics-projection-v1` (MODIFIED — dense
-  diagnostics become an explicit, separately-generated artifact rather
-  than an always-present part of every run, with an explicit ownership
-  and fail-closed provenance-match requirement), `research-unified-
-  execution-loop-v1` (MODIFIED — "Aligned inputs" now checks
-  `market_data_hash`/`bar_count`/range/`bar_index` range instead of the
-  removed `time_ms` array), `research-batch-experiments-v1` (no
-  requirement changes — cited for context only, since its existing
-  sequential/failure-isolation contract is what the per-candidate
-  release phase builds on, without a new batch execution model).
-- On-demand diagnostic-evaluation generation: ownership and provenance
-  contract fixed by this proposal (design.md) — Research owns
-  requesting/persisting diagnostics, calling Strategy Engine's
-  diagnostic-evaluation entrypoint (companion change) with the run's own
-  stored provenance, and fails closed if the response's provenance
-  doesn't match. Route/schema implementation detail is deferred to task
-  4.1; ownership is not left open.
-- Affected code (implementation deferred, not part of this proposal):
-  `adapters/http/strategy_engine_client.py` (`evaluate_range`/
-  `evaluate_range_batch`, drop `raw=body`, consume sparse events),
-  `domain/contracts.py` (`StrategyEvaluationResult` split into a lean
-  execution-contract type + separate diagnostic type),
-  `execution/loop.py`, `execution/entry.py`, `execution/static_exits.py`,
-  `execution/protection.py` (point-query against sparse events),
-  `application/backtests/strategy_contract.py` (`_validate_side_series`
-  and friends — validation against sparse events, not dense-length
-  assertions), `application/backtests/artifacts.py`
-  (`PersistSingleInstanceBacktest` — stop double-encoding, reference not
-  re-embed), `application/backtests/read_artifacts.py`
-  (`ReadResearchRuns` — read only what each call site needs),
-  `application/diagnostics/projection.py` (read from the new separate
-  diagnostic artifact), `application/experiments/run_batch.py`
-  (unaffected in structure — benefits automatically once the underlying
-  evaluation is cheap).
+  diagnostics become explicit/separately-generated, ownership and
+  fail-closed provenance-match), `research-unified-execution-loop-v1`
+  (MODIFIED — consumes `HistoricalExecutionProjection`, adds
+  `locked_exit_profile`/attribution restoration requirements, checks
+  `market_data_hash`/`bar_count`/range/`bar_index` instead of removed
+  `time_ms`), `research-batch-experiments-v1` (no requirement changes —
+  context only).
+- Affected code, I3+ (deferred, not part of this I0 proposal):
+  `adapters/http/strategy_engine_client.py`, `domain/contracts.py`
+  (consume the new projection shape), `execution/loop.py`,
+  `execution/entry.py`, `execution/static_exits.py`,
+  `execution/protection.py` (`PositionState.locked_exit_profile`,
+  per-profile candidate lookup, attribution population),
+  `application/backtests/strategy_contract.py`, `application/backtests/
+  artifacts.py`, `application/backtests/read_artifacts.py`,
+  `application/diagnostics/projection.py`, `application/experiments/
+  run_batch.py` (unaffected in structure until I8).

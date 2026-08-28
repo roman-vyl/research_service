@@ -3,9 +3,12 @@
 ### Requirement: Bundle completeness
 
 The bundle SHALL retain the exact request, a compact Strategy Engine
-execution evaluation (sparse decision events plus provenance, per
-`strategy_engine`'s `compact-strategy-evaluation-boundary-v1`), execution
-events, realised trades, metrics, and the canonical result. The
+execution evaluation (`HistoricalExecutionProjection` — executable entry
+opportunities with locked exit profile and attributed initial
+stop/take, per-profile-indexed signal-exit events with attribution, plus
+provenance, per `strategy_engine`'s `compact-strategy-evaluation-
+boundary-v1`), execution events, realised trades, metrics, and the
+canonical result. The
 canonical result file SHALL reference its execution evaluation by
 identity rather than re-embedding it. Dense diagnostic data (feature
 series, context data, component evidence, potential-entry traces) is
@@ -24,8 +27,15 @@ separate optional artifact" requirement below.
 #### Scenario: No raw Engine response body retained
 
 - **WHEN** a run bundle's execution evaluation file is inspected
-- **THEN** it contains the compact sparse decision-event contract only —
+- **THEN** it contains the compact `HistoricalExecutionProjection` only —
   no full copy of Strategy Engine's original response body.
+
+#### Scenario: Execution evaluation carries exit attribution
+
+- **WHEN** a run bundle's execution evaluation file is inspected
+- **THEN** every entry opportunity's initial stop/take and every signal-
+  exit candidate carries `rule_id`/`component_id`/`exit_kind`
+  attribution — not a bare ratio or boolean with no attribution.
 
 ## ADDED Requirements
 
