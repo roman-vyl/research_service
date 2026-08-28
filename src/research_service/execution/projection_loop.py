@@ -98,11 +98,15 @@ def run_projection_execution_loop(
                 if current_timeline is not None
                 else None
             )
+            active_take_profile = (
+                managed_state.active_take_profile if managed_state is not None else "initial"
+            )
             static_candidates = collect_projection_static_exit_candidates(
                 projection_index,
                 current_position,
                 candle,
                 bar_index=bar_index,
+                active_take_profile=active_take_profile,
             )
             managed_candidates = collect_managed_exit_candidates(
                 current_position,

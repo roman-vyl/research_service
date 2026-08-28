@@ -30,6 +30,8 @@ from research_service.domain.contracts import (
     HistoricalExecutionProjectionDTO,
     HistoricalExecutionProjectionIndex,
     InitialProtectionLegDTO,
+    ManagedBarDecision,
+    ManagedReplayResult,
     MarketFrame,
     MarketRange,
     SignalExitCandidateDTO,
@@ -153,6 +155,105 @@ def test_take_exit_uses_stored_attribution_with_null_stop_leg() -> None:
     assert closed.exit_fill.fill_price == Decimal("110")
     assert closed.exit_fill.rule_id == "tp_aligned"
     assert closed.exit_fill.exit_kind == "take_profit"
+
+
+# --- managed-policy disable_initial_tp: corrective pass -----------------
+
+
+def _disable_tp_replay(position_id: str, side: str, entry_time_ms: int) -> ManagedReplayResult:
+    bar0_time = entry_time_ms
+    bar1_time = entry_time_ms + 300_000
+    bars = (
+        ManagedBarDecision(
+            time_ms=bar0_time,
+            bar_index=0,
+            phase="initial_risk",
+            bars_in_trade=1,
+            mfe_pct=Decimal("0"),
+            mae_pct=Decimal("0"),
+            active_stop_price=None,
+            active_take_profile="disable_initial_tp",
+            runtime_exit_rule_ids=(),
+            effective_from_time_ms=bar1_time,
+        ),
+        ManagedBarDecision(
+            time_ms=bar1_time,
+            bar_index=1,
+            phase="initial_risk",
+            bars_in_trade=2,
+            mfe_pct=Decimal("0"),
+            mae_pct=Decimal("0"),
+            active_stop_price=None,
+            active_take_profile="disable_initial_tp",
+            runtime_exit_rule_ids=(),
+            effective_from_time_ms=None,
+        ),
+    )
+    return ManagedReplayResult(
+        contract_version="managed_policy_replay.v1",
+        decision_timing="end_of_bar_effective_next_bar",
+        trade_id=position_id,
+        side=side,
+        entry_time_ms=entry_time_ms,
+        bars=bars,
+        events=(),
+        final_state={},
+        raw={},
+    )
+
+
+def test_disable_initial_tp_suppresses_the_stored_take_profit_candidate() -> None:
+    # Bug reproduced pre-fix: the projection collector never received
+    # managed_state.active_take_profile, so the stored initial TP fired
+    # even though managed policy had disabled it.
+    candles = _flat_candles(3)
+    candles[1] = _candle(1, "105", "115", "104", "112")  # would hit take_price=110
+    opportunity = ExecutableEntryOpportunityDTO(
+        bar_index=0,
+        side="long",
+        locked_exit_profile="aligned",
+        initial_stop=None,
+        initial_take=_leg(0.1, "take_profit", "tp_aligned"),
+    )
+    index = _projection_index(bar_count=3, entry_opportunities=[opportunity])
+    market_frame = _market_frame(candles)
+
+    def provider(position: object) -> ManagedReplayResult:
+        return _disable_tp_replay(
+            position.position_id,  # type: ignore[attr-defined]
+            position.side,  # type: ignore[attr-defined]
+            position.entry_fill.time_ms,  # type: ignore[attr-defined]
+        )
+
+    result = run_projection_execution_loop(
+        "inst", index, market_frame, _POLICY, managed_replay_provider=provider
+    )
+    assert result.final_open_position is not None
+    assert result.final_open_position.initial_protection.take_profit_price == Decimal("110")
+    assert len(result.positions) == 1
+    assert result.positions[0].status == "open"
+
+
+def test_initial_take_profit_still_fires_without_disable() -> None:
+    # Positive control for the disable_initial_tp corrective pass: same
+    # OHLC, no managed_replay_provider -- TP must still fire.
+    candles = _flat_candles(3)
+    candles[1] = _candle(1, "105", "115", "104", "112")
+    opportunity = ExecutableEntryOpportunityDTO(
+        bar_index=0,
+        side="long",
+        locked_exit_profile="aligned",
+        initial_stop=None,
+        initial_take=_leg(0.1, "take_profit", "tp_aligned"),
+    )
+    index = _projection_index(bar_count=3, entry_opportunities=[opportunity])
+    market_frame = _market_frame(candles)
+
+    result = run_projection_execution_loop("inst", index, market_frame, _POLICY)
+    (closed,) = result.positions
+    assert closed.exit_fill is not None
+    assert closed.exit_fill.candidate_type == "take_profit"
+    assert closed.exit_fill.fill_price == Decimal("110")
 
 
 # --- both legs null: position may still open, no fabricated protection -

@@ -37,10 +37,21 @@ def collect_projection_static_exit_candidates(
     candle: Candle,
     *,
     bar_index: int,
+    active_take_profile: str = "initial",
 ) -> tuple[ExitCandidate, ...]:
     """Collect SL, TP and locked-profile signal candidates for a
     position open at bar start -- the projection-driven counterpart to
-    `execution/static_exits.py::collect_static_exit_candidates`."""
+    `execution/static_exits.py::collect_static_exit_candidates`.
+
+    `active_take_profile` matches that function's own parameter exactly
+    (I4 corrective pass): when managed policy has raised
+    `"disable_initial_tp"`, the stored initial fixed take-profit
+    candidate is suppressed here too -- the projection path had been
+    silently dropping this legacy managed-policy semantic, since the
+    caller wasn't threading `managed_state.active_take_profile` through
+    at all. Only the initial TP candidate is affected; the stop
+    candidate, the locked-profile signal lookup, and the signal
+    candidate winner are unchanged by this parameter."""
 
     if position.locked_exit_profile is None:
         raise InvalidRequest("position has no locked_exit_profile to look up signal exits by")
@@ -76,7 +87,7 @@ def collect_projection_static_exit_candidates(
                 )
             )
 
-    if protection.take_profit_price is not None:
+    if active_take_profile != "disable_initial_tp" and protection.take_profit_price is not None:
         price = _distance_fill_price(
             position.side,
             candle,
