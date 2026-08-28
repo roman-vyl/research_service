@@ -7,7 +7,10 @@ from typing import Any, cast
 
 import httpx
 
+from pydantic import ValidationError
+
 from research_service.domain.contracts import (
+    HistoricalExecutionProjectionDTO,
     ManagedBarDecision,
     ManagedReplayRequest,
     ManagedReplayResult,
@@ -394,6 +397,31 @@ def _parse_evaluation_result(body: dict[str, object], *, instance_id: str) -> St
         component_evidence=_object(body, "component_evidence"),
         raw=body,
     )
+
+
+def parse_historical_execution_projection(body: dict[str, object]) -> HistoricalExecutionProjectionDTO:
+    """Strict decode of Strategy Engine's `HistoricalExecutionProjection`
+    wire shape (`strategy-research-execution-contract-v1`, I3 consumer
+    foundation). No `raw=body` retention -- see
+    `HistoricalExecutionProjectionDTO`'s own docstring.
+
+    Standalone rather than an `HttpStrategyEngineClient` method: Engine's
+    `/range` route is not yet wired to this contract (route cutover is
+    I7, `compact-strategy-evaluation-boundary-v1`'s master plan) -- there
+    is no live endpoint to call yet. This function decodes whatever body
+    a caller already has (a future route, or a test fixture), matching
+    the pattern of this module's other pure `_parse_*`/`_object` helpers.
+    """
+
+    try:
+        return HistoricalExecutionProjectionDTO.model_validate(body)
+    except ValidationError as exc:
+        raise UpstreamServiceError(
+            service="strategy_engine",
+            status_code=502,
+            message="Strategy Engine historical execution projection response is invalid",
+            details={"errors": exc.errors(include_url=False, include_context=False)},
+        ) from exc
 
 
 def _int(value: object) -> int:

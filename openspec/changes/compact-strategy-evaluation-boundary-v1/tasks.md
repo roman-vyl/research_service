@@ -30,7 +30,7 @@ after its predecessor's gate is confirmed.
       projection shape to consume and a proven-correct builder to trust)
       — this is a cross-repo ordering constraint, not a task in this
       repo, recorded here so it isn't missed.
-- [ ] **I3 — Research: Consumer Foundation (no production cutover).**
+- [x] **I3 — Research: Consumer Foundation (no production cutover).**
       New DTO/parser for `HistoricalExecutionProjection`
       (`domain/contracts.py`), plus indexed lookup structures built at
       load time (`entry_by_bar`, `signal_candidates_by(side,
