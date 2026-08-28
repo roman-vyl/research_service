@@ -77,15 +77,25 @@ regardless of how batch orchestration is fixed.
   preserved for *reading* an already-generated diagnostic artifact — the
   generation step is a new, distinct write-path operation, not part of
   the read path that invariant governs.
-- **Batch settlement becomes cheap as a consequence, not a separate
-  fix.** Once every candidate's mandatory evaluation is O(events) instead
-  of O(bars) and carries no diagnostic payload, `RunBatchExperiment`'s
-  existing shared-L0 + per-candidate materialize/persist/release loop
-  (already correctly sequential since the earlier
-  `batch-candidate-canonical-summary-v1` work) is no longer amplifying a
-  per-candidate cost that no longer exists at this scale. No new batch
-  execution model is introduced — batch remains orchestration over the
-  same single-evaluation contract.
+- **Batch settlement gets a separate, binding follow-on phase — not an
+  automatic consequence of the sparse contract alone.**
+  `RunBatchExperiment`'s existing shared-L0 + per-candidate
+  materialize/persist/release loop (already correctly sequential since
+  `batch-candidate-canonical-summary-v1`) is Research-side and already
+  fine. What is **not** automatically fixed by Engine's sparse contract:
+  `EvaluateStrategyRangeBatch.execute` still accumulates all N
+  `BatchVariantOutcome`s before returning, and the `/range-batch` HTTP
+  response still covers all N variants in one payload — each variant's
+  payload shrinks from ~700MB to ~KB-scale, but N of them are still held
+  simultaneously during that one call. A distinct, binding phase (the
+  companion change's migration-order step 3) changes the aggregation
+  pattern itself — per-candidate evaluate→deliver/settle→release, never
+  N held resident simultaneously, shared-L0 retained — and only after
+  that phase does batch memory become approximately constant in N. No
+  new batch *execution model* is introduced (batch still evaluates
+  through the same single-evaluation contract, no separate strategy
+  semantics of its own) — but the *aggregation/transport pattern* is a
+  real, separate piece of work, not free.
 
 ## What Does Not Change
 
@@ -96,8 +106,11 @@ regardless of how batch orchestration is fixed.
 - No change to `research-batch-experiments-v1`'s existing requirements
   (candidate validity, sequential order, failure isolation, atomic
   artifacts, the `batch-candidate-canonical-summary-v1` summary fields)
-  — batch behavior is unchanged; only its cost profile changes as a
-  side effect of the evaluation contract getting cheap.
+  — batch behavior is unchanged; its cost profile improves in two
+  stages: per-candidate payload size shrinks immediately once Engine's
+  sparse contract lands, and simultaneous-N memory is bounded only once
+  the separate per-candidate evaluate→deliver/settle→release phase
+  (companion change) also lands.
 - No change to the public `/api/research/backtests`/`/api/research/runs/
   ...` HTTP surface shape for callers that only read trades/metrics/
   summary — those never touched the dense fields (confirmed by audit).
@@ -105,9 +118,12 @@ regardless of how batch orchestration is fixed.
   on-demand diagnostics-generation flow instead of always finding
   diagnostics already present.
 - Migration order matches the companion change: single-instance parity
-  must be proven first (byte-identical trades/accounting/exit-reasons/
-  provenance between old and new contract on a real `full_available`
-  N=1 evaluation) before `/range-batch` adopts the same contract.
+  must be proven first — identical `TradeRecord` sequence, exact
+  accounting, exact exit reasons, semantically-equal provenance (not a
+  byte-identical full artifact diff, since `time_ms` is intentionally
+  removed) — between old and new contract on a real `full_available`
+  N=1 evaluation, before `/range-batch` adopts the same contract, and
+  before the per-candidate release phase is attempted.
 
 ## Impact
 
@@ -115,13 +131,21 @@ regardless of how batch orchestration is fixed.
   bundle no longer double-embeds the evaluation, diagnostics no longer
   mandatory), `research-diagnostics-projection-v1` (MODIFIED — dense
   diagnostics become an explicit, separately-generated artifact rather
-  than an always-present part of every run), `research-batch-
-  experiments-v1` (no requirement changes — cited for context only,
-  since its existing sequential/failure-isolation contract is what
-  makes the cost fix effective without a new batch execution model).
-- New capability: on-demand diagnostic-evaluation generation (name TBD
-  at implementation time) — the Research-side counterpart to Strategy
-  Engine's new diagnostic-evaluation entrypoint.
+  than an always-present part of every run, with an explicit ownership
+  and fail-closed provenance-match requirement), `research-unified-
+  execution-loop-v1` (MODIFIED — "Aligned inputs" now checks
+  `market_data_hash`/`bar_count`/range/`bar_index` range instead of the
+  removed `time_ms` array), `research-batch-experiments-v1` (no
+  requirement changes — cited for context only, since its existing
+  sequential/failure-isolation contract is what the per-candidate
+  release phase builds on, without a new batch execution model).
+- On-demand diagnostic-evaluation generation: ownership and provenance
+  contract fixed by this proposal (design.md) — Research owns
+  requesting/persisting diagnostics, calling Strategy Engine's
+  diagnostic-evaluation entrypoint (companion change) with the run's own
+  stored provenance, and fails closed if the response's provenance
+  doesn't match. Route/schema implementation detail is deferred to task
+  4.1; ownership is not left open.
 - Affected code (implementation deferred, not part of this proposal):
   `adapters/http/strategy_engine_client.py` (`evaluate_range`/
   `evaluate_range_batch`, drop `raw=body`, consume sparse events),

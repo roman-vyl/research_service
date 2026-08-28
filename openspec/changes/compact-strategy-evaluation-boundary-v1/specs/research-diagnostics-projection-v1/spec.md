@@ -62,3 +62,29 @@ reading an already-generated artifact SHALL NOT.
   Engine while building that response — this requirement is unchanged
   by diagnostics becoming optional; it governs the read path, not the
   separate generation operation above.
+
+### Requirement: Diagnostic generation ownership and provenance fail-closed
+
+Research Service SHALL own requesting and persisting diagnostics.
+Strategy Engine SHALL own computing them. A generation request SHALL use
+the target run's own already-stored provenance
+(`market_data_hash`/range/`config_hash`) to call Strategy Engine's
+diagnostic-evaluation entrypoint — never a freshly re-derived value.
+Research Service SHALL reject and refuse to persist a diagnostic
+response whose `config_hash`, `market_data_hash`, or `bar_count` does
+not exactly match the target run's stored provenance.
+
+#### Scenario: Diagnostic response provenance matches the run
+
+- **WHEN** a diagnostic-evaluation response is received for a
+  generation request
+- **THEN** it is persisted as that run's diagnostic artifact only if its
+  `config_hash`, `market_data_hash`, and `bar_count` exactly match the
+  run's own stored execution-evaluation provenance.
+
+#### Scenario: Provenance mismatch is rejected, not silently accepted
+
+- **WHEN** a diagnostic-evaluation response's provenance does not match
+  the target run's stored provenance
+- **THEN** Research Service SHALL reject the response and SHALL NOT
+  persist it as that run's diagnostic artifact.

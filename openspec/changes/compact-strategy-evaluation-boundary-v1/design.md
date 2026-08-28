@@ -108,38 +108,119 @@ a distinct, new write-path operation this change introduces; it is not
 materialize a diagnostic artifact that a projection can later read
 without calling upstream."
 
-## Batch consequence (no new batch execution model)
+## bar_index invariant — Research's fail-closed side
 
-`RunBatchExperiment.execute` (already correct since
+Per the companion change: every `StrategyDecisionEvent.bar_index`
+indexes exactly the canonical range described by that response's own
+`market_data_hash`/`bar_count` — the same position in Research's own
+`MarketFrame` resolved for that identical `market_data_hash`. Research
+SHALL fail closed (reject the evaluation, not silently proceed) if:
+
+- the evaluation's `market_data_hash` does not match the
+  `market_data_hash` Research resolved for its own `MarketFrame`;
+- the evaluation's `bar_count` does not match Research's own frame's bar
+  count;
+- the evaluation's declared range does not match Research's own resolved
+  window;
+- any `bar_index` on a decision event falls outside `[0, bar_count)`.
+
+This replaces today's `time_ms`-array equality check
+(`strategy_contract.py`) — with `time_ms` gone, this hash/bar_count/range
+alignment is the *only* thing standing between Research and executing
+against misaligned data, so it must be an explicit, tested rejection
+path, not an incidental side effect of a field that happened to also be
+checked before.
+
+## Diagnostic-evaluation generation — ownership and provenance (Research side)
+
+Ownership (fixed now, per the companion change — not left "TBD"):
+**Research owns requesting and persisting diagnostics**; Strategy Engine
+owns computing them (companion change). The generation use case:
+
+1. Caller requests diagnostics for an existing `run_id`.
+2. Research reads that run's **already-stored** provenance
+   (`market_data_hash`, range, `config_hash`) from its persisted
+   `strategy_evaluation.json` — never re-derives it from a fresh market
+   read.
+3. Research calls Strategy Engine's diagnostic-evaluation entrypoint
+   with that exact strategy identity + market provenance + expected
+   hash.
+4. Research fails closed — rejects the response, does not persist a
+   `diagnostics.json` — if the response's `config_hash`/
+   `market_data_hash`/`bar_count` don't exactly match what's already
+   stored for that `run_id`. This prevents diagnostics silently being
+   generated against a different market snapshot or strategy config than
+   the run they claim to explain.
+5. Only on a provenance match: persist `diagnostics.json` for that
+   `run_id`.
+
+## Batch consequence — separate, binding phase, not automatic
+
+`RunBatchExperiment.execute` itself (already correct since
 `batch-candidate-canonical-summary-v1`: shared window/Engine-call once,
-then a truly sequential per-candidate materialize→persist→release loop)
-needs no structural change. Its cost profile changes as a direct
-consequence of the evaluation contract shrinking from O(bars) to
-O(events) and diagnostics becoming opt-in: N candidates' combined
-`/range-batch` response shrinks from N × (dense per-bar payload) to N ×
-(sparse event list), and no candidate pays the diagnostic-generation
-cost unless explicitly requested. This is the old-BBB shape restored
-with the correct service boundary:
+then a truly sequential per-candidate materialize→persist→release loop
+on the Research side) needs no structural change. But **this alone does
+not bound batch memory in N.** `RunBatchExperiment` still makes one
+`evaluate_range_batch` call and receives one response covering all N
+variants — Engine's sparse contract shrinks that response from N ×
+(dense per-bar payload) to N × (sparse event list), which is a large,
+real improvement, but N results are still constructed and held
+simultaneously inside that one call/response before Research's
+already-sequential settlement loop even starts.
+
+A **separate, binding phase** (matching the companion change's
+migration-order step 3) is required before claiming batch memory is
+bounded: the call pattern itself must change so N candidates are
+evaluated, delivered to Research, and released one at a time — never all
+N held resident simultaneously in either process — while retaining
+shared-L0 acquisition (one market read, one window resolution for the
+whole batch). The exact mechanism (Research driving N sequential
+single-evaluation calls instead of one `/range-batch` call, or an
+Engine-side incremental response) is an implementation decision
+deferred past this proposal, coordinated with the companion change.
+
+Once both the sparse contract *and* this per-candidate release phase
+land, this is the old-BBB shape restored with the correct service
+boundary:
 
 ```
 OLD BBB:      native calculator state → execution, same process
-THIS CHANGE:  native calculator state → compact decision events → HTTP → execution in Research
-TODAY:        native calculator state → box entire universe into strings → giant JSON → reconstruct → use tiny subset
+THIS CHANGE:  native calculator state → compact decision events → HTTP → execution in Research (released per-candidate)
+TODAY:        native calculator state → box entire universe into strings → giant JSON → reconstruct → use tiny subset (N held at once)
 ```
+
+## Parity means (not byte-identical full artifact)
+
+`time_ms` is intentionally removed, so the old and new contracts cannot
+produce byte-identical persisted artifacts — that is expected, not a
+parity failure. Parity is proven when, for the same input:
+
+- the resulting `TradeRecord` sequence is identical;
+- accounting totals are exact;
+- exit reasons are exact, trade-for-trade;
+- provenance is semantically equal (`market_data_hash`, `bar_count`,
+  `config_hash`, `instance_id`) — not byte-identical serialized bytes.
 
 ## Migration order (binding, matches companion change)
 
-1. Single-instance `full_available` N=1 parity proof first (byte-
-   identical trades/accounting/exit-reasons/provenance, old contract vs
-   new). Measure CPU/RSS/body size.
-2. Only then does `/range-batch` adopt the same compact contract.
-3. Re-run the N=1/2/4/11 memory harness from the earlier diagnostic pass
-   this session; confirm approximately constant memory in N.
+1. Single-instance `full_available` N=1 parity proof first, per "Parity
+   means" above (old contract vs new). Measure CPU/RSS/body size.
+2. `/range-batch` adopts the same compact per-variant contract. **This
+   step alone does not bound batch memory in N** (see "Batch
+   consequence" above).
+3. Separate, binding: the per-candidate evaluate→deliver/settle→release
+   phase lands, retaining shared-L0 acquisition.
+4. Only after step 3: re-run the N=1/2/4/11 memory harness from the
+   earlier diagnostic pass this session; confirm approximately constant
+   memory in N.
 
 ## Out of scope for this change
 
 - Exact wire/API shape of the new diagnostic-generation request/route
-  (a real design decision, deferred to implementation planning).
+  (ownership and provenance contract are fixed above; route/schema
+  detail is deferred to implementation planning).
 - Any change to indicator math, accounting math, or fee/PnL semantics.
-- `/range-batch` transport mechanics beyond "consumes the same compact
-  contract" — no streaming/incremental-response design proposed here.
+- Exact transport/call-pattern mechanics for the per-candidate release
+  phase (migration-order step 3) — the requirement that it must not
+  retain N results simultaneously is binding; how that's achieved is
+  deferred, coordinated with the companion `strategy_engine` change.
