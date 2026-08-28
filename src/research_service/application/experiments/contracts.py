@@ -81,6 +81,20 @@ class BatchExperimentRequest(BaseModel):
         return self
 
 
+class BatchSideSummary(BaseModel):
+    """Compact per-side (long/short) research-comparison metrics for one
+    successful batch candidate. No dense or per-trade data
+    (`research-batch-experiments-v1`, "BatchSideSummary shape")."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    trades: int = Field(ge=0)
+    net_pnl: Decimal
+    return_pct: Decimal
+    win_rate: Decimal | None = None
+    profit_factor: Decimal | None = None
+
+
 class BatchCandidateResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -101,6 +115,17 @@ class BatchCandidateResult(BaseModel):
     fees_paid: Decimal | None = None
     net_pnl: Decimal | None = None
     market_data_hash: str | None = None
+    # Research-comparison metrics, present only when status == "completed"
+    # — derived from the in-memory materialized canonical result's trade
+    # list immediately after successful persistence, never from Engine's
+    # raw evaluation output and never by rereading the artifact from disk
+    # (research-batch-experiments-v1, "Authoritative per-candidate path").
+    return_pct: Decimal | None = None
+    win_rate: Decimal | None = None
+    profit_factor: Decimal | None = None
+    max_drawdown: Decimal | None = None
+    long: BatchSideSummary | None = None
+    short: BatchSideSummary | None = None
     error_type: str | None = None
     error_message: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)

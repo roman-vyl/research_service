@@ -598,3 +598,40 @@ def test_legacy_candidate_backtest_shape_is_rejected() -> None:
             candidate_id="legacy",
             backtest={"strategy": {}},  # old shape: nested standalone backtest request
         )
+
+
+# --- Candidate summary fields (research-batch-experiments-v1 extension) -------
+
+
+def test_successful_candidate_row_has_derived_summary_fields(tmp_path: Path) -> None:
+    strategy = FakeStrategyEngine(strategy_result())
+    market = FakeMarketData(market_frame())
+    use_case, _ = build_use_case(strategy, market, tmp_path)
+
+    result = use_case.execute(make_request(candidate("a")))
+
+    item = result.candidates[0]
+    assert item.status == "completed"
+    assert item.return_pct == item.net_pnl / Decimal("1000")
+    assert item.max_drawdown is not None
+    assert item.long is not None
+    assert item.short is not None
+    assert item.long.trades + item.short.trades == item.realised_trade_count
+
+
+def test_failed_candidate_row_has_no_summary_fields(tmp_path: Path) -> None:
+    strategy = FakeStrategyEngine(strategy_result(), failing_variant_ids=frozenset({"b"}))
+    market = FakeMarketData(market_frame())
+    use_case, _ = build_use_case(strategy, market, tmp_path)
+
+    result = use_case.execute(make_request())
+
+    failed = result.candidates[1]
+    assert failed.candidate_id == "b"
+    assert failed.status == "failed"
+    assert failed.return_pct is None
+    assert failed.win_rate is None
+    assert failed.profit_factor is None
+    assert failed.max_drawdown is None
+    assert failed.long is None
+    assert failed.short is None
