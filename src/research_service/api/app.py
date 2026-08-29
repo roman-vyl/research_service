@@ -14,10 +14,11 @@ from research_service.api.routers import market, research, system
 from research_service.application.backtests import (
     MaterializeBacktestOutcome,
     PersistSingleInstanceBacktest,
+    PersistSingleInstanceRun,
     ReadResearchRuns,
     RunSingleInstanceBacktest,
 )
-from research_service.application.diagnostics import ProjectRunDiagnostics
+from research_service.application.diagnostics import GenerateRunDiagnostics, ProjectRunDiagnostics
 from research_service.application.experiments import PersistBatchExperiment, RunBatchExperiment
 from research_service.application.market import GetCandlesWindow, GetChartBundle, GetEmaWindow
 from research_service.application.research import GetComponentCatalog, ValidateStrategyConfig
@@ -72,7 +73,12 @@ def _build_services(settings: Settings, container: Container) -> AppServices:
         container.strategy_engine,
         container.market_data,
     )
-    persist_single_instance_backtest = PersistSingleInstanceBacktest(container.artifacts)
+    # Batch's own persistence stays on the unmodified legacy writer
+    # (`research-production-cutover-v1`: "Shared batch/single-instance
+    # infrastructure stays batch-shaped") -- not exposed via AppServices,
+    # used only by RunBatchExperiment below.
+    persist_batch_backtest = PersistSingleInstanceBacktest(container.artifacts)
+    persist_single_instance_run = PersistSingleInstanceRun(container.artifacts)
     read_research_runs = ReadResearchRuns(container.artifacts)
     return AppServices(
         candles_window=candles_window,
@@ -82,14 +88,17 @@ def _build_services(settings: Settings, container: Container) -> AppServices:
         config_validation=config_validation,
         research_configs=ManageResearchConfigs(config_validation, config_store),
         run_single_instance_backtest=run_single_instance_backtest,
-        persist_single_instance_backtest=persist_single_instance_backtest,
+        persist_single_instance_run=persist_single_instance_run,
         read_research_runs=read_research_runs,
         project_run_diagnostics=ProjectRunDiagnostics(read_research_runs),
+        generate_run_diagnostics=GenerateRunDiagnostics(
+            container.strategy_engine, read_research_runs, container.artifacts
+        ),
         run_batch_experiment=RunBatchExperiment(
             container.strategy_engine,
             container.market_data,
             MaterializeBacktestOutcome(container.strategy_engine),
-            persist_single_instance_backtest,
+            persist_batch_backtest,
         ),
         persist_batch_experiment=PersistBatchExperiment(container.artifacts),
     )

@@ -15,6 +15,7 @@ from research_service.domain.contracts import (
     ManagedReplayRequest,
     ManagedReplayResult,
     MarketRange,
+    StrategyDiagnosticEvaluationDTO,
     StrategyEvaluationBatchRequest,
     StrategyEvaluationBatchVariantOutcome,
     StrategyEvaluationRequest,
@@ -130,6 +131,105 @@ class HttpStrategyEngineClient:
         # (strategy-evaluation-canonical-boundary-v1) — stamp Research's own
         # already-derived identity instead of parsing it off the wire.
         return _parse_evaluation_result(body, instance_id=request.instance_id)
+
+    def evaluate_range_projection(
+        self,
+        request: StrategyEvaluationRequest,
+    ) -> HistoricalExecutionProjectionDTO:
+        """`compact-strategy-evaluation-boundary-v1` I7: production
+        single-instance path. Calls the same `/strategy-evaluations/
+        range` route as `evaluate_range` -- Engine's I7 cutover made
+        this route serve `.v2` only -- and decodes via the real
+        `parse_historical_execution_projection`. `/range-batch`'s
+        consumer (`evaluate_range_batch` above) is untouched and keeps
+        calling `_parse_evaluation_result`."""
+
+        payload: dict[str, object] = {
+            "market": {
+                "ticker": request.market.ticker,
+                "base_timeframe": request.market.timeframe,
+                "from_ms": request.market.from_ms,
+                "to_ms": request.market.to_ms,
+            },
+            "expected_market_data_hash": request.expected_market_data_hash,
+            "strategy": {
+                "strategy_id": request.strategy_id,
+                "raw_spec": request.strategy_spec,
+            },
+            "options": {
+                "include_features": request.include_features,
+                "include_contexts": request.include_contexts,
+                "include_component_evidence": request.include_component_evidence,
+                "include_state_artifact": False,
+            },
+        }
+        body = self._post_json(
+            "/v1/strategy-evaluations/range",
+            payload,
+            "Strategy Engine range evaluation request failed",
+        )
+        return parse_historical_execution_projection(body)
+
+    def evaluate_range_diagnostics(
+        self,
+        request: StrategyEvaluationRequest,
+    ) -> StrategyDiagnosticEvaluationDTO:
+        """Calls Engine's separate dense diagnostic contract -- unaffected
+        by I7's `/range` cutover -- to build a run's separately persisted
+        diagnostic artifact (`research-diagnostics-projection-v1`)."""
+
+        payload: dict[str, object] = {
+            "market": {
+                "ticker": request.market.ticker,
+                "base_timeframe": request.market.timeframe,
+                "from_ms": request.market.from_ms,
+                "to_ms": request.market.to_ms,
+            },
+            "expected_market_data_hash": request.expected_market_data_hash,
+            "strategy": {
+                "strategy_id": request.strategy_id,
+                "raw_spec": request.strategy_spec,
+            },
+        }
+        body = self._post_json(
+            "/v1/strategy-evaluations/range/diagnostics",
+            payload,
+            "Strategy Engine diagnostic evaluation request failed",
+        )
+        market_raw = body.get("market")
+        if not isinstance(market_raw, dict):
+            raise UpstreamServiceError(
+                service="strategy_engine",
+                status_code=502,
+                message="Strategy Engine diagnostic evaluation field market is invalid",
+            )
+        market = MarketRange(
+            ticker=str(market_raw.get("ticker", "")),
+            timeframe=str(market_raw.get("base_timeframe", "")),
+            from_ms=_int(market_raw.get("from_ms", -1)),
+            to_ms=_int(market_raw.get("to_ms", -1)),
+        )
+        try:
+            return StrategyDiagnosticEvaluationDTO(
+                contract_version=cast(Any, body.get("contract_version")),
+                strategy_id=str(body.get("strategy_id", "")),
+                config_hash=str(body.get("config_hash", "")),
+                market=market,
+                market_data_hash=str(market_raw.get("market_data_hash", "")),
+                bar_count=_int(market_raw.get("bar_count", -1)),
+                features=_object(body, "features"),
+                contexts=_object(body, "contexts"),
+                potential_entries=_object(body, "potential_entries"),
+                component_evidence=_object(body, "component_evidence"),
+                warnings=tuple(str(value) for value in _list(body.get("warnings", []))),
+            )
+        except ValidationError as exc:
+            raise UpstreamServiceError(
+                service="strategy_engine",
+                status_code=502,
+                message="Strategy Engine diagnostic evaluation response is invalid",
+                details={"errors": exc.errors(include_url=False, include_context=False)},
+            ) from exc
 
     def evaluate_range_batch(
         self,

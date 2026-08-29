@@ -31,7 +31,7 @@ from test_single_instance_backtest import (
     FakeStrategyEngine,
     market_frame,
     strategy_identity,
-    strategy_result,
+    strategy_projection,
 )
 
 _RAW_SPEC = {"anchor": {"period": 200}}
@@ -146,13 +146,13 @@ def test_managed_replay_events_survive_execution_loop() -> None:
     and returned as part of the one authoritative execute() outcome — not a caller-owned
     sink."""
 
-    engine = ManagedEventsStrategyEngine(strategy_result())
+    engine = ManagedEventsStrategyEngine(strategy_projection())
     use_case = RunSingleInstanceBacktest(engine, FakeMarketData(market_frame()))
 
     outcome = use_case.execute(_request(managed_policy_enabled=True))
 
-    assert len(outcome.result.accounting.trades) == 1
-    position_id = outcome.result.accounting.trades[0].position_id
+    assert len(outcome.accounting.trades) == 1
+    position_id = outcome.accounting.trades[0].position_id
     assert len(outcome.managed_policy_events) == 2
     assert {event.event_type for event in outcome.managed_policy_events} == {
         "phase_changed",
@@ -215,7 +215,7 @@ def _persist_via_backtest_endpoint(
     *,
     managed_policy_enabled: bool,
 ) -> tuple[TestClient, str]:
-    engine = ManagedEventsStrategyEngine(strategy_result())
+    engine = ManagedEventsStrategyEngine(strategy_projection())
     container = _container(tmp_path, engine)
     client = TestClient(create_app(container.settings, container))
     payload = _http_request(managed_policy_enabled=managed_policy_enabled)

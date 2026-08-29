@@ -4,24 +4,26 @@ from __future__ import annotations
 
 from research_service.application.backtests.contracts import SingleInstanceBacktestRequest
 from research_service.application.backtests.history_window import ResolveBacktestWindow
-from research_service.application.backtests.materialize_backtest_outcome import (
-    MaterializeBacktestOutcome,
-    SingleInstanceBacktestOutcome,
+from research_service.application.backtests.materialize_backtest_projection import (
+    MaterializeBacktestProjectionOutcome,
+    SingleInstanceRunOutcome,
 )
 from research_service.domain.contracts import StrategyEvaluationRequest
 from research_service.domain.strategy_instance import derive_strategy_instance_id
 from research_service.ports.market_data import MarketDataPort
 from research_service.ports.strategy_engine import StrategyEnginePort
 
-__all__ = ["RunSingleInstanceBacktest", "SingleInstanceBacktestOutcome"]
+__all__ = ["RunSingleInstanceBacktest", "SingleInstanceRunOutcome"]
 
 
 class RunSingleInstanceBacktest:
-    """Resolve the market window, acquire one Strategy Engine evaluation, and
-    delegate the rest (execution/managed-replay/accounting/result
-    construction) to `MaterializeBacktestOutcome` — the Phase-B continuation
-    seam that a future batch path can call directly with an
-    Engine-evaluation-per-candidate it already has in hand."""
+    """Resolve the market window, acquire one Strategy Engine
+    `HistoricalExecutionProjection` (`.v2`), and delegate the rest
+    (execution/managed-replay/accounting) to
+    `MaterializeBacktestProjectionOutcome` (I7,
+    `compact-strategy-evaluation-boundary-v1`). Deliberately NOT
+    `MaterializeBacktestOutcome` -- that class stays batch-only, unmodified
+    (`research-production-cutover-v1`)."""
 
     def __init__(
         self,
@@ -31,12 +33,12 @@ class RunSingleInstanceBacktest:
         self._strategy_engine = strategy_engine
         self._market_data = market_data
         self._window_planner = ResolveBacktestWindow(market_data)
-        self._materialize = MaterializeBacktestOutcome(strategy_engine)
+        self._materialize = MaterializeBacktestProjectionOutcome(strategy_engine)
 
     def execute(
         self,
         request: SingleInstanceBacktestRequest,
-    ) -> SingleInstanceBacktestOutcome:
+    ) -> SingleInstanceRunOutcome:
         instance_id = derive_strategy_instance_id(
             strategy_id=request.strategy.strategy_id,
             ticker=request.strategy.ticker,
@@ -57,10 +59,10 @@ class RunSingleInstanceBacktest:
             market=window.market,
             expected_market_data_hash=window.market_data_hash,
         )
-        evaluation = self._strategy_engine.evaluate_range(strategy_request)
+        projection = self._strategy_engine.evaluate_range_projection(strategy_request)
         market_frame = self._market_data.read_historical_range(
             window.market,
             expected_market_data_hash=window.market_data_hash,
         )
 
-        return self._materialize.execute(request, evaluation, market_frame)
+        return self._materialize.execute(request, instance_id, projection, market_frame)

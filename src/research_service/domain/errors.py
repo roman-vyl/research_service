@@ -88,6 +88,20 @@ class InvalidRunArtifact(ResearchServiceError):
         )
 
 
+class DiagnosticsNotYetGenerated(ResearchServiceError):
+    """Run exists but has no diagnostic artifact yet -- distinct from an
+    error: a stable "not yet generated" state
+    (research-diagnostics-projection-v1)."""
+
+    def __init__(self, run_id: str) -> None:
+        super().__init__(
+            code="diagnostics_not_yet_generated",
+            message=f"diagnostics have not been generated for run {run_id}",
+            status_code=404,
+            details={"run_id": run_id},
+        )
+
+
 class ManagedPolicyTraceUnavailable(ResearchServiceError):
     """Run's artifact bundle predates managed_policy_events.json. Not "no
     events" — a distinct "we cannot know" state for legacy bundles."""

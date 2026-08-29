@@ -6,7 +6,9 @@ from dataclasses import dataclass
 from typing import Any, Protocol
 
 from research_service.domain.contracts import (
+    HistoricalExecutionProjectionDTO,
     MarketRange,
+    StrategyDiagnosticEvaluationDTO,
     StrategyEvaluationBatchRequest,
     StrategyEvaluationBatchVariantOutcome,
     StrategyEvaluationRequest,
@@ -29,6 +31,16 @@ class StrategyEnginePort(Protocol):
         self,
         request: StrategyEvaluationRequest,
     ) -> StrategyEvaluationResult: ...
+
+    def evaluate_range_projection(
+        self,
+        request: StrategyEvaluationRequest,
+    ) -> HistoricalExecutionProjectionDTO: ...
+
+    def evaluate_range_diagnostics(
+        self,
+        request: StrategyEvaluationRequest,
+    ) -> StrategyDiagnosticEvaluationDTO: ...
 
     def evaluate_range_batch(
         self,

@@ -22,6 +22,20 @@ class RunArtifactStore(ArtifactStore, Protocol):
         files: Mapping[str, bytes],
     ) -> Path: ...
 
+    def write_run_supplementary_file(
+        self,
+        run_id: str,
+        relative_name: str,
+        payload: bytes,
+    ) -> Path:
+        """Write one file into an already-published run directory, outside
+        the atomic manifest-tracked bundle -- for artifacts generated after
+        the run itself was persisted (e.g. the diagnostic artifact,
+        `research-diagnostics-projection-v1`: "a separate, explicit
+        operation from reading"). Does not touch or re-verify the existing
+        manifest-tracked files."""
+        ...
+
 
 class BatchArtifactStore(ArtifactStore, Protocol):
     """Atomic persistence boundary for one immutable batch bundle."""

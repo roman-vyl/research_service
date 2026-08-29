@@ -16,11 +16,11 @@ from typing import cast
 from fastapi import Request
 
 from research_service.application.backtests import (
-    PersistSingleInstanceBacktest,
+    PersistSingleInstanceRun,
     ReadResearchRuns,
     RunSingleInstanceBacktest,
 )
-from research_service.application.diagnostics import ProjectRunDiagnostics
+from research_service.application.diagnostics import GenerateRunDiagnostics, ProjectRunDiagnostics
 from research_service.application.experiments import PersistBatchExperiment, RunBatchExperiment
 from research_service.application.market import GetCandlesWindow, GetChartBundle, GetEmaWindow
 from research_service.application.research import GetComponentCatalog, ValidateStrategyConfig
@@ -38,9 +38,10 @@ class AppServices:
     config_validation: ValidateStrategyConfig
     research_configs: ManageResearchConfigs
     run_single_instance_backtest: RunSingleInstanceBacktest
-    persist_single_instance_backtest: PersistSingleInstanceBacktest
+    persist_single_instance_run: PersistSingleInstanceRun
     read_research_runs: ReadResearchRuns
     project_run_diagnostics: ProjectRunDiagnostics
+    generate_run_diagnostics: GenerateRunDiagnostics
     run_batch_experiment: RunBatchExperiment
     persist_batch_experiment: PersistBatchExperiment
 

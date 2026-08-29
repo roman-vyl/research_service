@@ -1,4 +1,12 @@
-"""Read immutable run bundles and project BFF run/result contracts."""
+"""Read immutable run bundles and project BFF run/result contracts.
+
+Cut over in place to the canonical I6.D persistence shape (I7,
+`compact-strategy-evaluation-boundary-v1`) -- `/runs` reads only
+canonical-shape runs after I7 (`research-production-cutover-v1`). No
+`contract_version`-based shape discrimination, no legacy reader, no
+fallback: a run persisted before this cutover (or by the still-unmodified
+batch path, before I8 migrates it too) is not supported here.
+"""
 
 from __future__ import annotations
 
@@ -13,20 +21,25 @@ from pydantic import ValidationError
 from research_service.application.backtests.run_views import (
     RunCompactSummary,
     RunDetail,
+    RunDetailResult,
     RunMetrics,
     RunSummary,
     RunTrades,
 )
+from research_service.accounting.contracts import TradeRecord
 from research_service.application.backtests.artifacts import RunArtifactManifest
-from research_service.application.backtests.contracts import (
-    SingleInstanceBacktestRequest,
-    SingleInstanceBacktestResult,
+from research_service.application.backtests.contracts import SingleInstanceBacktestRequest
+from research_service.application.backtests.persist_run import SingleInstanceRunResult
+from research_service.domain.contracts import (
+    HistoricalExecutionProjectionDTO,
+    StrategyDiagnosticEvaluationDTO,
 )
 from research_service.domain.errors import (
     InvalidRunArtifact,
     ManagedPolicyTraceUnavailable,
     RunNotFound,
 )
+from research_service.domain.execution import ExecutionEvent
 from research_service.execution.managed_policy_events import ManagedPolicyEventTrace
 from research_service.ports.artifacts import RunArtifactReader
 
@@ -35,7 +48,10 @@ from research_service.ports.artifacts import RunArtifactReader
 class _RunDocuments:
     manifest: RunArtifactManifest
     request: SingleInstanceBacktestRequest
-    result: SingleInstanceBacktestResult
+    result: SingleInstanceRunResult
+    strategy_evaluation: HistoricalExecutionProjectionDTO
+    trades: tuple[TradeRecord, ...]
+    execution_events: tuple[ExecutionEvent, ...]
     metrics: dict[str, Any]
     managed_policy_events_raw: bytes | None
 
@@ -55,7 +71,7 @@ def _int(metrics: dict[str, Any], key: str) -> int:
 
 
 class ReadResearchRuns:
-    """Read only the new versioned artifact-store layout."""
+    """Read only the canonical (I7) single-instance run bundle layout."""
 
     def __init__(self, store: RunArtifactReader) -> None:
         self._store = store
@@ -77,7 +93,13 @@ class ReadResearchRuns:
         documents = self._documents(run_id)
         return RunDetail(
             manifest=documents.manifest,
-            result=documents.result,
+            result=RunDetailResult(
+                run_id=documents.result.run_id,
+                instance_id=documents.result.instance_id,
+                strategy_evaluation=documents.strategy_evaluation,
+                execution_events=documents.execution_events,
+                trades=documents.trades,
+            ),
             strategy_spec=documents.request.strategy.raw_spec,
         )
 
@@ -92,13 +114,33 @@ class ReadResearchRuns:
 
     def trades(self, run_id: str) -> RunTrades:
         documents = self._documents(run_id)
-        return RunTrades(run_id=run_id, trades=documents.result.accounting.trades)
+        return RunTrades(run_id=run_id, trades=documents.trades)
 
     def managed_policy_events(self, run_id: str) -> ManagedPolicyEventTrace:
         documents = self._documents(run_id)
         if documents.managed_policy_events_raw is None:
             raise ManagedPolicyTraceUnavailable(run_id)
         return ManagedPolicyEventTrace.model_validate_json(documents.managed_policy_events_raw)
+
+    def diagnostic_artifact(self, run_id: str) -> StrategyDiagnosticEvaluationDTO | None:
+        """The run's separately persisted diagnostic artifact
+        (`research-diagnostics-projection-v1`), or `None` if it has not
+        been generated yet -- a stable, distinct state, not an error.
+        Written outside the manifest-tracked atomic bundle
+        (`write_run_supplementary_file`), so it is read directly, not
+        through `_documents()`'s manifest-hash-verified payload set."""
+
+        try:
+            raw = self._store.read_run_file(run_id, "diagnostics.json")
+        except FileNotFoundError:
+            # Distinguish "run does not exist" from "run exists, no
+            # diagnostics yet" -- confirm the run itself is real first.
+            self._documents(run_id)
+            return None
+        try:
+            return StrategyDiagnosticEvaluationDTO.model_validate_json(raw)
+        except ValidationError as exc:
+            raise InvalidRunArtifact(str(exc), run_id=run_id) from exc
 
     def metrics(self, run_id: str) -> RunMetrics:
         documents = self._documents(run_id)
@@ -143,9 +185,26 @@ class ReadResearchRuns:
             result_raw = payloads["result.json"]
             metrics_raw = payloads["metrics.json"]
             request = SingleInstanceBacktestRequest.model_validate_json(request_raw)
-            result = SingleInstanceBacktestResult.model_validate_json(result_raw)
+            result = SingleInstanceRunResult.model_validate_json(result_raw)
+            strategy_evaluation = HistoricalExecutionProjectionDTO.model_validate_json(
+                payloads[result.strategy_evaluation_ref.path]
+            )
+            trades = tuple(
+                TradeRecord.model_validate(item)
+                for item in json.loads(payloads[result.trades_ref.path])
+            )
+            execution_events = tuple(
+                ExecutionEvent.model_validate(item)
+                for item in json.loads(payloads[result.execution_events_ref.path])
+            )
             metrics = json.loads(metrics_raw)
-        except (KeyError, ValidationError, json.JSONDecodeError, TypeError, ValueError) as exc:
+        except (
+            KeyError,
+            ValidationError,
+            json.JSONDecodeError,
+            TypeError,
+            ValueError,
+        ) as exc:
             raise InvalidRunArtifact(str(exc), run_id=run_id) from exc
         # request.run_id no longer exists (run_id is Research-generated, not
         # a request field) — only manifest/result identity is cross-checked.
@@ -155,6 +214,9 @@ class ReadResearchRuns:
             manifest=manifest,
             request=request,
             result=result,
+            strategy_evaluation=strategy_evaluation,
+            trades=trades,
+            execution_events=execution_events,
             metrics=metrics,
             managed_policy_events_raw=managed_policy_events_raw,
         )
@@ -164,17 +226,19 @@ class ReadResearchRuns:
         # The resolved/effective market (not the as-requested market) —
         # under `range_policy=full_available` the two differ, and the
         # summary must report what was actually evaluated and executed.
-        market = documents.result.strategy_evaluation.market
+        # Sourced directly from result.json's own identity subset, not by
+        # opening strategy_evaluation.json for basic run identity.
+        result = documents.result
         strategy = documents.request.strategy
         return RunSummary(
             run_id=documents.manifest.run_id,
             created_at_utc=documents.manifest.created_at_utc,
             instance_id=documents.manifest.instance_id,
             strategy_id=strategy.strategy_id,
-            ticker=market.ticker,
-            timeframe=market.timeframe,
-            from_ms=market.from_ms,
-            to_ms=market.to_ms,
+            ticker=result.ticker,
+            timeframe=result.timeframe,
+            from_ms=result.from_ms,
+            to_ms=result.to_ms,
             realised_trade_count=_int(documents.metrics, "realised_trade_count"),
             open_position_count=_int(documents.metrics, "open_position_count"),
             final_equity=_decimal(documents.metrics, "final_equity"),

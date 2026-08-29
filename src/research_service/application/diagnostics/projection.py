@@ -18,7 +18,8 @@ from research_service.api.contracts.diagnostics import (
 )
 from research_service.api.contracts.managed_policy_events import ManagedPolicyEventTrace
 from research_service.application.backtests.read_artifacts import ReadResearchRuns
-from research_service.domain.errors import InvalidRequest
+from research_service.domain.contracts import StrategyDiagnosticEvaluationDTO
+from research_service.domain.errors import DiagnosticsNotYetGenerated, InvalidRequest
 
 _MAX_BARS = 50_000
 
@@ -199,9 +200,32 @@ def _context_trace(
     return htf, tuple(records)
 
 
-def _component_events(result: Any, start: int, end: int) -> tuple[ComponentEvent, ...]:
+def _entry_series(
+    entry_opportunities: Any, side: str, bar_count: int
+) -> tuple[bool, ...]:
+    """Post-I7 equivalent of the legacy dense `entries[side]`/
+    `exit_policy.stop_ready[side]` pair -- both collapse to the same
+    series, since `HistoricalExecutionProjection.entry_opportunities`
+    already represents "entry_allowed AND protection_ready" as one
+    collapsed fact (Master Plan invariant: `stop_ready` does not survive
+    as a standalone entity)."""
+
+    bars = {o.bar_index for o in entry_opportunities if o.side == side}
+    return tuple(i in bars for i in range(bar_count))
+
+
+def _component_events(
+    *,
+    diagnostics: StrategyDiagnosticEvaluationDTO,
+    execution_events: tuple[Any, ...],
+    time_ms: tuple[int, ...],
+    bar_count: int,
+    base_timeframe: str,
+    start: int,
+    end: int,
+) -> tuple[ComponentEvent, ...]:
     events: list[ComponentEvent] = []
-    evidence = result.strategy_evaluation.component_evidence
+    evidence = diagnostics.component_evidence
     for group, role in (
         ("direction_blockers", "entry_block"),
         ("setups", "entry_block"),
@@ -223,25 +247,25 @@ def _component_events(result: Any, start: int, end: int) -> tuple[ComponentEvent
             for component in components:
                 component_id = str(component.get("component_id", group))
                 instance_id = str(component.get("instance_id", component_id))
-                allowed = _bools(component.get("allowed"), result.strategy_evaluation.bar_count)
+                allowed = _bools(component.get("allowed"), bar_count)
                 for index, active in enumerate(allowed):
-                    time_ms = result.strategy_evaluation.time_ms[index]
-                    if not active or not start <= time_ms < end:
+                    bar_time_ms = time_ms[index]
+                    if not active or not start <= bar_time_ms < end:
                         continue
                     events.append(
                         ComponentEvent(
-                            time=time_ms // 1000,
+                            time=bar_time_ms // 1000,
                             event_type="point",
                             role=role,
                             side=side,
                             component_id=component_id,
                             instance_id=instance_id,
                             label=component_id,
-                            base_timeframe=result.strategy_evaluation.market.timeframe,
+                            base_timeframe=base_timeframe,
                             metadata={"evidence_group": group, "bar_index": index},
                         )
                     )
-    for event in result.execution.events:
+    for event in execution_events:
         if not start <= event.time_ms < end:
             continue
         metadata = dict(event.metadata)
@@ -255,7 +279,7 @@ def _component_events(result: Any, start: int, end: int) -> tuple[ComponentEvent
                 instance_id=event.instance_id,
                 label=event.event_type,
                 tooltip=str(metadata.get("reason")) if metadata.get("reason") else None,
-                base_timeframe=result.strategy_evaluation.market.timeframe,
+                base_timeframe=base_timeframe,
                 metadata={"position_id": event.position_id, "fill_id": event.fill_id, **metadata},
             )
         )
@@ -285,26 +309,39 @@ class ProjectRunDiagnostics:
             )
         if from_ms >= to_ms:
             raise InvalidRequest("from must be less than to")
+
+        diagnostics = self._runs.diagnostic_artifact(run_id)
+        if diagnostics is None:
+            raise DiagnosticsNotYetGenerated(run_id)
+
         market = result.strategy_evaluation.market
+        full_size = result.strategy_evaluation.bar_count
+        time_ms = tuple(market.from_ms + i * market.step_ms for i in range(full_size))
         start = max(from_ms, market.from_ms)
         end = min(to_ms, market.to_ms)
-        indices = [
-            i for i, value in enumerate(result.strategy_evaluation.time_ms) if start <= value < end
-        ]
+        indices = [i for i, value in enumerate(time_ms) if start <= value < end]
         if len(indices) > _MAX_BARS:
             indices = indices[:_MAX_BARS]
-        times_ms = tuple(result.strategy_evaluation.time_ms[i] for i in indices)
-        full_size = result.strategy_evaluation.bar_count
-        raw = _mapping(result.strategy_evaluation.raw)
+        times_ms = tuple(time_ms[i] for i in indices)
+
+        raw = {"features": diagnostics.features, "contexts": diagnostics.contexts}
         htf_full, context_full = _context_trace(
-            raw, result.strategy_evaluation.component_evidence, full_size, context_overlay_ref
+            raw, diagnostics.component_evidence, full_size, context_overlay_ref
         )
+
+        entries = {
+            "long": _entry_series(result.strategy_evaluation.entry_opportunities, "long", full_size),
+            "short": _entry_series(
+                result.strategy_evaluation.entry_opportunities, "short", full_size
+            ),
+        }
+        exit_policy = {"stop_ready": {"long": entries["long"], "short": entries["short"]}}
 
         def sliced_side(side: str) -> SideSignalTrace:
             full = _side_trace(
-                result.strategy_evaluation.component_evidence,
-                result.strategy_evaluation.entries,
-                result.strategy_evaluation.exit_policy,
+                diagnostics.component_evidence,
+                entries,
+                exit_policy,
                 side,
                 full_size,
             )
@@ -339,17 +376,18 @@ class ProjectRunDiagnostics:
         )
         return SignalTraceBundle(
             times=tuple(value // 1000 for value in times_ms),
-            meta=_spec_meta(
-                _mapping(result.strategy_evaluation.raw.get("strategy", {})).get(
-                    "raw_spec", detail.result.strategy_evaluation.raw.get("strategy_spec", {})
-                )
-                if isinstance(result.strategy_evaluation.raw, dict)
-                else {},
-                result.instance_id,
-            ),
+            meta=_spec_meta(detail.strategy_spec, result.instance_id),
             htf_context=htf,
             context_consumption_trace=contexts,
-            component_events=_component_events(result, start, end),
+            component_events=_component_events(
+                diagnostics=diagnostics,
+                execution_events=result.execution_events,
+                time_ms=time_ms,
+                bar_count=full_size,
+                base_timeframe=market.timeframe,
+                start=start,
+                end=end,
+            ),
             long=sliced_side("long"),
             short=sliced_side("short"),
         )
@@ -400,12 +438,12 @@ class ProjectRunDiagnostics:
         trace = self._runs.managed_policy_events(run_id)
         if position_id is None:
             return trace
-        known_position_ids = {
-            position_execution.position.position_id
-            for position_execution in detail.result.execution.positions
-        }
-        if detail.result.execution.final_open_position is not None:
-            known_position_ids.add(detail.result.execution.final_open_position.position_id)
+        # Canonical shape (compact-strategy-evaluation-boundary-v1, I7):
+        # `execution_events` carries every position's id regardless of
+        # whether it closed (entry_filled/exit_filled) or was left open
+        # at range end (position_left_open) -- a strict superset of what
+        # `execution.positions`/`final_open_position` provided before.
+        known_position_ids = {event.position_id for event in detail.result.execution_events}
         if position_id not in known_position_ids:
             raise InvalidRequest(
                 "position_id does not belong to this run",

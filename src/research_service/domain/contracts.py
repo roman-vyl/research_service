@@ -550,6 +550,33 @@ class HistoricalExecutionProjectionDTO(BaseModel):
         return self
 
 
+class StrategyDiagnosticEvaluationDTO(BaseModel):
+    """Research-owned decode of Strategy Engine's separate dense diagnostic
+    contract (`strategy_diagnostic_evaluation.v1`, unaffected by I7's
+    `/range` cutover -- `POST /strategy-evaluations/range/diagnostics`
+    keeps serving this shape). Used only to build a run's separately
+    persisted diagnostic artifact
+    (`research-diagnostics-projection-v1`), never as execution input.
+    Field content (`features`/`contexts`/`potential_entries`/
+    `component_evidence`) is passed through as opaque dicts -- this
+    module does not need typed access to their internals, only to
+    forward them to the diagnostics projection layer."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    contract_version: Literal["strategy_diagnostic_evaluation.v1"]
+    strategy_id: str = Field(min_length=1)
+    config_hash: str = Field(min_length=1)
+    market: MarketRange
+    market_data_hash: str = Field(min_length=1)
+    bar_count: int = Field(ge=0)
+    features: dict[str, object]
+    contexts: dict[str, object]
+    potential_entries: dict[str, object]
+    component_evidence: dict[str, object]
+    warnings: tuple[str, ...] = ()
+
+
 def validate_projection_alignment(
     projection: HistoricalExecutionProjectionDTO,
     *,

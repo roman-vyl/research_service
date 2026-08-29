@@ -102,12 +102,15 @@ def run_backtest(
 
     application_request = payload.to_application()
     outcome = services(request).run_single_instance_backtest.execute(application_request)
-    result = outcome.result
     try:
-        persisted = services(request).persist_single_instance_backtest.execute(
+        persisted = services(request).persist_single_instance_run.execute(
             application_request,
-            result,
-            outcome.managed_policy_events,
+            run_id=outcome.run_id,
+            instance_id=outcome.instance_id,
+            strategy_evaluation=outcome.strategy_evaluation,
+            execution=outcome.execution,
+            accounting=outcome.accounting,
+            managed_policy_events=outcome.managed_policy_events,
         )
     except FileExistsError as exc:
         # run_id is Research-generated, not caller-supplied — a collision
@@ -115,15 +118,15 @@ def run_backtest(
         # duplicate-run submission (canonical-strategy-instance-v1, REMOVED
         # "Duplicate run rejection"). Still surfaced as 409 against the
         # generated identity, since the artifact path is genuinely taken.
-        raise RunAlreadyExists(result.run_id) from exc
+        raise RunAlreadyExists(outcome.run_id) from exc
 
     return BacktestRunResponse(
-        run_id=result.run_id,
-        instance_id=result.instance_id,
-        realised_trade_count=result.accounting.realised_trade_count,
-        open_position_count=result.accounting.open_position_count,
-        final_equity=result.accounting.final_equity,
-        net_pnl=result.accounting.net_pnl,
+        run_id=outcome.run_id,
+        instance_id=outcome.instance_id,
+        realised_trade_count=outcome.accounting.realised_trade_count,
+        open_position_count=outcome.accounting.open_position_count,
+        final_equity=outcome.accounting.final_equity,
+        net_pnl=outcome.accounting.net_pnl,
         artifact_path=persisted.artifact_path,
         manifest_contract_version=persisted.manifest.contract_version,
         market_data_hash=persisted.manifest.market_data_hash,
@@ -158,6 +161,17 @@ def get_run_trades(request: Request, run_id: str) -> RunTrades:
 @router.get("/runs/{run_id}/metrics", response_model=RunMetrics)
 def get_run_metrics(request: Request, run_id: str) -> RunMetrics:
     return services(request).read_research_runs.metrics(run_id)
+
+
+@router.post("/runs/{run_id}/diagnostics/generate")
+def generate_run_diagnostics(request: Request, run_id: str) -> dict[str, object]:
+    """Explicit, separate write operation
+    (`research-diagnostics-projection-v1`): generates and persists the
+    run's diagnostic artifact, idempotently -- an already-generated
+    artifact is returned as-is, not recomputed."""
+
+    diagnostics = services(request).generate_run_diagnostics.execute(run_id)
+    return {"run_id": run_id, "contract_version": diagnostics.contract_version}
 
 
 @router.get("/runs/{run_id}/signal-trace", response_model=SignalTraceBundle)

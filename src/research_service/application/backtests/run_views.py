@@ -8,7 +8,8 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field
 
 from research_service.application.backtests.artifacts import RunArtifactManifest
-from research_service.application.backtests.contracts import SingleInstanceBacktestResult
+from research_service.domain.contracts import HistoricalExecutionProjectionDTO
+from research_service.domain.execution import ExecutionEvent
 from research_service.accounting.contracts import TradeRecord
 
 
@@ -41,12 +42,30 @@ class RunCompactSummary(BaseModel):
     artifact_contract_version: str = Field(min_length=1)
 
 
+class RunDetailResult(BaseModel):
+    """The canonical (I7, `compact-strategy-evaluation-boundary-v1`)
+    resolved result content for `RunDetail` -- assembled by
+    `ReadResearchRuns` from the canonical `result.json`'s references plus
+    the referenced files, not a re-embedded on-disk shape itself."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    contract_version: Literal["research_single_instance_run.v2"] = (
+        "research_single_instance_run.v2"
+    )
+    run_id: str = Field(min_length=1)
+    instance_id: str = Field(min_length=1)
+    strategy_evaluation: HistoricalExecutionProjectionDTO
+    execution_events: tuple[ExecutionEvent, ...]
+    trades: tuple[TradeRecord, ...]
+
+
 class RunDetail(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     contract_version: Literal["research_run_detail.v1"] = "research_run_detail.v1"
     manifest: RunArtifactManifest
-    result: SingleInstanceBacktestResult
+    result: RunDetailResult
     # Sourced from the persisted request.json (request.strategy.strategy_spec) —
     # the authoritative strategy spec for one run. Only this field is surfaced;
     # the rest of the persisted request envelope (execution/accounting policy,
