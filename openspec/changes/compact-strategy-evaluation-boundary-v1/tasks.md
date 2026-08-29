@@ -86,14 +86,24 @@ after its predecessor's gate is confirmed.
         existing legacy `run_unified_execution_loop` (unmodified). New
         path: the I5.A harness → `run_projection_execution_loop` →
         `account_execution_loop` (unmodified). Result: 8317 vs. 8317
-        closed trades, **zero diffs** on the full common-facts surface
-        (entry, initial protection, exit, `TradeRecord`, accounting --
-        `gross_pnl`/`net_pnl` identical to the last decimal digit).
-        Attribution fields differ (legacy always `None`, structurally --
-        the legacy reference never populated them, the pre-existing gap
-        I4 restored on the new path) -- reported informationally, not
-        folded into pass/fail, per `research-historical-execution-
-        parity-v1`'s own scoping.
+        closed trades, **zero diffs** on Lane A's full comparison surface
+        per `research-historical-execution-parity-v1`'s corrected
+        per-lane scoping -- every `TradeRecord` field both sides produce
+        (entry/exit bar/time/price, `quantity`, `entry_notional`/`exit_
+        notional`, `gross_pnl`/`entry_fee`/`exit_fee`/`fees_paid`/`net_
+        pnl`, `gross_return_pct`/`net_return_pct`, `equity_before`/
+        `equity_after`, `hold_bars`/`hold_ms`, `exit_candidate_type`/
+        `exit_reason`/`exit_layer`), every `TradePathMetrics` field
+        (`path`), and every `TradeAccountingResult` field (`initial_
+        equity`, `realised_trade_count`, `open_position_count`, `gross_
+        pnl`, `fees_paid`, `net_pnl`, `final_equity`) -- all identical to
+        the last decimal digit. Attribution fields (`exit_rule_id`/
+        `exit_component_id`/`exit_kind`) differ (legacy always `None`,
+        structurally -- the legacy reference never populated them, the
+        pre-existing gap I4 restored on the new path) -- reported
+        informationally, explicitly excluded from Lane A's pass/fail per
+        the corrected spec (`exit_layer` IS compared normally and
+        matches).
 
         **Corrective note**: an earlier attempt used the shared
         profile-sensitive spec for Lane A too and found 6934 vs. 6928
@@ -118,8 +128,19 @@ after its predecessor's gate is confirmed.
         .json` (three distinct profile SL/TP/signal-exit
         configurations, same real entry/setup/HTF machinery as Lane A).
         Real MDS window (60,001 bars): 556 vs. 556 closed trades, zero
-        diffs including attribution/`locked_exit_profile`. Mandatory
-        negative control run against the full `full_available` dataset
+        diffs on Lane B's own comparison surface (side, entry/exit
+        bar/price, `hold_bars`, `gross_pnl`/`net_pnl` -- asserted
+        comparable only under the harness's zero-fee `AccountingPolicy`,
+        the independent simulator has no fee model --, `exit_candidate_
+        type`, `locked_exit_profile`, and exit attribution
+        `exit_rule_id`/`exit_component_id`/`exit_kind`/`exit_layer`,
+        MANDATORY exact on this lane). `TradePathMetrics`/notional/fee/
+        equity fields are explicitly NOT part of Lane B's surface -- the
+        independent reference does not compute them; those exact fields
+        are proven, on real full-scale data, by Lane A instead
+        (`research-historical-execution-parity-v1`'s corrected per-lane
+        scoping). Mandatory negative control run against the full
+        `full_available` dataset
         (676,246 bars, 6928 real trades from the independent simulator)
         found 4 real trades where the locked-profile result provably
         differs from what a deliberately-wrong current-bar-profile

@@ -25,6 +25,27 @@ lookup (using Engine's native `profile_long`/`profile_short` proof-only
 timeline, never the locked profile) would have selected, and reports
 where it diverges from the correct locked-profile result -- proving the
 scenario actually distinguishes the two interpretations.
+
+Comparison surface (mandatory, exact): side, entry/exit bar_index,
+entry/exit price, hold_bars, gross_pnl/net_pnl (comparable to the
+new side's TradeRecord.gross_pnl/.net_pnl only because
+_ACCOUNTING_POLICY is asserted zero-fee below -- the independent
+reference has no fee model), exit_candidate_type, locked_exit_profile,
+and exit attribution (exit_rule_id/exit_component_id/exit_kind/
+exit_layer).
+
+Deliberately NOT compared for Lane B: entry_notional/exit_notional/
+entry_fee/exit_fee/equity_before/equity_after (accounting bookkeeping
+the independent reference never computes -- these are proven, on real
+full-scale data, by Lane A instead; `research-historical-execution-
+parity-v1`'s own "Accounting parity is a consequence, not a separate
+computation" requirement is why re-deriving them independently here
+would not add evidence) and `TradePathMetrics` (mfe/mae/captured/
+giveback -- the independent reference does not scan intrabar OHLC for
+these; nothing in this proof claims they were checked). This is an
+explicit scope boundary, not an oversight -- see `research-
+historical-execution-parity-v1`'s per-lane "Zero-diff comparison
+surface" split.
 """
 
 from __future__ import annotations
@@ -302,6 +323,23 @@ def main(argv: list[str] | None = None) -> int:
                 diffs.append(f"trade[{i}].entry_price: reference={r['entry_price']} new={n.entry_price}")
             if abs(Decimal(str(r["exit_price"])) - n.exit_price) > Decimal("0.00000001"):
                 diffs.append(f"trade[{i}].exit_price: reference={r['exit_price']} new={n.exit_price}")
+            if r["hold_bars"] != n.hold_bars:
+                diffs.append(f"trade[{i}].hold_bars: reference={r['hold_bars']} new={n.hold_bars}")
+            # gross_pnl/net_pnl: the independent reference computes a pure
+            # price-difference gross_pnl with no fee model. Comparable to
+            # both n.gross_pnl and n.net_pnl only because _ACCOUNTING_POLICY
+            # uses the zero-fee default (entry_fee_rate=exit_fee_rate=0), so
+            # gross_pnl == net_pnl on the new side too -- asserted explicitly
+            # below rather than assumed.
+            if _ACCOUNTING_POLICY.entry_fee_rate != 0 or _ACCOUNTING_POLICY.exit_fee_rate != 0:
+                raise AssertionError(
+                    "Lane B's independent reference has no fee model -- "
+                    "_ACCOUNTING_POLICY must stay zero-fee for gross_pnl/net_pnl to be comparable"
+                )
+            if abs(Decimal(str(r["gross_pnl"])) - n.gross_pnl) > Decimal("0.00000001"):
+                diffs.append(f"trade[{i}].gross_pnl: reference={r['gross_pnl']} new={n.gross_pnl}")
+            if n.gross_pnl != n.net_pnl:
+                diffs.append(f"trade[{i}].net_pnl: expected == gross_pnl under zero fees, got {n.net_pnl}")
             if r["exit_candidate_type"] != n.exit_candidate_type:
                 diffs.append(f"trade[{i}].exit_candidate_type: reference={r['exit_candidate_type']} new={n.exit_candidate_type}")
             if r["exit_rule_id"] != n.exit_rule_id:

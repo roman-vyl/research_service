@@ -19,12 +19,18 @@ same range, and runs:
     .build` -> `run_projection_execution_loop` (I4).
 
 Both execution results go through the same, unmodified
-`account_execution_loop`. Reports a field-by-field diff over I5's own
-"Zero-diff comparison surface" (entry, initial protection, exit,
-accounting/TradeRecord, provenance) -- attribution fields are reported
-separately and not folded into the pass/fail count, since Lane A's
-reference path structurally never populates them (a known, already-
-reported architectural fact, not a defect discovered here).
+`account_execution_loop`. Reports a field-by-field diff over EVERY
+`TradeRecord` field both sides actually produce (excluding only the
+self-referential trade_id/position_id/instance_id labels) plus every
+`TradePathMetrics` field, plus every `TradeAccountingResult` field --
+this is Lane A's own real comparison surface, per `research-
+historical-execution-parity-v1`'s per-lane scoping: `exit_rule_id`/
+`exit_component_id`/`exit_kind` are reported separately and NOT folded
+into the pass/fail count, since Lane A's reference path structurally
+never populates them (a known, already-reported architectural fact,
+not a defect discovered here) -- `exit_layer` IS compared normally,
+since both sides already agree on the canonical `"exit_policy"`
+constant regardless of that gap.
 """
 
 from __future__ import annotations
@@ -35,7 +41,7 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from research_service.accounting.contracts import AccountingPolicy, TradeRecord
+from research_service.accounting.contracts import AccountingPolicy, TradePathMetrics, TradeRecord
 from research_service.accounting.service import account_execution_loop
 from research_service.adapters.http.market_data_client import HttpMarketDataClient
 from research_service.adapters.http.strategy_engine_client import (
@@ -90,6 +96,14 @@ def _build_legacy_evaluation(body: dict[str, Any], *, instance_id: str) -> Strat
 
 
 _ENTRY_FIELDS = ("bar_index", "side", "time_ms", "reference_price", "fill_price")
+# Every TradeRecord field both Lane A sides actually produce (both run
+# through the same, unmodified account_execution_loop) -- excludes only
+# self-referential IDs (trade_id/position_id/instance_id, which are
+# Research-generated labels, not cross-system content) and the
+# attribution fields (exit_rule_id/exit_component_id/exit_kind --
+# reported separately below, since the legacy reference structurally
+# never populates them; exit_layer IS compared here since both sides
+# already agree it's the canonical "exit_policy" constant).
 _TRADE_FIELDS = (
     "side",
     "entry_bar_index",
@@ -99,16 +113,49 @@ _TRADE_FIELDS = (
     "entry_price",
     "exit_price",
     "quantity",
+    "entry_notional",
+    "exit_notional",
     "gross_pnl",
+    "entry_fee",
+    "exit_fee",
     "fees_paid",
     "net_pnl",
     "gross_return_pct",
     "net_return_pct",
+    "equity_before",
+    "equity_after",
     "hold_bars",
     "hold_ms",
     "exit_candidate_type",
+    "exit_reason",
+    "exit_layer",
 )
-_ATTRIBUTION_FIELDS = ("exit_rule_id", "exit_component_id", "exit_kind", "exit_layer")
+_PATH_FIELDS = (
+    "mfe_price",
+    "mfe_pct",
+    "mfe_bar_index",
+    "mfe_bars_from_entry",
+    "mae_price",
+    "mae_pct",
+    "mae_bar_index",
+    "mae_bars_from_entry",
+    "captured_price",
+    "captured_pct",
+    "capture_ratio",
+    "giveback_price",
+    "giveback_pct",
+    "bars_from_mfe_to_exit",
+)
+_ATTRIBUTION_FIELDS = ("exit_rule_id", "exit_component_id", "exit_kind")
+
+
+def _diff_path(i: int, r: TradePathMetrics, n: TradePathMetrics) -> list[str]:
+    diffs: list[str] = []
+    for field in _PATH_FIELDS:
+        rv, nv = getattr(r, field), getattr(n, field)
+        if rv != nv:
+            diffs.append(f"trade[{i}].path.{field}: reference={rv!r} new={nv!r}")
+    return diffs
 
 
 def _diff_trades(reference: tuple[TradeRecord, ...], new: tuple[TradeRecord, ...]) -> list[str]:
@@ -121,6 +168,7 @@ def _diff_trades(reference: tuple[TradeRecord, ...], new: tuple[TradeRecord, ...
             rv, nv = getattr(r, field), getattr(n, field)
             if rv != nv:
                 diffs.append(f"trade[{i}].{field}: reference={rv!r} new={nv!r}")
+        diffs.extend(_diff_path(i, r.path, n.path))
     return diffs
 
 
@@ -227,7 +275,15 @@ def main(argv: list[str] | None = None) -> int:
         f"gross_pnl={new_accounting.gross_pnl} net_pnl={new_accounting.net_pnl}"
     )
     accounting_diffs = []
-    for field in ("realised_trade_count", "gross_pnl", "fees_paid", "net_pnl", "final_equity"):
+    for field in (
+        "initial_equity",
+        "realised_trade_count",
+        "open_position_count",
+        "gross_pnl",
+        "fees_paid",
+        "net_pnl",
+        "final_equity",
+    ):
         rv, nv = getattr(legacy_accounting, field), getattr(new_accounting, field)
         if rv != nv:
             accounting_diffs.append(f"{field}: reference={rv!r} new={nv!r}")

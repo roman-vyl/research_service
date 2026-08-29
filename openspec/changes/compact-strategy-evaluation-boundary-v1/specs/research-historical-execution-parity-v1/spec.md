@@ -137,53 +137,85 @@ between the two repos is not currently a working reference mechanism.
 
 ### Requirement: Zero-diff comparison surface
 
-I5 SHALL compare, exactly, the following fields (all sourced from
-existing, already-shipped domain models — no new fields are introduced
-by this capability):
+I5's comparison surface is scoped PER LANE, to what each lane's
+reference mechanism actually, independently produces — not one
+identical field list forced onto both lanes regardless of what their
+references are capable of. A proof implementation SHALL NOT claim a
+field was compared when its lane's reference does not independently
+compute it.
 
-- **Entry**: `EntryFill.bar_index`, `.side`, `.time_ms`, `.reference_
-  price`, `.fill_price`.
-- **Locked profile**: `PositionState.locked_exit_profile` — captured
-  once at fill and held fixed for the position's life (Lane B only;
-  Lane A's canonical spec never changes profile, so this field is
-  trivially constant there).
-- **Initial protection**: `InitialProtection.stop_loss_price`/`.take_
-  profit_price` (Decimal, exact) and `.stop_loss_attribution`/`.take_
-  profit_attribution` (`rule_id`/`component_id`/`exit_kind`/`layer`,
-  exact string equality) — independently nullable per leg, matching
-  whichever leg the reference resolved.
-- **Signal candidate stream while open**: for every bar an independent
-  position remains open, the candidate(s) the locked-profile signal
-  stream carries at that bar (via `HistoricalExecutionProjectionIndex.
-  lookup_signal_event`), compared against the reference's own per-bar
-  signal facts for the same locked profile.
-- **Exit**: `ExitFill.bar_index`, `.time_ms`, `.candidate_type`, `.fill_
-  price`, `.reference_level`.
-- **Exit attribution**: `ExitFill.rule_id`/`.component_id`/`.exit_kind`/
-  `.layer` — exact string equality; `layer` MUST equal the canonical
-  constant `"exit_policy"` on both sides (never read from Engine's wire,
-  which carries no `layer` field).
-- **Accounting / trade record**: every field of `TradeRecord`
-  (`accounting/contracts.py`) — `entry_bar_index`/`exit_bar_index`/
-  `entry_time_ms`/`exit_time_ms`/`entry_price`/`exit_price`/`quantity`/
-  `entry_notional`/`exit_notional`/`gross_pnl`/`entry_fee`/`exit_fee`/
-  `fees_paid`/`net_pnl`/`gross_return_pct`/`net_return_pct`/`equity_
-  before`/`equity_after`/`hold_bars`/`hold_ms`/`exit_candidate_type`/
-  `exit_reason`/`exit_layer`/`exit_rule_id`/`exit_component_id`/`exit_
-  kind`/`path` (`TradePathMetrics`, every field) — all Decimal/int
-  fields compared exactly (Decimal arithmetic throughout this pipeline;
-  no float rounding is introduced downstream of the wire ratio itself).
-- **Aggregate metrics**: every field of `TradeAccountingResult`
-  (`realised_trade_count`, `open_position_count`, `gross_pnl`, `fees_
-  paid`, `net_pnl`, `final_equity`) compared exactly. There is no
-  long/short-split aggregate at N=1 scope in this codebase today
-  (`application/experiments/candidate_summary.py`'s long/short split is
-  a batch-only artifact, `research-batch-experiments-v1`, out of I5
-  scope) — I5 SHALL NOT introduce one.
-- **Provenance**: `instance_id`, `config_hash`, `market_data_hash`,
-  `bar_count`, and market identity (`ticker`/`timeframe`/`from_ms`/
-  `to_ms`) — compared exactly, semantically (not byte-identical
-  serialized JSON).
+**Lane A** (legacy Research execution path as reference) SHALL compare,
+exactly, every field of `TradeRecord` (`accounting/contracts.py`) both
+sides actually produce — `entry_bar_index`/`exit_bar_index`/`entry_
+time_ms`/`exit_time_ms`/`entry_price`/`exit_price`/`quantity`/`entry_
+notional`/`exit_notional`/`gross_pnl`/`entry_fee`/`exit_fee`/`fees_
+paid`/`net_pnl`/`gross_return_pct`/`net_return_pct`/`equity_before`/
+`equity_after`/`hold_bars`/`hold_ms`/`exit_candidate_type`/`exit_
+reason`/`exit_layer`, plus every field of `path` (`TradePathMetrics`,
+every field — both sides compute this identically since both route
+through the same, unmodified `account_execution_loop`), plus every
+field of `TradeAccountingResult` (`realised_trade_count`, `open_
+position_count`, `initial_equity`, `gross_pnl`, `fees_paid`, `net_pnl`,
+`final_equity`), plus provenance (below). `exit_rule_id`/`exit_
+component_id`/`exit_kind` are EXCLUDED from Lane A's pass/fail
+comparison and reported informationally only — Lane A's legacy
+reference path structurally never populates them (`execution/static_
+exits.py` never sets `rule_id`/`component_id`/`exit_kind` on an
+`ExitCandidate`; this is the exact pre-existing gap I4 restored on the
+new path, not a defect this proof is scoped to catch on Lane A). There
+is no long/short-split aggregate at N=1 scope in this codebase today
+(`application/experiments/candidate_summary.py`'s long/short split is a
+batch-only artifact, `research-batch-experiments-v1`, out of I5 scope)
+— I5 SHALL NOT introduce one.
+
+**Lane B** (independent old-BBB-grounded lifecycle simulator as
+reference) SHALL compare, exactly: `side`, `entry_bar_index`, `exit_
+bar_index`, `entry_price`, `exit_price`, `hold_bars`, `gross_pnl`/`net_
+pnl` (comparable only because the harness asserts its `AccountingPolicy`
+is zero-fee — the independent simulator has no fee model, so `gross_pnl
+== net_pnl` is the only valid comparison point, not full fee/notional/
+equity bookkeeping), `exit_candidate_type`, `locked_exit_profile`
+(`PositionState.locked_exit_profile`, captured once at fill and held
+fixed for the position's life — Lane B only; Lane A's canonical spec
+never changes profile, so this field carries no evidentiary value
+there), and exit attribution (`exit_rule_id`/`exit_component_id`/
+`exit_kind`/`exit_layer` — MANDATORY exact match on Lane B, unlike Lane
+A, since the independent simulator DOES produce real attribution from
+the same declared-order selection algorithm `strategy_engine`'s I2
+verified). Also: **initial protection** (`InitialProtection.stop_loss_
+price`/`.take_profit_price` and their attribution, independently
+nullable per leg) and **signal candidate stream while open** (for every
+bar an independent position remains open, the locked-profile signal
+stream's candidates at that bar, via `HistoricalExecutionProjectionIndex
+.lookup_signal_event`, against the reference's own per-bar signal
+facts) are proven as an intrinsic part of how the Lane B reference
+lifecycle is constructed (`_reference_lifecycle` resolves protection
+and looks up signal events from the same real projection data the new
+path consumes, then independently reimplements selection/arbitration on
+top of it) — not restated as separate top-level bullets, since Lane B's
+Zero-diff comparison surface above already is that resolved lifecycle's
+observable output.
+
+**Deliberately NOT part of Lane B's comparison surface**: `entry_
+notional`/`exit_notional`/`entry_fee`/`exit_fee`/`equity_before`/
+`equity_after` and `TradePathMetrics` (`path`, every field) — the
+independent old-BBB-grounded simulator does not compute accounting
+bookkeeping or intrabar MFE/MAE tracking, so there is no independent
+expected value to compare against for these fields on Lane B. This is
+not a gap silently left unchecked: these exact fields ARE independently
+verified, on real full-scale data, by Lane A (whose reference — the
+existing, unmodified legacy execution path — DOES route through the
+same `account_execution_loop`/`TradePathMetrics` computation the new
+path uses). This split is consistent with the "Existing accounting math
+is reused unmodified" requirement below: accounting/path-metrics
+correctness is not an independent claim per lane, it is a consequence
+of execution-fact correctness plus one shared, unmodified computation,
+and Lane A already establishes that consequence holds.
+
+**Provenance** (both lanes): `instance_id`, `config_hash`, `market_
+data_hash`, `bar_count`, and market identity (`ticker`/`timeframe`/
+`from_ms`/`to_ms`) — compared exactly, semantically (not byte-identical
+serialized JSON).
 
 Tolerance: exact equality throughout, with exactly one pre-existing
 exception carried over unchanged, not newly introduced by this
@@ -194,7 +226,27 @@ I1 corrective pass already established for its own attribution
 algorithm (`historical_execution_projection.py::_close_enough`) — I5
 does not define a new tolerance, it reuses that one, and only where a
 float value from the wire is the thing being compared. Every Decimal-
-typed field in the list above is compared with zero tolerance.
+typed field in the lists above is compared with zero tolerance.
+
+#### Scenario: Lane A excludes exit attribution from pass/fail, Lane B requires it
+
+- **WHEN** Lane A's comparison completes with `exit_rule_id`/`exit_
+  component_id`/`exit_kind` differing between the legacy reference (always
+  `None`) and the new path (real attribution)
+- **THEN** this is reported informationally and does NOT fail Lane A
+- **AND** the identical fields differing on Lane B, where the independent
+  reference DOES produce real attribution, DOES fail Lane B.
+
+#### Scenario: A proof does not claim fields its reference cannot independently produce
+
+- **WHEN** Lane B's comparison is evaluated
+- **THEN** `TradePathMetrics`/notional/fee/equity fields are not asserted
+  equal and are not reported as passing — they are simply outside Lane
+  B's comparison surface, because its independent reference does not
+  compute them
+- **AND** this is stated explicitly in the proof's own scope
+  documentation, not left to be inferred from what the code happens not
+  to check.
 
 #### Scenario: Any semantic diff fails the gate
 
