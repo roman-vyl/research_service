@@ -3,7 +3,7 @@
 task I5.A).
 
 NOT `src/`, not wired into any production request path. Reads the JSON
-file produced by `strategy_engine/scripts/i5_serialize_projection_v2.py`
+file produced by `strategy_engine/scripts/serialize_historical_execution_projection_v2.py`
 and decodes it through Research's actual, already-shipped strict
 parser/alignment/index (I3) -- exercising the "v2 envelope decodes
 through the real Research parser unmodified" scenario
@@ -11,7 +11,7 @@ through the real Research parser unmodified" scenario
 route change.
 
 Usage:
-    python scripts/i5_decode_projection.py \
+    python scripts/decode_historical_execution_projection.py \
         --projection projection_v2.json \
         --expected-ticker BTCUSDT.P --expected-timeframe 5m \
         --expected-from-ms 0 --expected-to-ms 300000
@@ -65,14 +65,6 @@ def main(argv: list[str] | None = None) -> int:
         from_ms=args.expected_from_ms,
         to_ms=args.expected_to_ms,
     )
-    validate_projection_alignment(
-        projection,
-        expected_market=expected_market,
-        expected_market_data_hash=projection.market_data_hash,
-        expected_bar_count=projection.bar_count,
-    )
-
-    index = HistoricalExecutionProjectionIndex.build(projection)
 
     print(f"contract_version: {projection.contract_version}")
     print(f"strategy_id: {projection.strategy_id}")
@@ -85,24 +77,47 @@ def main(argv: list[str] | None = None) -> int:
             events = getattr(projection.signal_exit_events, side)[profile]
             if events:
                 print(f"signal_exit_events[{side}][{profile}]: {len(events)} events")
-    print(f"index built: entry lookups + signal lookups ready (id={id(index)})")
-    print("decode + alignment: OK")
 
-    if args.drive_loop:
-        market_data_client = HttpMarketDataClient(args.mds_base_url)
-        try:
-            market_frame = market_data_client.read_range(expected_market)
-        finally:
-            market_data_client.close()
-        result = run_projection_execution_loop(
-            projection.strategy_id, index, market_frame, ExecutionPolicy()
-        )
-        print(
-            f"run_projection_execution_loop: OK -- "
-            f"{len(result.positions)} closed position(s), "
-            f"final_open_position={'yes' if result.final_open_position else 'no'}, "
-            f"{len(result.events)} event(s)"
-        )
+    if not args.drive_loop:
+        # No real MarketFrame fetched in this mode -- there is nothing
+        # independent to align against yet, so this is a decode-only
+        # structural check, not an alignment proof. --drive-loop below is
+        # the real alignment proof: it validates against an independently
+        # fetched MarketFrame's own market/market_data_hash/candle count,
+        # never the projection's own self-reported values.
+        print("decode: OK (no --drive-loop: no independent MarketFrame to align against)")
+        return 0
+
+    market_data_client = HttpMarketDataClient(args.mds_base_url)
+    try:
+        market_frame = market_data_client.read_range(expected_market)
+    finally:
+        market_data_client.close()
+
+    # Real alignment proof: validated against the independently fetched
+    # MarketFrame's own resolved values, never the projection's own
+    # self-reported market_data_hash/bar_count (that would validate the
+    # projection against itself and could never fail).
+    validate_projection_alignment(
+        projection,
+        expected_market=market_frame.market,
+        expected_market_data_hash=market_frame.market_data_hash or "",
+        expected_bar_count=len(market_frame.candles),
+    )
+    print("alignment (against independently fetched MarketFrame): OK")
+
+    index = HistoricalExecutionProjectionIndex.build(projection)
+    print(f"index built: entry lookups + signal lookups ready (id={id(index)})")
+
+    result = run_projection_execution_loop(
+        projection.strategy_id, index, market_frame, ExecutionPolicy()
+    )
+    print(
+        f"run_projection_execution_loop: OK -- "
+        f"{len(result.positions)} closed position(s), "
+        f"final_open_position={'yes' if result.final_open_position else 'no'}, "
+        f"{len(result.events)} event(s)"
+    )
     return 0
 
 
