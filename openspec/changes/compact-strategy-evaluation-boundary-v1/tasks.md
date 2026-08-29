@@ -261,7 +261,7 @@ after its predecessor's gate is confirmed.
         this directly). Gate: I6.E's both checks report zero
         diffs on both the canonical always-on Run and the profile-
         sensitive adversarial Run.
-- [ ] **I7 (Research's share) — Coordinated Cutover, single-instance
+- [x] **I7 (Research's share) — Coordinated Cutover, single-instance
       only.** Normative requirements: new `research-production-cutover-v1`
       (this revision) plus amendments to `research-unified-execution-
       loop-v1`/`research-run-artifacts-v1`/`research-diagnostics-
@@ -270,7 +270,7 @@ after its predecessor's gate is confirmed.
       checkpoint work (old Research cannot parse the new contract, must
       land together). `/range-batch` consumption is explicitly out of
       scope for this cutover's production-approval — I8 owns that.
-      OpenSpec-only this pass — no application code. Sub-tasks:
+      **I7_GATE_PASSED.** Sub-tasks:
   - [x] **I7.A — EXPLORE.** Read production wiring
         (`strategy_routes.py`, `evaluate_range.py`, `ports.py` both
         repos, `run_backtest.py`, `run_batch.py`, `read_artifacts.py`,
@@ -313,18 +313,44 @@ after its predecessor's gate is confirmed.
         live routes explicitly unaffected, coordinated-rollback note
         — mirrored in `strategy_engine`'s own OpenSpec
         (`strategy-research-execution-contract-v1`).
-      OpenSpec pass complete: `I7_OPENSPEC_GATE_READY`. Real cutover
-      code (both repos) and the live N=1 E2E gate below require a
-      separate, explicit go-ahead per the Master Plan's checkpoint
-      gating — not authorized by this OpenSpec pass.
-      Gate: N=1 production path green end to end against the live stack
-      (deferred to actual I7 implementation, not this OpenSpec pass);
-      joint with `strategy_engine`'s Runtime regression fence (this repo
-      has no direct Runtime relationship, so nothing here to regress,
-      but the joint gate still requires that fence green before this
-      checkpoint is considered complete). This OpenSpec-only pass's own
-      gate: `openspec validate --strict` green in both repos, no `src`/
-      `tests` diff in either repo.
+  - [x] **I7.F — Real cutover implementation.** `EmaPullbackRangeEvaluator
+        .evaluate_execution_projection()` + `EvaluateStrategyRange
+        .execute_projection()` wired to `/range` (Engine); `execute()`/
+        `evaluate_execution()` unmodified, still serving `/range-batch`.
+        Research: `evaluate_range_projection`/`evaluate_range_diagnostics`
+        added to `StrategyEnginePort`/`HttpStrategyEngineClient`;
+        `MaterializeBacktestProjectionOutcome`/`PersistSingleInstanceRun`
+        (new, single-instance-only) wired into `RunSingleInstanceBacktest`;
+        `MaterializeBacktestOutcome`/`PersistSingleInstanceBacktest`
+        untouched, batch-only. `ReadResearchRuns`/`run_views` cut over in
+        place to the canonical I6.D shape — one reader, no legacy
+        fallback, no `contract_version` discrimination. Diagnostic-
+        artifact generator (`GenerateRunDiagnostics`,
+        `POST /runs/{run_id}/diagnostics/generate`) built;
+        `diagnostics/projection.py` migrated off the removed dense fields
+        onto the generated artifact + `entry_opportunities` (`signal_
+        entry`/`stop_ready`/`portfolio_entry` collapse to one series,
+        matching the Master Plan's `stop_ready` invariant). Test suites
+        updated in both repos; `ruff`/`mypy` green (`mypy src`, the
+        project's own configured gate in both repos); batch's own
+        `FakeStrategyEngine`/legacy-path tests untouched and still pass.
+  - [x] **I7.G — Live N=1 E2E gate.** Real, freshly-started Strategy
+        Engine + Research Service processes (local, not the shared
+        `bbb_stack` docker deployment) against the real, already-running
+        Market Data Service: confirmed `/range` serves `.v2` from the
+        live Engine; a real `POST /api/research/backtests` request
+        completed end to end (real HTTP `/range` call, real execution,
+        real accounting, 3 closed trades); the persisted bundle is in
+        the canonical shape (`result.json` references, not re-embeds);
+        `GET /runs`, `/runs/{id}`, `/runs/{id}/trades` all read it back
+        correctly through the BFF; `POST /runs/{id}/diagnostics/generate`
+        then `GET /runs/{id}/signal-trace` succeeded (404 `diagnostics_
+        not_yet_generated` beforehand, as specified).
+      Gate: N=1 production path green end to end against a live stack —
+      **PASSED (I7.G)**. `openspec validate --strict`/`--all --strict`
+      green in both repos; `pytest`/`ruff check`/`mypy src` green in
+      both repos; no dual-shape reader, no `contract_version`
+      discrimination, no legacy-compatibility path introduced.
 - [ ] **I8 (Research's share) — Batch Lifetime Redesign.** Only after
       I7. Change the aggregation pattern so N candidates' evaluations
       are never held resident simultaneously in either process, while
