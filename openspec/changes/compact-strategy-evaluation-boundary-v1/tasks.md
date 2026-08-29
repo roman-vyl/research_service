@@ -463,15 +463,26 @@ after its predecessor's gate is confirmed.
         `GET /runs/{run_id}` (closing the I7-to-I8 batch-artifact-
         readability gap); single-instance `POST /backtests` re-confirmed
         unaffected on the same stack. (2) N=1/2/4/11 constant-RSS
-        benchmark: same live Engine process, peak RSS sampled via `ps`
-        during each run — 100928 / 101008 / 101056 / 101184 KB
-        (1.00x/1.00x/1.00x/1.00x of N=1, +0.25% total from N=1 to N=11)
-        — approximately constant, not linear.
-      Gate: N=1/2/4/11 benchmark, peak RSS approximately constant in
-      N — **PASSED (I8.G.2)**; real batch run against a live Engine
-      instance, N>1, succeeds end to end — **PASSED (I8.G.1)**.
-      `openspec validate --strict`/`--all --strict` green;
-      `pytest`/`ruff check`/`mypy src` green in both repos.
+        benchmark, Engine-process side: same live Engine process, peak
+        RSS sampled via `ps` during each run — 100928 / 101008 / 101056 /
+        101184 KB (1.00x/1.00x/1.00x/1.00x of N=1, +0.25% total from N=1
+        to N=11) — approximately constant, not linear. (3) N=1/2/4/11
+        constant-RSS benchmark, Research-process side (closing the gap
+        that I8.G originally measured Engine only): each N run in its
+        own isolated subprocess (`resource.getrusage(RUSAGE_SELF)
+        .ru_maxrss` is a per-process lifetime high-water mark, not
+        resettable within one process, so isolating per-N in separate
+        subprocesses is required for a clean measurement) against a
+        fresh live Engine — 52384 / 52432 / 52576 / 52576 KB
+        (1.00x/1.00x/1.00x/1.00x of N=1, +0.37% total from N=1 to N=11)
+        — approximately constant, confirming `RunBatchExperiment` itself
+        (not just Engine) never holds N candidates' state simultaneously.
+      Gate: N=1/2/4/11 benchmark, peak RSS approximately constant in N,
+      both Engine-process and Research-process — **PASSED (I8.G.2,
+      I8.G.3)**; real batch run against a live Engine instance, N>1,
+      succeeds end to end — **PASSED (I8.G.1)**. `openspec validate
+      --strict`/`--all --strict` green; `pytest`/`ruff check`/
+      `mypy src` green in both repos.
 
 ## Spec
 
