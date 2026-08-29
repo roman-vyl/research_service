@@ -25,7 +25,7 @@ after its predecessor's gate is confirmed.
       `openspec validate --strict` green; spec deltas alone are enough
       to derive I3's DTO/parser shape and I4's execution-loop rework
       without re-reading the audit report.
-- [ ] **I2 dependency note.** I3/I4 below cannot start meaningfully
+- [x] **I2 dependency note.** I3/I4 below cannot start meaningfully
       before `strategy_engine`'s I1/I2 land (Research needs a real
       projection shape to consume and a proven-correct builder to trust)
       — this is a cross-repo ordering constraint, not a task in this
@@ -64,7 +64,7 @@ after its predecessor's gate is confirmed.
       single most important gate in this plan).** Normative requirements:
       `research-historical-execution-parity-v1`. Nothing past this point
       (I6/I7/I8) starts until this is green. Sub-tasks:
-  - [ ] **I5.A — Proof harness foundation.** `strategy_engine`-side
+  - [x] **I5.A — Proof harness foundation.** `strategy_engine`-side
         proof-only `v2` envelope serializer (mirrors `strategy_
         serialization.py::serialize_strategy_evaluation_execution`'s
         structure for the `v2` shape; not `src/`, not route-wired) and
