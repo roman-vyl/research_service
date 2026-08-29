@@ -110,12 +110,15 @@ after its predecessor's gate is confirmed.
         contract; no persistence/diagnostics/accounting-formula changes;
         Runtime untouched. Gate: I5.B and I5.C both report zero semantic
         diffs.
-- [ ] **I6 — Persistence / Diagnostics Split + Canonical Run Artifact
-      Parity.** Normative requirements: `research-run-artifact-
-      parity-v1` (new capability, this revision) plus the already-
-      normative `research-run-artifacts-v1`/`research-diagnostics-
-      projection-v1` (amended in I0). Nothing past this point (I7/I8)
-      starts until this is green. Sub-tasks:
+- [ ] **I6 — Persistence / Diagnostics Split + Persisted-Artifact
+      Regression Proof.** Normative requirements: `research-run-
+      artifact-parity-v1` (new capability, this revision) plus the
+      already-normative `research-run-artifacts-v1`/`research-
+      diagnostics-projection-v1` (amended in I0). Nothing past this
+      point (I7/I8) starts until this is green. A practical regression
+      proof over the narrow common-facts surface, not a full
+      structural-equality/canonicalizer project — see the capability
+      spec's "deliberately NOT a complete canonicalizer" note. Sub-tasks:
   - [ ] **I6.A — Frozen-input/reference harness foundation.**
         Proof-only old-BBB input adapter: construct
         `candles_to_ohlcv_dataframe`'s exact DataFrame shape directly
@@ -124,18 +127,20 @@ after its predecessor's gate is confirmed.
         `execution/data_loader.py::load_candles_once`/`data_engine
         .store.Db` entirely for this proof. No new MDS interface, no
         change to old BBB's production data-loading architecture.
-  - [ ] **I6.B — Old ↔ new Run artifact/field mapping.** Codify the
-        mapping table in design.md's "I6 implementation strategy"
-        section (`trade_records[]` ↔ `trades.json`+
-        `execution_events.json`, `entry_idx`↔`entry_bar_index`,
-        `exit_instance_id`↔`exit_rule_id`, etc.) as the canonicalizer's
-        actual field-translation logic.
-  - [ ] **I6.C — Canonicalization.** Implement the closed
-        nondeterministic-metadata allowlist from `research-run-
-        artifact-parity-v1` (`run_id`, `created_at`/`created_at_utc`,
-        absolute filesystem paths — no wildcards) plus the deterministic
-        canonical JSON serializer (sorted keys, fixed numeric
-        representation, fixed whitespace, UTF-8).
+  - [ ] **I6.B — Common-facts field mapping.** Codify the field-mapping
+        table in design.md's "I6 implementation strategy" section
+        (`entry_idx`↔`entry_bar_index`, `exit_instance_id`↔
+        `exit_rule_id`, etc.) — scoped only to the closed common-facts
+        list in `research-run-artifact-parity-v1`, not a full field
+        union of both systems.
+  - [ ] **I6.C — New-side provenance/storage field verification.**
+        Implement the internal-correctness checks from "New-side
+        provenance/storage fields are verified, not cross-compared":
+        `manifest.json` file hashes match persisted bytes,
+        `market_data_hash`/market identity match the frozen dataset,
+        `instance_id`/`config_hash` match `derive_strategy_instance_id`.
+        No cross-system comparison, no canonicalizer, no
+        nondeterministic-metadata allowlist machinery.
   - [ ] **I6.D — Persistence/diagnostics split.** `strategy_evaluation
         .json` becomes the canonical `HistoricalExecutionProjection`;
         `result.json` references it by identity instead of
@@ -143,27 +148,29 @@ after its predecessor's gate is confirmed.
         I3, confirm still true); diagnostics become the separate,
         explicitly-generated artifact designed in "Diagnostics become
         explicit and optional"/"Diagnostic-evaluation generation" in
-        design.md. Preserve content per "No information loss through
-        storage relocation": `trades.json`, `metrics.json`,
-        `execution_events.json`, `result.json`, manifest, lightweight
-        run/batch summaries keep their current informational content —
-        deduplication/relocation is not information loss.
-  - [ ] **I6.E — Canonical Run parity acceptance.** Run both sides
-        (old-BBB reference via I6.A's adapter; new Research Run via the
-        I6.D-shaped persisted bundle) from the same frozen dataset and
-        an equivalent canonical strategy configuration, canonicalize
-        both (I6.C), and diff. Includes the same profile-sensitive
+        design.md. Preserve content per "No silent loss of common-
+        surface content through the diagnostics split": `trades.json`,
+        `metrics.json`, `execution_events.json`, `result.json`,
+        manifest, lightweight run/batch summaries keep their current
+        informational content — deduplication/relocation is not
+        information loss.
+  - [ ] **I6.E — Common-facts regression proof.** Two checks: (1)
+        cross-system, old-BBB reference (via I6.A's adapter) vs. the
+        persisted new-side Run, on the common-facts surface only,
+        trade for trade; (2) persistence read-back, the in-memory
+        `SingleInstanceBacktestResult` vs. the same facts read back
+        from `trades.json`/`metrics.json`/`execution_events.json`
+        after persisting. Includes the same profile-sensitive
         adversarial scenario I5/I2 already established, at the
         persisted-artifact level this time.
-  - [ ] **I6.F — Regression / artifact completeness gate.** Confirm: no
-        consumer (BFF routes, diagnostics projection) regresses; run
-        artifact bundle still contains everything I5 verified was
-        needed; `research-run-artifacts-v1`/`research-diagnostics-
-        projection-v1` requirements hold; no content-bearing field
-        excluded from I6.E's comparison by anything other than the
-        explicit allowlist. Gate: I6.E reports zero semantic diffs on
-        both the canonical always-on Run and the profile-sensitive
-        adversarial Run.
+  - [ ] **I6.F — Regression / completeness gate.** Confirm: no consumer
+        (BFF routes, diagnostics projection) regresses; run artifact
+        bundle still contains everything I5 verified was needed;
+        `research-run-artifacts-v1`/`research-diagnostics-projection-v1`
+        requirements hold; no common-facts field silently dropped by
+        the diagnostics split. Gate: I6.E's both checks report zero
+        diffs on both the canonical always-on Run and the profile-
+        sensitive adversarial Run.
 - [ ] **I7 (Research's share) — Coordinated Cutover, single-instance
       only.** Switch Research's *historical* `/range` consumption to
       the I3-I6 path, coordinated with `strategy_engine`'s same-

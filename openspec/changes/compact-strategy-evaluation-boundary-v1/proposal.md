@@ -110,16 +110,20 @@ behavior, exit, attribution, accounting, `TradeRecord`, path metrics,
 aggregate execution/accounting facts, and provenance. I5 does not
 require a persisted Run artifact bundle to exist.
 
-I6 additionally proves **canonical Run artifact parity**
+I6 additionally proves a **persisted-artifact regression proof**
 (`research-run-artifact-parity-v1`, added by this revision): after I5
-passes, old BBB's own persisted Run output and Research's persisted Run
-artifact bundle — produced from the same frozen real-market dataset and
-an equivalent canonical strategy configuration — are structurally
-identical once canonicalized, covering the full chain `strategy result
-→ execution → accounting → metrics → result materialization →
-persisted Run artifacts`. This is I6's own separate proof-only gate; it
-is not folded into I5, and I5's own capability is not expanded to cover
-persisted artifacts.
+passes, the common execution/accounting/trade/path/summary facts I5
+already proved correct still agree, trade for trade, between old BBB's
+Run output and Research's persisted Run artifact bundle, produced from
+the same frozen real-market dataset and an equivalent canonical
+strategy configuration. This is deliberately narrower than a full
+structural-equality proof of both systems' entire Run artifact models:
+new-side-only provenance/storage fields (`run_id`, `manifest.json`,
+`instance_id`/`config_hash`/`market_data_hash`) are verified for their
+own internal correctness, not diffed against old BBB, which has no
+equivalent fields to compare them to. This is I6's own separate
+proof-only gate; it is not folded into I5, and I5's own capability is
+not expanded to cover persisted artifacts.
 
 ## What Changes (target model, I3+ implementation)
 

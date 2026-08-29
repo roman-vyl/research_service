@@ -384,27 +384,29 @@ post-I6, references it by identity instead), `manifest.json`
 (`f"run_{uuid.uuid4().hex}"`, `materialize_backtest_outcome.py::
 _generate_run_id`) — a random UUID, not a function of Run content.
 
-**Old BBB ↔ new Research artifact mapping** (fields, not files — file
-boundaries legitimately differ, see "Artifact relocation is allowed"):
+**Old BBB ↔ new Research field mapping, scoped to the common-facts
+comparison surface only** (`research-run-artifact-parity-v1`'s "Common-
+facts comparison surface" requirement — this is deliberately NOT a
+full field-union mapping of both systems' entire artifact models; rows
+marked "out of cross-system scope" exist on one or both sides but are
+not diffed against each other, per that requirement):
 
-| Old BBB | New Research |
-|---|---|
-| `trade_records[]` (per-trade, entry+exit together) | `trades.json` (`TradeRecord[]`, exit-only per record) + `execution_events.json` (`entry_filled`/`exit_filled` events) — entry facts live in the `entry_filled` event and in `TradeRecord`'s `entry_*` fields |
-| `entry_idx`/`exit_idx` | `entry_bar_index`/`exit_bar_index` |
-| `exit_instance_id` | `exit_rule_id` |
-| `exit_component_id` | `exit_component_id` |
-| `exit_kind` | `exit_kind` |
-| `exit_group` (`"always_on"`/`"profile"`) | no direct equivalent — subsumed by `exit_rule_id`/`exit_component_id` identifying the specific rule; not a canonical-model field on the new side |
-| `exit_profile` | `PositionState.locked_exit_profile` (I4) |
-| (no `exit_layer` field) | `exit_layer` (canonical constant `"exit_policy"` for every historical-execution-projection-sourced exit) |
-| `pnl`/`gross_pnl`/`fees_paid`/`return_pct`/`gross_return_pct` | `net_pnl`/`gross_pnl`/`fees_paid`/`net_return_pct`/`gross_return_pct` |
-| `hold_bars`/`hold_minutes` | `hold_bars`/`hold_ms` |
-| `build_trade_quality_diagnostics` (mfe/mae/path fields) | `TradePathMetrics` (mfe/mae/captured/giveback fields) — semantically equivalent, not field-identical; see the capability spec's "Canonicalization" note |
-| `VariantMetrics.total`/`SideMetrics` | `TradeAccountingResult` (`realised_trade_count`, `gross_pnl`, `fees_paid`, `net_pnl`) — no `final_equity` on the old side (N=1 has no equity-curve concept there) |
-| `symbol`/`timeframe`/`candles`/`data_range` | `market` (`ticker`/`timeframe`/`from_ms`/`to_ms`)/`bar_count`/`market_data_hash` |
-| `run_id`/`created_at` (nondeterministic) | `run_id`/`manifest.created_at_utc` (nondeterministic) |
-| `<run_id>.summary.json` | `metrics.json` + `run_views.py`'s compact projections — both are lightweight projections of the same trade/accounting facts |
-| (no manifest/content-hash file) | `manifest.json` (storage/transport metadata, not Run content) |
+| Old BBB | New Research | In common-facts surface? |
+|---|---|---|
+| `trade_records[]` (per-trade, entry+exit together) | `trades.json` (`TradeRecord[]`) + `execution_events.json` | yes — entry facts read from the `entry_filled` event and `TradeRecord`'s `entry_*` fields |
+| `entry_idx`/`exit_idx` | `entry_bar_index`/`exit_bar_index` | yes |
+| `exit_instance_id` | `exit_rule_id` | yes |
+| `exit_component_id` | `exit_component_id` | yes |
+| `exit_kind` | `exit_kind` | yes |
+| `exit_profile` | `PositionState.locked_exit_profile` (I4) | yes, where the spec is profile-sensitive |
+| `pnl`/`gross_pnl`/`fees_paid`/`return_pct` | `net_pnl`/`gross_pnl`/`fees_paid`/`net_return_pct` | yes |
+| `hold_bars` | `hold_bars` | yes |
+| `build_trade_quality_diagnostics` MFE/MAE fields | `TradePathMetrics.mfe_*`/`mae_*` | yes (only the quantities both sides compute the same way) |
+| `VariantMetrics.total` | `TradeAccountingResult` (`realised_trade_count`, `gross_pnl`, `fees_paid`, `net_pnl`) | yes |
+| `<run_id>.summary.json` | `metrics.json` | yes, as a sanity cross-check that each side's own summary agrees with its own trades |
+| `exit_group`, `profile_breakdown`/`exit_reason_breakdown`/`fee_diagnostics`/`bounce_counter_breakdown`/`quality_flag_breakdown` (old BBB optional breakdowns) | — | **out of cross-system scope** — derived/optional, not diffed |
+| `hold_minutes`, `active_exit_profile`, `entry_context_state` | `hold_ms`, `exit_layer`, `TradePathMetrics.capture_ratio`/`giveback_*` | **out of cross-system scope** — computed by only one side |
+| `run_id`/`created_at`, `symbol`/`timeframe`/`candles`/`data_range` | `run_id`, `manifest.json`, `instance_id`/`config_hash`/`market_data_hash`/market identity | **out of cross-system scope** — new-side fields verified for internal correctness only, per "New-side provenance/storage fields are verified, not cross-compared"; old BBB has no wrapper-identity/hash equivalent to compare them to |
 
 **Frozen-input mechanism**: `ResolveBacktestWindow` (`application/
 backtests/history_window.py`), already shipped, already the mechanism
@@ -429,16 +431,16 @@ adapter function, analogous to how I5.A's Engine-side script calls
 `build_historical_execution_projection` directly rather than through
 `/range`.
 
-**Diagnostic-only vs execution-semantic** (for "No information loss
-through storage relocation"): feature series, context data, component
-evidence, and potential-entry traces (`research-diagnostics-
-projection-v1`'s existing scope) are diagnostic-only — old BBB has no
-equivalent separately-persisted concept (it recomputes everything from
-the monolith's live pipeline state on demand), and neither side's
-canonical Run model needs them for trade/accounting/provenance parity.
-Everything in the "Old BBB ↔ new Research artifact mapping" table above
-is execution-semantic and IS in the canonical Run model's comparison
-surface — I6's diagnostics split does not touch any of it.
+**Diagnostic-only vs execution-semantic** (for "No silent loss of
+common-surface content through the diagnostics split"): feature series,
+context data, component evidence, and potential-entry traces
+(`research-diagnostics-projection-v1`'s existing scope) are
+diagnostic-only — old BBB has no equivalent separately-persisted
+concept (it recomputes everything from the monolith's live pipeline
+state on demand), and neither side needs them for the common-facts
+comparison. Every "yes" row in the field-mapping table above is
+execution-semantic and IS in the common-facts comparison surface —
+I6's diagnostics split does not touch any of it.
 
 ## Out of scope for this change
 
