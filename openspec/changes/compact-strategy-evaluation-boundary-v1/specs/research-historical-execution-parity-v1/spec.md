@@ -61,16 +61,30 @@ implementation under test as its source of expected values.
 - **Lane A reference** is Research's own existing, unmodified legacy
   execution path (`execution/loop.py::run_unified_execution_loop` via
   `execution/entry.py`/`execution/protection.py`/`execution/static_
-  exits.py`, fed by the legacy `.v1` `StrategyEvaluationResult` Engine
-  contract through `adapters/http/strategy_engine_client.py::evaluate_
-  range`) — a materially different code path (different entry/
-  protection/candidate-collection modules; only the shared, already-
-  proven-correct arbitration primitives `execution/unified_exits.py::
-  arbitrate_unified_exit_candidates`/`execute_unified_exit` and
-  `accounting/service.py::account_execution_loop` are common to both
-  sides, and those are not what Lane A is proving). This reference is
-  valid only for an always-on-only spec: it implements no
-  `locked_exit_profile` semantics at all.
+  exits.py`), fed by Research's legacy `.v1` `StrategyEvaluationResult`
+  domain model built proof-only, in-process, from `strategy_engine`'s
+  legacy dense computation (`EmaPullbackRangeEvaluator.evaluate()` /
+  `StrategyRangeResult`) against the same resolved market window —
+  **not** through `adapters/http/strategy_engine_client.py::evaluate_
+  range`/Engine's live `/range` route. Engine's production `/range`
+  route already serves the superseded sparse `.v1`
+  `StrategyEvaluationExecution` contract (`strategy_serialization.py::
+  serialize_strategy_evaluation_execution`, per this change's own
+  earlier route cutover), which Research's legacy client cannot parse
+  (it expects `StrategyRangeResult`'s dense `features`/`entries`/
+  `exit_policy`/`component_evidence` shape) — see "Known intermediate
+  incompatibility" below. Using Engine's still-present, unmodified
+  `evaluate()` method directly (proof-only, in-process, exactly as
+  I5.A's own Engine-side script already calls `_evaluate_frame_native`
+  directly rather than through a route) is a materially different code
+  path from the new path under test (different entry/protection/
+  candidate-collection modules; only the shared, already-proven-correct
+  arbitration primitives `execution/unified_exits.py::arbitrate_
+  unified_exit_candidates`/`execute_unified_exit` and `accounting/
+  service.py::account_execution_loop` are common to both sides, and
+  those are not what Lane A is proving). This reference is valid only
+  for an always-on-only spec: it implements no `locked_exit_profile`
+  semantics at all.
 - **Lane B reference** SHALL be an independent old-BBB-grounded trade-
   lifecycle simulator — extending the verbatim, character-for-character
   old-BBB functions already established at `strategy_engine`'s I2
@@ -92,6 +106,34 @@ implementation under test as its source of expected values.
   collection code it is meant to validate
 - **THEN** that mechanism is not an acceptable I5 reference and the
   proof does not count toward the gate.
+
+### Requirement: Known intermediate incompatibility — production `/range` vs. legacy Research client
+
+Engine's production `/range` route already serves the sparse `.v1`
+`StrategyEvaluationExecution` contract; Research's production HTTP
+client (`adapters/http/strategy_engine_client.py::evaluate_range`/
+`_parse_evaluation_result`) still expects the older dense
+`StrategyRangeResult` shape and cannot parse the actual current
+response. This is a real, pre-existing intermediate state of the
+migration — not something I5 introduces or is required to fix. It is
+resolved by I7's coordinated `.v2` cutover (both repos land the new
+consumer/producer together), not by I5. I5's Lane A reference SHALL NOT
+route through this broken HTTP path in either direction (neither
+production `/range` nor the legacy client) — it uses Engine's legacy
+in-process `evaluate()` directly, as described in "Independent
+reference, not self-comparison" above, precisely because the HTTP path
+between the two repos is not currently a working reference mechanism.
+
+#### Scenario: Lane A reference does not depend on the broken HTTP path
+
+- **WHEN** I5's Lane A reference is constructed
+- **THEN** it calls `EmaPullbackRangeEvaluator.evaluate()` directly,
+  in-process, against the same resolved market window — it does not
+  call Engine's live `/range` route or Research's `evaluate_range`
+  HTTP client method
+- **AND** the fact that those two would not currently interoperate is
+  recorded here, not silently worked around, and is explicitly out of
+  I5's scope to fix (I7's responsibility).
 
 ### Requirement: Zero-diff comparison surface
 
