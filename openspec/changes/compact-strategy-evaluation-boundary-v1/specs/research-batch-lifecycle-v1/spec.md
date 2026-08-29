@@ -107,34 +107,55 @@ forbids.
 I8 SHALL therefore cut `/strategy-evaluations/range-batch` over to a
 new streamed `.v2` response, not the old buffered `.v1` aggregate:
 
-- Engine SHALL acquire the shared `MarketFrame` exactly once per batch
-  request (unchanged from today's `EvaluateStrategyRangeBatch`
-  acquisition step).
+- Engine SHALL acquire the shared `MarketFrame`, and complete its own
+  validation (alignment, `expected_market_data_hash`, etc.), exactly
+  once per batch request, and SHALL complete this in full BEFORE any
+  part of the streaming response — headers or body — begins (unchanged
+  ordering from today's `EvaluateStrategyRangeBatch` acquisition step,
+  made explicit here because streaming makes it load-bearing: a
+  half-started stream cannot be turned into a clean whole-request HTTP
+  error after the fact).
 - Engine SHALL evaluate each variant sequentially against that one
-  frame, using the same native computation `evaluate_execution_
-  projection` uses, and SHALL emit each variant's outcome (a
-  `HistoricalExecutionProjection` `.v2` envelope, or a per-variant
-  error object) as it is produced — streamed (e.g. newline-delimited
-  JSON, one JSON object per line, HTTP chunked transfer), not
-  accumulated into an array before the response is sent. Engine SHALL
-  NOT hold more than one variant's projection/native-frame state
-  resident at a time; each is serialized, written, and released before
-  the next variant is evaluated.
-- Research SHALL consume the response as a stream: for each line,
-  decode it via `parse_historical_execution_projection` (or the
-  per-variant error path), then immediately materialize → persist →
-  release that one candidate (see "Batch execution/persistence migrate
-  to the canonical single-instance path" below) before reading the
-  next line. Research SHALL NOT buffer the full response body or the
-  full decoded variant list before processing begins.
-- A terminal failure of the shared acquisition step (before any
-  variant is evaluated) SHALL fail the whole batch, exactly as today
-  (`research-batch-experiments-v1`: "whole-experiment failures...
-  propagate... no candidate loop starts, nothing is persisted"). A
-  failure evaluating one variant (after acquisition succeeded) SHALL
-  isolate only that variant — reported inline in the stream as that
-  variant's error object — and SHALL NOT stop the stream or fail
-  later variants.
+  frame by calling `EvaluateStrategyRange.execute_projection()` — the
+  same application-layer method `/range` calls — never an evaluator's
+  `evaluate_execution_projection()` directly; batch SHALL NOT bypass
+  the request-validation/registry-resolution boundary every other
+  strategy evaluation goes through. Engine SHALL emit each variant's
+  outcome as it is produced, one element per variant, streamed (e.g.
+  newline-delimited JSON, HTTP chunked transfer), not accumulated into
+  an array before the response is sent. Engine SHALL NOT hold more than
+  one variant's projection/native-frame state resident at a time; each
+  is serialized, written, and released before the next variant is
+  evaluated.
+- **Element shape (normative)**: every streamed element is a JSON
+  object `{variant_id, result, error}`. `variant_id` is always present
+  and non-null. Exactly one of `result`/`error` is non-null, never
+  both, never neither. `result`, when present, is the canonical
+  `HistoricalExecutionProjection` `.v2` payload — the same envelope
+  `parse_historical_execution_projection` already decodes for `/range`
+  — unwrapped, not a reduced or batch-specific form of it. `error`,
+  when present, carries that variant's failure detail.
+- Research SHALL consume the response as a stream: for each element,
+  read `variant_id` and branch on which of `result`/`error` is
+  non-null. A non-null `result` SHALL be decoded via the existing
+  `parse_historical_execution_projection` (unchanged — it already
+  decodes exactly this envelope shape), then immediately materialized →
+  persisted → released (see "Batch execution/persistence migrate to the
+  canonical single-instance path" below) before reading the next
+  element. A non-null `error` SHALL isolate that one candidate as
+  failed, matching today's per-variant error handling. Research SHALL
+  NOT buffer the full response body or the full decoded variant list
+  before processing begins.
+- A terminal failure of the shared acquisition/validation step (before
+  any streaming begins) SHALL produce a normal, single-body whole-
+  request HTTP error — the same shape/status-code convention
+  whole-batch failures already use — with zero candidate elements
+  streamed, exactly as today (`research-batch-experiments-v1`:
+  "whole-experiment failures... propagate... no candidate loop starts,
+  nothing is persisted"). A failure evaluating one variant (after
+  acquisition succeeded, once streaming has begun) SHALL isolate only
+  that variant — reported as that variant's `error` element — and
+  SHALL NOT stop the stream or fail later variants.
 - This retires `/range-batch`'s old sparse `.v1` aggregate response
   entirely — Research's batch consumer SHALL NOT depend on it in any
   form, closing the wire-incompatibility from "the real wire contract
@@ -144,7 +165,7 @@ new streamed `.v2` response, not the old buffered `.v1` aggregate:
 
 - **WHEN** a batch of N candidates runs after I8
 - **THEN** Strategy Engine calls its market-data port exactly once for
-  the whole request
+  the whole request, before any streaming begins
 - **AND** it evaluates all N variants against that one `MarketFrame`,
   sequentially, within the same request/response lifecycle — not one
   Engine call per candidate
@@ -152,6 +173,31 @@ new streamed `.v2` response, not the old buffered `.v1` aggregate:
   variant's projection resident, and at no point does Research hold
   more than one variant's decoded projection resident before that
   candidate is materialized, persisted, and released.
+
+#### Scenario: Each stream element has exactly one of result/error, decoded via the existing parser
+
+- **WHEN** Research reads any element of the `/range-batch` stream
+  after I8
+- **THEN** it has a non-null `variant_id` and exactly one non-null
+  `result`/`error`
+- **AND** a non-null `result` decodes successfully through the existing
+  `parse_historical_execution_projection` with no batch-specific
+  parsing path.
+
+#### Scenario: Batch evaluation goes through the same application boundary as single-instance
+
+- **WHEN** Engine evaluates any variant for `/range-batch` after I8
+- **THEN** it does so via `EvaluateStrategyRange.execute_projection()`,
+  never an evaluator's `evaluate_execution_projection()` called
+  directly.
+
+#### Scenario: Shared acquisition failure is a clean whole-request error, not a broken stream
+
+- **WHEN** the shared `MarketFrame` acquisition or its validation fails
+- **THEN** Research receives a normal whole-request HTTP error response,
+  not a stream that starts and then breaks
+- **AND** zero candidate elements were streamed, and no candidate is
+  materialized or persisted.
 
 #### Scenario: A single candidate's evaluation failure isolates only that candidate
 
