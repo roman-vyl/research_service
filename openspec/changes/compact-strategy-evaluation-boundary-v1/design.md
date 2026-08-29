@@ -335,6 +335,111 @@ Research-relevant checkpoints as actionable tasks. Summary of what
   but is not thereby production-approved.
 - **I8** — batch lifetime, joint, only after I7.
 
+## I6 implementation strategy (Explore findings, this revision)
+
+Normative requirements live in the `research-run-artifact-parity-v1`
+capability; this section records what EXPLORE found in both
+repositories' actual code, so a future implementer does not have to
+re-derive it.
+
+**Old BBB's Run model** (`roman-vyl/_bbb_new_gen@cddc836`,
+`research/strategies/ema_pullback/execution/results.py`): one Run
+produces three files under `research/results/`:
+`runs/<run_id>.json` (full report: `run_id`, `created_at`,
+`report_schema_version`, `family`, `symbol`, `timeframe`, `candles`,
+`data_range{from_open_time_ms,to_open_time_ms}`, `variants_count`,
+`trade_quality_config`, `path_diagnostics_config`, `variants[]` — each
+variant carries `strategy_spec`, `metrics` (long/short/total
+`SideMetrics` + sharpe + max_drawdown + open_trades + optional
+breakdowns), `component_counters`, and the full `trade_records[]`);
+`runs/<run_id>.summary.json` (`build_compact_report_payload`: the same
+shape with `trade_records`/`candles`/`ohlcv`/`component_events`/
+`trade_management_events`/`signal_trace`/`trace` stripped, replaced by
+counts); `latest.json` (identical content to the current run's full
+report — a pointer, not separate content). Per-trade fields
+(`extract_trade_records`): `direction`, `status`, `entry_time_ms`,
+`exit_time_ms`, `entry_price`, `exit_price`, `size`, `pnl`,
+`return_pct`, `exit_reason`, `gross_pnl`, `fees_paid`,
+`gross_return_pct`, `exit_group`, `exit_profile`, `exit_component_id`,
+`exit_instance_id`, `exit_kind`, `entry_idx`, `exit_idx`, `hold_bars`,
+`hold_minutes`, `entry_profile`, `active_exit_profile`,
+`entry_context_state`, plus `build_trade_quality_diagnostics`'s
+path-quality fields. No separate execution-event stream, no separate
+strategy-evaluation/projection artifact, no manifest file, no content
+hash per file — old BBB is a monolith with no wire boundary to
+provenance-hash.
+
+**Current Research Run model** (`application/backtests/artifacts.py::
+PersistSingleInstanceBacktest`): one Run persists eight files:
+`request.json`, `strategy_evaluation.json` (today the legacy dense
+`StrategyEvaluationResult`; post-I6 the canonical
+`HistoricalExecutionProjection`, per `research-run-artifacts-v1`),
+`execution_events.json` (`ExecutionEvent[]`), `trades.json`
+(`TradeRecord[]`), `metrics.json` (a `TradeAccountingResult` subset),
+`managed_policy_events.json`, `result.json` (the full
+`SingleInstanceBacktestResult`, currently re-embedding the evaluation —
+post-I6, references it by identity instead), `manifest.json`
+(`RunArtifactManifest`: contract versions, per-file sha256/size,
+`market_data_hash`, `created_at_utc`). `run_id` is Research-generated
+(`f"run_{uuid.uuid4().hex}"`, `materialize_backtest_outcome.py::
+_generate_run_id`) — a random UUID, not a function of Run content.
+
+**Old BBB ↔ new Research artifact mapping** (fields, not files — file
+boundaries legitimately differ, see "Artifact relocation is allowed"):
+
+| Old BBB | New Research |
+|---|---|
+| `trade_records[]` (per-trade, entry+exit together) | `trades.json` (`TradeRecord[]`, exit-only per record) + `execution_events.json` (`entry_filled`/`exit_filled` events) — entry facts live in the `entry_filled` event and in `TradeRecord`'s `entry_*` fields |
+| `entry_idx`/`exit_idx` | `entry_bar_index`/`exit_bar_index` |
+| `exit_instance_id` | `exit_rule_id` |
+| `exit_component_id` | `exit_component_id` |
+| `exit_kind` | `exit_kind` |
+| `exit_group` (`"always_on"`/`"profile"`) | no direct equivalent — subsumed by `exit_rule_id`/`exit_component_id` identifying the specific rule; not a canonical-model field on the new side |
+| `exit_profile` | `PositionState.locked_exit_profile` (I4) |
+| (no `exit_layer` field) | `exit_layer` (canonical constant `"exit_policy"` for every historical-execution-projection-sourced exit) |
+| `pnl`/`gross_pnl`/`fees_paid`/`return_pct`/`gross_return_pct` | `net_pnl`/`gross_pnl`/`fees_paid`/`net_return_pct`/`gross_return_pct` |
+| `hold_bars`/`hold_minutes` | `hold_bars`/`hold_ms` |
+| `build_trade_quality_diagnostics` (mfe/mae/path fields) | `TradePathMetrics` (mfe/mae/captured/giveback fields) — semantically equivalent, not field-identical; see the capability spec's "Canonicalization" note |
+| `VariantMetrics.total`/`SideMetrics` | `TradeAccountingResult` (`realised_trade_count`, `gross_pnl`, `fees_paid`, `net_pnl`) — no `final_equity` on the old side (N=1 has no equity-curve concept there) |
+| `symbol`/`timeframe`/`candles`/`data_range` | `market` (`ticker`/`timeframe`/`from_ms`/`to_ms`)/`bar_count`/`market_data_hash` |
+| `run_id`/`created_at` (nondeterministic) | `run_id`/`manifest.created_at_utc` (nondeterministic) |
+| `<run_id>.summary.json` | `metrics.json` + `run_views.py`'s compact projections — both are lightweight projections of the same trade/accounting facts |
+| (no manifest/content-hash file) | `manifest.json` (storage/transport metadata, not Run content) |
+
+**Frozen-input mechanism**: `ResolveBacktestWindow` (`application/
+backtests/history_window.py`), already shipped, already the mechanism
+I5 reuses — resolves `full_available`/`explicit_range` exactly once via
+`MarketDataPort.get_bounds`/`audit_range`, producing one
+`ResolvedBacktestWindow{market, market_data_hash, expected_bar_count,
+audit}`. No new MDS interface needed for I6 either.
+
+**Old BBB proof-input adapter**: old BBB never calls Research's
+`MarketDataPort` — it loads candles directly from its own local store
+(`data_engine.store.Db`, via `execution/data_loader.py::
+load_candles_once`) into a `pandas.DataFrame` shaped by
+`ema_smoke_helpers.py::candles_to_ohlcv_dataframe`
+(`open_time_ms`-indexed, `open`/`high`/`low`/`close`/`volume`
+columns). The I6.A proof-only harness SHALL construct that exact
+DataFrame shape directly from the one resolved `MarketFrame.candles`
+Research's own pipeline used — bypassing `load_candles_once`/`Db`
+entirely for this proof — never letting old BBB open its own DB
+connection and independently resolve "the same" range. This changes
+nothing in old BBB's production architecture; it is a proof-only
+adapter function, analogous to how I5.A's Engine-side script calls
+`build_historical_execution_projection` directly rather than through
+`/range`.
+
+**Diagnostic-only vs execution-semantic** (for "No information loss
+through storage relocation"): feature series, context data, component
+evidence, and potential-entry traces (`research-diagnostics-
+projection-v1`'s existing scope) are diagnostic-only — old BBB has no
+equivalent separately-persisted concept (it recomputes everything from
+the monolith's live pipeline state on demand), and neither side's
+canonical Run model needs them for trade/accounting/provenance parity.
+Everything in the "Old BBB ↔ new Research artifact mapping" table above
+is execution-semantic and IS in the canonical Run model's comparison
+surface — I6's diagnostics split does not touch any of it.
+
 ## Out of scope for this change
 
 - Exact wire/API shape of the diagnostic-generation request/route

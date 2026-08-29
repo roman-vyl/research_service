@@ -100,6 +100,27 @@ parity-v1`'s "Production routes and batch remain out of scope"
 requirement) — passing it authorizes I6/I7 to be proposed next, it does
 not perform them.
 
+### I5 vs. I6: two different parity gates, not one
+
+I5 proves **computational/execution semantic parity**: on the same
+market input, old/legacy semantics and the new Strategy Engine →
+`HistoricalExecutionProjection` → Research execution path produce
+identical entry facts, locked profile, initial protection, signal-exit
+behavior, exit, attribution, accounting, `TradeRecord`, path metrics,
+aggregate execution/accounting facts, and provenance. I5 does not
+require a persisted Run artifact bundle to exist.
+
+I6 additionally proves **canonical Run artifact parity**
+(`research-run-artifact-parity-v1`, added by this revision): after I5
+passes, old BBB's own persisted Run output and Research's persisted Run
+artifact bundle — produced from the same frozen real-market dataset and
+an equivalent canonical strategy configuration — are structurally
+identical once canonicalized, covering the full chain `strategy result
+→ execution → accounting → metrics → result materialization →
+persisted Run artifacts`. This is I6's own separate proof-only gate; it
+is not folded into I5, and I5's own capability is not expanded to cover
+persisted artifacts.
+
 ## What Changes (target model, I3+ implementation)
 
 - **Consume Strategy Engine's `HistoricalExecutionProjection`**
