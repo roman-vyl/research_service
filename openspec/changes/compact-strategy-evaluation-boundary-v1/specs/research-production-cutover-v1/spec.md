@@ -40,24 +40,35 @@ After I7, Strategy Engine's `POST /strategy-evaluations/range` route
 SHALL serve `contract_version: "strategy_evaluation_execution.v2"`
 (the `HistoricalExecutionProjection` envelope, already normatively
 fixed by `strategy_engine`'s `strategy-research-execution-contract-v1`
-capability) as its only response shape. The superseded sparse `.v1`
-`StrategyEvaluationExecution` contract becomes unreachable through this
-route. `POST /strategy-evaluations/range/diagnostics` (dense
-diagnostics) is unaffected — it already returns a separate contract
-today and stays that way.
+capability) as its only response shape. `POST /strategy-evaluations/
+range/diagnostics` (dense diagnostics) is unaffected — it already
+returns a separate contract today and stays that way.
+
+**This cutover SHALL NOT be implemented by changing what
+`EvaluateStrategyRange.execute()` returns.** Confirmed via code:
+`EvaluateStrategyRangeBatch` calls this exact same `.execute()` method
+per candidate inside its own loop, and `/strategy-evaluations/range-
+batch`'s route serializes its outcomes with the unchanged sparse `.v1`
+serializer. Changing `execute()`'s return shape would silently switch
+`/range-batch` to `.v2` too, violating "I7 does not touch batch" above.
+The correct shape (normative in `strategy_engine`'s own
+`strategy-research-execution-contract-v1`): `/range`'s route handler
+SHALL call a NEW, separate application-service method
+(`EvaluateStrategyRange.execute_projection()` or equivalent), while
+`/range-batch`'s route handler SHALL keep calling the existing,
+completely unmodified `EvaluateStrategyRange.execute()` — which
+therefore remains reachable via HTTP, through `/range-batch`, not
+merely retained as private in-process code. `evaluate()`/
+`StrategyRangeResult` (the original dense contract) remain private/
+unrouted, unaffected by I7 either way.
 
 `StrategyEvaluator`'s Protocol (`strategy_engine/strategies/ports.py`)
-gains one method returning `HistoricalExecutionProjection` (calling the
-already-shipped, already-proven `_evaluate_frame_native` +
+gains one additive method returning `HistoricalExecutionProjection`
+(calling the already-shipped, already-proven `_evaluate_frame_native` +
 `build_historical_execution_projection`, I1) — the exact production
 counterpart of I5.A's proof-only script, now reachable via the real
-route instead of only in-process. `evaluate()`/`StrategyRangeResult`
-(the original dense contract, already private/unrouted since this
-change's first draft) and `evaluate_execution()`/`StrategyEvaluationExecution`
-(the sparse `.v1` contract) both remain as private, in-process-only
-methods after I7 — neither is deleted, since `strategy_engine`'s own
-test suite and any future regression comparison may still need them;
-neither is reachable from any route.
+route (only through the new method, not through `execute()`/
+`evaluate_execution()`) instead of only in-process.
 
 #### Scenario: Production /range serves v2 after cutover
 
@@ -68,12 +79,15 @@ neither is reachable from any route.
 - **AND** the response body is a `HistoricalExecutionProjection`
   envelope, not the sparse `.v1` shape.
 
-#### Scenario: The superseded .v1 route response is gone, the code is not
+#### Scenario: /range-batch keeps reaching the sparse .v1 path via HTTP
 
-- **WHEN** `strategy_engine`'s own test suite exercises
-  `evaluate_execution()`/`StrategyRangeResult`/`evaluate()` directly
-- **THEN** those calls still succeed (the methods are not deleted)
-- **AND** no HTTP route reaches them.
+- **WHEN** a real request is sent to `POST /strategy-evaluations/
+  range-batch` after I7
+- **THEN** it is still served via `EvaluateStrategyRange.execute()` →
+  `evaluate_execution()` → `serialize_strategy_evaluation_execution()`,
+  exactly as before I7
+- **AND** this HTTP path to the sparse `.v1` shape remains reachable —
+  it is not reduced to private/unrouted code by I7.
 
 ### Requirement: Research v2 consumer wiring
 
