@@ -88,3 +88,27 @@ not exactly match the target run's stored provenance.
   the target run's stored provenance
 - **THEN** Research Service SHALL reject the response and SHALL NOT
   persist it as that run's diagnostic artifact.
+
+## ADDED Requirements
+
+### Requirement: Diagnostic-artifact generation is a hard I7 prerequisite
+
+This capability's diagnostic-artifact generation and separate-artifact
+read path (already normative above) SHALL be implemented and wired
+before, or atomically with, I7's persistence-shape cutover
+(`research-run-artifacts-v1`'s "Production persistence shape cutover").
+`application/diagnostics/projection.py` SHALL be migrated off reading
+`result.strategy_evaluation.component_evidence`/`.raw`/`.entries`/
+`.exit_policy` (fields absent from the post-cutover shape) and onto the
+generated diagnostic artifact. I7 SHALL NOT ship the persistence cutover
+without this migration landing in the same coordinated change — doing
+so would leave diagnostics reading fields that no longer exist.
+
+#### Scenario: Diagnostics read from the generated artifact, not the execution file
+
+- **WHEN** diagnostics are requested for a run persisted under the I7
+  shape
+- **THEN** `application/diagnostics/projection.py` builds its response
+  from the separately generated diagnostic artifact
+- **AND** it does not access `result.strategy_evaluation` for
+  diagnostic content.

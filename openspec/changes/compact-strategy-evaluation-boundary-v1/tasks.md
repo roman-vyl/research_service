@@ -262,16 +262,56 @@ after its predecessor's gate is confirmed.
         diffs on both the canonical always-on Run and the profile-
         sensitive adversarial Run.
 - [ ] **I7 (Research's share) — Coordinated Cutover, single-instance
-      only.** Switch Research's *historical* `/range` consumption to
-      the I3-I6 path, coordinated with `strategy_engine`'s same-
+      only.** Normative requirements: new `research-production-cutover-v1`
+      (this revision) plus amendments to `research-unified-execution-
+      loop-v1`/`research-run-artifacts-v1`/`research-diagnostics-
+      projection-v1`. Switch Research's *historical* `/range` consumption
+      to the I3-I6 path, coordinated with `strategy_engine`'s same-
       checkpoint work (old Research cannot parse the new contract, must
       land together). `/range-batch` consumption is explicitly out of
-      scope for this cutover's production-approval — I8 owns that. Gate:
-      N=1 production path green end to end against the live stack;
+      scope for this cutover's production-approval — I8 owns that.
+      OpenSpec-only this pass — no application code. Sub-tasks:
+  - [x] **I7.A — EXPLORE.** Read production wiring
+        (`strategy_routes.py`, `evaluate_range.py`, `ports.py` both
+        repos, `run_backtest.py`, `run_batch.py`, `read_artifacts.py`,
+        `diagnostics/projection.py`, `run_views.py`). Findings: (1)
+        `MaterializeBacktestOutcome`/`PersistSingleInstanceBacktest`
+        shared with batch — must not be mutated in place; (2)
+        `diagnostics/projection.py` reads legacy dense fields
+        (`component_evidence`/`raw`/`entries`/`exit_policy`) that won't
+        exist after cutover, and no diagnostic-artifact generator exists
+        yet despite `research-diagnostics-projection-v1` already
+        requiring one; (3) `RunArtifactManifest` lacks market identity,
+        so `read_artifacts.py::_summary()` needs a resolved shape for
+        `result.json`.
+  - [x] **I7.B — Spec authored.** `research-production-cutover-v1`
+        capability written: scope boundary (batch/Runtime untouched),
+        final `/range` v2 contract, Research v2 consumer wiring, shared-
+        infrastructure-stays-batch-shaped resolution, persistence
+        cutover shape (identity subset + reference-by-identity), hard
+        diagnostics-generator prerequisite, fail-closed compatibility,
+        live E2E regression gate, coordinated rollback.
+  - [ ] **I7.C — Companion capability amendments.** Add MODIFIED
+        requirements to `research-unified-execution-loop-v1` (single-
+        instance execution path wiring, batch explicitly unaffected),
+        `research-run-artifacts-v1` (production `result.json`/
+        `strategy_evaluation.json` shape cutover), `research-
+        diagnostics-projection-v1` (generator existence + `projection.py`
+        migration now mandatory, not just normatively described).
+  - [ ] **I7.D — VERIFY.** Re-check drafted spec against code for any
+        newly surfaced ambiguity; iterate until deterministic.
+  - [ ] **I7.E — strategy_engine companion delta.** `/range` v2-only cutover,
+        `/range-batch` explicitly unchanged, new `StrategyEvaluator`
+        Protocol method, live routes explicitly unaffected, rollback note
+        — mirrored in `strategy_engine`'s own OpenSpec.
+      Gate: N=1 production path green end to end against the live stack
+      (deferred to actual I7 implementation, not this OpenSpec pass);
       joint with `strategy_engine`'s Runtime regression fence (this repo
       has no direct Runtime relationship, so nothing here to regress,
       but the joint gate still requires that fence green before this
-      checkpoint is considered complete).
+      checkpoint is considered complete). This OpenSpec-only pass's own
+      gate: `openspec validate --strict` green in both repos, no `src`/
+      `tests` diff in either repo.
 - [ ] **I8 (Research's share) — Batch Lifetime Redesign.** Only after
       I7. Change the aggregation pattern so N candidates' evaluations
       are never held resident simultaneously in either process, while

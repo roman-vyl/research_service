@@ -133,3 +133,28 @@ independent Research decision.
   always-on rule set
 - **THEN** its attribution reflects that specific profile's rule/
   component, not a generic always-on category.
+
+## ADDED Requirements
+
+### Requirement: Single-instance production wiring (I7)
+
+`RunSingleInstanceBacktest` SHALL drive this execution loop from a real
+`HistoricalExecutionProjectionDTO` obtained from Strategy Engine's live
+`/strategy-evaluations/range` route (post I7 cutover), not from an
+in-process proof harness. The batch path
+(`application/experiments/run_batch.py`) SHALL continue to use its
+existing legacy-shape execution path unmodified — this loop's I7 wiring
+change applies to the single-instance production caller only. Full
+cutover requirements (shared-infrastructure handling, compatibility,
+rollback, E2E gate) are normative in `research-production-cutover-v1`;
+this requirement records only that this loop itself is the thing being
+wired to a real route for the first time.
+
+#### Scenario: Single-instance run is driven by the real route
+
+- **WHEN** a production `RunSingleInstanceBacktest.execute()` call runs
+  after I7
+- **THEN** this execution loop consumes a `HistoricalExecutionProjectionDTO`
+  decoded from a real HTTP response of the live, cut-over `/range` route
+- **AND** batch's use of this loop's legacy-shape counterpart is
+  unaffected.

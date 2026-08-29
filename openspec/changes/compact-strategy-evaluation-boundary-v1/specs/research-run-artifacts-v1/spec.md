@@ -62,3 +62,27 @@ explicitly requested, as its own artifact scoped to the same `run_id`.
   artifact scoped to that `run_id`
 - **AND** the run's existing canonical result and execution-evaluation
   files are not modified by this generation step.
+
+## ADDED Requirements
+
+### Requirement: Production persistence shape cutover (I7)
+
+After I7's coordinated cutover, single-instance production runs SHALL
+be persisted in the I6.D-proven shape: `strategy_evaluation.json` IS
+the real `HistoricalExecutionProjection`; `result.json` references it
+(and `trades.json`/`execution_events.json`) by sha256 identity rather
+than re-embedding, while retaining a lightweight market-identity/
+provenance subset (`ticker`, `timeframe`, `from_ms`, `to_ms`,
+`bar_count`, `market_data_hash`, `instance_id`, `config_hash`) directly
+on `result.json` so identity-only consumers (e.g. run summaries) do not
+need to open the referenced file. Batch-persisted artifacts are
+unaffected — this requirement governs only the single-instance
+production path. Full cutover coordination, compatibility, and rollback
+requirements are normative in `research-production-cutover-v1`.
+
+#### Scenario: Single-instance result.json carries identity without re-embedding
+
+- **WHEN** a single-instance run is persisted after I7
+- **THEN** `result.json` contains the market-identity subset directly
+  and a sha256-identified reference to `strategy_evaluation.json`
+- **AND** it does not contain the full re-embedded projection content.
