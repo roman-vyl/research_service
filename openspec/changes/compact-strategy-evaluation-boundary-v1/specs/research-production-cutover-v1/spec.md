@@ -147,81 +147,77 @@ redesign; I7 does not decide that.
 - **AND** a batch run's persisted artifacts are byte-for-byte the same
   shape as before I7.
 
-### Requirement: Single-instance and batch persistence get separate readers, not one dual-shape reader
+### Requirement: /runs reads only the canonical new shape — no legacy compatibility
 
-`ReadResearchRuns`/`_documents()` (`application/backtests/read_artifacts.py`)
-is today one generic reader used for every persisted run regardless of
-origin. Because I7 cuts single-instance persistence over to the I6.D
-shape while batch's writer stays completely unmodified (see "Shared
-batch/single-instance infrastructure stays batch-shaped"), a single
-persisted `result.json` on disk is now one of two genuinely different
-shapes depending on which path produced it — legacy embedded
-(`SingleInstanceBacktestResult`, batch) or I6.D identity-subset+refs
-(single-instance). This is a direct consequence of I7/I8's staged
-sequencing (I7 cuts single-instance only; I8 has not yet cut batch
-over), not a permanent two-format contract to design for indefinitely.
+`ReadResearchRuns`/`_documents()` (`application/backtests/
+read_artifacts.py`) and its production read models (`SingleInstance
+BacktestResult` parsing, `RunSummary`/`RunDetail`/`RunTrades`/
+`RunMetrics`/`RunCompactSummary` construction) SHALL be cut over IN
+PLACE to the canonical I6.D persistence shape as part of I7. There is
+exactly one reader, one set of read models, and one `/runs` read path
+after I7 — not two.
 
-Resolution, normative for I7:
+Normative for I7:
 
-- Single-instance's new-shape persisted runs SHALL be read through a
-  NEW, separate reader/model path (new pydantic result model, new
-  `ReadResearchRuns`-equivalent or a sibling class) built only for the
-  I6.D shape.
-- The existing `ReadResearchRuns`/legacy `SingleInstanceBacktestResult`
-  reader SHALL remain exactly as it is today, and SHALL become
-  batch-only after I7 — still load-bearing for batch, not deletable by
-  I7, mirroring "Shared batch/single-instance infrastructure stays
-  batch-shaped."
-- **No single reader/model SHALL branch on or otherwise recognize both
-  `result.json` shapes.** Two readers, not one reader with a shape
-  discriminator.
-- **No `contract_version` (or equivalent) field SHALL be added to
-  either `result.json` shape for the purpose of telling the two shapes
-  apart.** Which reader applies is determined entirely by which
-  persistence path (single-instance vs. batch) produced the run — a
-  property of how the run was created, not something a reader needs to
-  detect by inspecting file content.
-- Batch's writer AND batch's existing read semantics (whatever BFF/
-  consumer path already reads batch-persisted runs today) SHALL NOT
-  change in I7 — this requirement governs single-instance's new reader
-  only.
+- `ReadResearchRuns` and its models SHALL be modified in place to parse
+  and serve only the canonical I6.D `result.json` shape (identity
+  subset + references, per "Production persistence cutover to the
+  I6-proven shape" below).
+- After I7, `/runs` (and every other consumer of `ReadResearchRuns`)
+  SHALL read only canonical new-shape runs. Old, pre-cutover persisted
+  run shapes are neither supported nor recognized — no code path
+  SHALL sniff, detect, or branch on a run's shape.
+- **No `contract_version` (or equivalent) field SHALL be added for
+  shape discrimination purposes.** There is only one shape for this
+  reader to know about.
+- **No fallback, no separate legacy reader, no separate legacy store/
+  namespace SHALL be introduced.** This is a genuine in-place cutover,
+  not a parallel-path migration.
 - Backward compatibility with runs persisted before I7 is explicitly
-  NOT required — I6/I7 do not need to keep old single-instance-shaped
-  runs readable through the new reader, or through any reader, after
-  cutover.
-- I8, when it migrates batch onto the canonical new-shape persistence/
-  read path, SHALL delete the legacy batch-only `ReadResearchRuns`/
-  `SingleInstanceBacktestResult`-based writer and reader — they exist
-  only as long as batch still needs the shape they serve, exactly like
-  `MaterializeBacktestOutcome`/`PersistSingleInstanceBacktest` are
-  described as batch-only-until-I8, not permanent.
+  NOT required — old-shape runs already on disk need not remain
+  readable through `/runs` after this cutover.
+- Batch execution and persistence (`MaterializeBacktestOutcome`/
+  `PersistSingleInstanceBacktest`/`run_batch.py`) SHALL remain
+  completely untouched through I7, per "Shared batch/single-instance
+  infrastructure stays batch-shaped" — but because `ReadResearchRuns`
+  itself is cut over in place, batch-persisted candidate artifacts
+  produced between I7 and I8 are NOT guaranteed to be readable through
+  the canonical `/runs` path in that window. This is an accepted,
+  explicitly out-of-scope consequence of I7/I8's staged sequencing, not
+  a defect I7 must paper over — I7 governs single-instance production
+  only, and `/runs` read compatibility for batch artifacts is not part
+  of its contract.
+- I8, when it migrates batch execution/persistence onto the same
+  canonical format, SHALL delete the old batch execution/persistence
+  code (`MaterializeBacktestOutcome`/`PersistSingleInstanceBacktest`
+  and whatever legacy shape they still produce) — at that point batch
+  artifacts become canonical too and the accepted I7-to-I8 gap closes.
 
-#### Scenario: Two readers, no shape-sniffing
+#### Scenario: /runs serves only canonical-shape runs after I7
 
-- **WHEN** I7 is implemented
-- **THEN** a single-instance run's `result.json` is read only through
-  the new I6.D-shape reader, and a batch run's `result.json` is read
-  only through the unmodified legacy reader
-- **AND** no reader function or model attempts to validate/parse a
-  `result.json` against both shapes to determine which one it is.
+- **WHEN** `/runs` (or any `ReadResearchRuns` consumer) is called after
+  I7
+- **THEN** it parses and returns only runs persisted in the canonical
+  I6.D shape
+- **AND** no code path attempts to detect or parse an old-shape run.
 
-#### Scenario: No contract_version added to disambiguate
+#### Scenario: No shape discrimination machinery
 
 - **WHEN** I7's persistence cutover is implemented
-- **THEN** neither the legacy `SingleInstanceBacktestResult` shape nor
-  the new I6.D shape gains a field whose purpose is enabling a shared
-  reader to tell them apart
-- **AND** each shape's own existing/target field set (per "Production
-  persistence cutover to the I6-proven shape" below) is otherwise
-  unchanged by this requirement.
+- **THEN** the canonical `result.json` shape gains no field whose
+  purpose is enabling shape discrimination
+- **AND** there is no second/legacy reader, store, or namespace
+  co-existing with `ReadResearchRuns` for this purpose.
 
-#### Scenario: I8 retires the legacy batch-only path, not I7
+#### Scenario: Batch-produced artifacts are not guaranteed readable between I7 and I8
 
-- **WHEN** I7 is deployed
-- **THEN** the legacy `ReadResearchRuns`/`SingleInstanceBacktestResult`
-  reader and writer still exist, unmodified, serving batch only
-- **AND** they are deleted only once I8 migrates batch onto the
-  canonical new-shape path, not as part of I7.
+- **WHEN** a batch candidate is persisted (via the unmodified batch
+  path) after I7 but before I8
+- **THEN** `/runs` is not required to be able to read it — this is an
+  accepted consequence of batch not yet being migrated, not a defect
+- **AND** I8's migration of batch onto the canonical format is what
+  closes this gap, at which point the old batch execution/persistence
+  code is deleted.
 
 ### Requirement: Production persistence cutover to the I6-proven shape
 
@@ -243,30 +239,24 @@ re-embedding it. `trades.json`/`metrics.json`/`execution_events.json`/
 `manifest.json` keep their current informational content exactly (I6.D
 already proved this preserves every common-facts field).
 
-This new shape SHALL be read only through the new, separate reader
-introduced by "Single-instance and batch persistence get separate
-readers, not one dual-shape reader" above — `read_artifacts.py`'s
-existing `ReadResearchRuns`/`SingleInstanceBacktestResult` parsing
-SHALL NOT be modified in place; it remains the unmodified batch-only
-reader. `RunSummary`/`RunDetail`/`RunTrades`/`RunMetrics`/
-`RunCompactSummary` (`run_views.py`)'s field shapes are the target for
-the new reader to produce as well — none of these BFF view types
-inherently depend on the re-embedded evaluation (confirmed:
-`run_views.py` reads only `trades`/`metrics`/`manifest`-shaped data),
-so the new reader can build the same view types from the new shape's
-identity subset plus `trades.json`/`metrics.json`/`manifest.json`,
-without those view models themselves needing to change.
+This shape is what `ReadResearchRuns` is cut over in place to serve —
+see "/runs reads only the canonical new shape — no legacy compatibility"
+above. `RunSummary`/`RunDetail`/`RunTrades`/`RunMetrics`/
+`RunCompactSummary` (`run_views.py`) SHALL continue to be built from
+the same underlying facts they are today (trades/metrics/manifest) —
+none of these BFF view types depend on the re-embedded evaluation
+today (confirmed: `run_views.py` reads only `trades`/`metrics`/
+`manifest`), so they require no shape change, only confirmation they
+still build correctly from the new `result.json`.
 
 #### Scenario: New-shape result.json still yields a correct run summary
 
-- **WHEN** a single-instance run persisted under the I7 shape is read
-  back through the new reader's `detail`/`compact_summary`/`trades`/
-  `metrics`-equivalent operations
+- **WHEN** a run persisted under the I7 shape is read back through
+  `ReadResearchRuns.detail`/`.compact_summary`/`.trades`/`.metrics`
 - **THEN** every field those BFF views expose today is present and
   correct, sourced from `result.json`'s own identity subset plus
-  `trades.json`/`metrics.json`/`manifest.json`
-- **AND** the legacy `ReadResearchRuns` reader is not involved in
-  serving this run.
+  `trades.json`/`metrics.json`/`manifest.json` — no BFF consumer
+  regresses.
 
 ### Requirement: Diagnostics artifact generation must exist before cutover
 
