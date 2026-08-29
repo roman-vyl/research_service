@@ -49,6 +49,19 @@ not as a separate, deferred concern — since any lifecycle change to
 batch necessarily touches how Research obtains each candidate's
 evaluation, which is exactly where the incompatibility lives.
 
+**Corrective note**: an earlier revision of this requirement proposed
+resolving this by having Research make N independent per-candidate
+`/range` calls instead of one `/range-batch` call. That proposal was
+blocked: Engine's `/range` route has no preloaded-`MarketFrame`
+transport (confirmed via `EvaluateIndicatorRange._prepare()` —
+`request.market_frame is None` on that path, so it always calls
+`self._market_data.load_range(...)` itself). N independent `/range`
+calls would therefore cause N separate Engine-side MDS reads (plus
+Research's own one), not one shared acquisition — violating the
+Master Plan's own shared-L0 invariant this requirement exists to
+satisfy. See "Streamed shared-once acquisition" below for the
+corrected design.
+
 #### Scenario: Batch works against the real, live Engine after I8
 
 - **WHEN** a real batch request runs against a live, current Strategy
@@ -58,56 +71,102 @@ evaluation, which is exactly where the incompatibility lives.
   mismatch), confirmed against the real running service, not only a
   test double.
 
-### Requirement: Shared-once, per-candidate-isolated acquisition
+### Requirement: Streamed shared-once acquisition
 
-I8 SHALL replace the single `/range-batch` call (which returns all N
-candidates' evaluations in one response, held resident together) with
-N independent per-candidate `HistoricalExecutionProjection` (`.v2`)
-acquisitions via the already-proven, already-production `/range` route
-and `StrategyEnginePort.evaluate_range_projection` — the same call
-`RunSingleInstanceBacktest` makes today. Only market-data acquisition
-(window resolution + the historical `MarketFrame` read) SHALL remain
-shared once across the whole batch — Strategy Engine evaluation SHALL
-NOT be shared or batched into one call.
+**L0** in this requirement means the one shared historical
+`MarketFrame`/OHLC dataset every candidate in a batch evaluates
+against — MDS is read exactly once per batch, and every candidate's
+indicator/strategy computation runs against that same frame:
 
-This directly satisfies the Master Plan's own I8 framing ("the only
-required property is shared market-frame acquisition, not necessarily
-one HTTP response containing N evaluations") and eliminates the
-`/range-batch` wire-incompatibility by construction: Research no longer
-depends on `/range-batch`'s response shape at all for candidate
-evaluation. `/strategy-evaluations/range-batch`'s Engine-side route MAY
-remain present and unused by Research after I8 — its removal, if any,
-is Strategy Engine's own I8 decision, not required by this requirement.
+```
+MDS
+ ↓ once
+L0 MarketFrame
+ ├─ candidate A → indicators → strategy → projection
+ ├─ candidate B → indicators → strategy → projection
+ ├─ candidate C → indicators → strategy → projection
+ └─ ...
+```
 
-#### Scenario: One market fetch, N independent Engine calls
+`EvaluateStrategyRangeBatch.execute()` (`strategy_engine`) already
+implements exactly this shape today, confirmed by reading it: it calls
+`self._market_data.load_range(...)` exactly once, then loops
+`request.variants` sequentially, passing that same `market_frame` into
+each `StrategyRangeRequest` (`IndicatorRangeRequest._prepare()` reuses
+a supplied `market_frame` instead of re-fetching — the transport this
+requirement needs already exists). Its two real problems are: (1) the
+loop calls the evaluator's old `.execute()` (`.v1`, sparse
+`decision_events`) instead of the `.v2` projection path; (2) it
+accumulates all N outcomes into one in-memory list
+(`outcomes: list[BatchVariantOutcome]`) and returns them as a single
+JSON response body — an N-evaluation aggregate held resident in Engine
+(then again in Research after `_post_json` deserializes the whole
+body), which is exactly what "no N-evaluation aggregate retained"
+forbids.
+
+I8 SHALL therefore cut `/strategy-evaluations/range-batch` over to a
+new streamed `.v2` response, not the old buffered `.v1` aggregate:
+
+- Engine SHALL acquire the shared `MarketFrame` exactly once per batch
+  request (unchanged from today's `EvaluateStrategyRangeBatch`
+  acquisition step).
+- Engine SHALL evaluate each variant sequentially against that one
+  frame, using the same native computation `evaluate_execution_
+  projection` uses, and SHALL emit each variant's outcome (a
+  `HistoricalExecutionProjection` `.v2` envelope, or a per-variant
+  error object) as it is produced — streamed (e.g. newline-delimited
+  JSON, one JSON object per line, HTTP chunked transfer), not
+  accumulated into an array before the response is sent. Engine SHALL
+  NOT hold more than one variant's projection/native-frame state
+  resident at a time; each is serialized, written, and released before
+  the next variant is evaluated.
+- Research SHALL consume the response as a stream: for each line,
+  decode it via `parse_historical_execution_projection` (or the
+  per-variant error path), then immediately materialize → persist →
+  release that one candidate (see "Batch execution/persistence migrate
+  to the canonical single-instance path" below) before reading the
+  next line. Research SHALL NOT buffer the full response body or the
+  full decoded variant list before processing begins.
+- A terminal failure of the shared acquisition step (before any
+  variant is evaluated) SHALL fail the whole batch, exactly as today
+  (`research-batch-experiments-v1`: "whole-experiment failures...
+  propagate... no candidate loop starts, nothing is persisted"). A
+  failure evaluating one variant (after acquisition succeeded) SHALL
+  isolate only that variant — reported inline in the stream as that
+  variant's error object — and SHALL NOT stop the stream or fail
+  later variants.
+- This retires `/range-batch`'s old sparse `.v1` aggregate response
+  entirely — Research's batch consumer SHALL NOT depend on it in any
+  form, closing the wire-incompatibility from "the real wire contract
+  is broken today" above by construction, not by avoidance.
+
+#### Scenario: One market fetch, N sequential in-process evaluations, no N-aggregate
 
 - **WHEN** a batch of N candidates runs after I8
-- **THEN** `ResolveBacktestWindow`/the historical `MarketFrame` read
-  each execute exactly once for the whole batch
-- **AND** Strategy Engine's `/range` route is called exactly once per
-  candidate (N times total), never once for all candidates.
+- **THEN** Strategy Engine calls its market-data port exactly once for
+  the whole request
+- **AND** it evaluates all N variants against that one `MarketFrame`,
+  sequentially, within the same request/response lifecycle — not one
+  Engine call per candidate
+- **AND** at no point does Engine's process hold more than one
+  variant's projection resident, and at no point does Research hold
+  more than one variant's decoded projection resident before that
+  candidate is materialized, persisted, and released.
 
-#### Scenario: A single candidate's Engine failure isolates only that candidate
+#### Scenario: A single candidate's evaluation failure isolates only that candidate
 
-- **WHEN** one candidate's `/range` call fails (network error, upstream
-  error, contract mismatch)
+- **WHEN** one variant's evaluation fails mid-stream (Engine-side
+  strategy error, or a decode/materialize/persist failure on the
+  Research side after a valid projection was received)
 - **THEN** that candidate's row is reported `status: failed`
-- **AND** every other candidate's acquisition/materialization/
-  persistence proceeds unaffected — this is a strictly better failure
-  isolation than today's single shared `/range-batch` call, whose
-  failure fails the whole batch (`research-batch-experiments-v1`:
-  "whole-experiment failures... the Engine `/range-batch` call itself").
-
-Today's two separate isolation levels (Level 2: a per-variant Engine
-error inside one shared `/range-batch` response; Level 3: a per-
-candidate materialize/persist failure) collapse into a single
-per-candidate try/isolate boundary after I8, since each candidate's
-Engine acquisition is no longer a separate response field to inspect —
-it is the same call that can fail for the same reasons materialize/
-persist can. `research-batch-experiments-v1`'s "Failure isolation"
-requirement (one candidate failure MUST NOT prevent later candidates
-from running) does not require a specific error-level taxonomy, so this
-collapse does not violate it — only implementation detail changes.
+- **AND** the stream continues — every other candidate still evaluates,
+  materializes, and persists, unaffected. Today's two separate
+  isolation levels (a per-variant Engine error inside the old buffered
+  response, vs. a per-candidate materialize/persist failure) collapse
+  into one per-candidate isolation boundary in the new stream-consuming
+  loop; `research-batch-experiments-v1`'s "Failure isolation"
+  requirement does not mandate a specific error-level taxonomy, so this
+  is an implementation-detail change, not a requirement violation.
 
 ### Requirement: Per-candidate release — peak memory constant in N
 

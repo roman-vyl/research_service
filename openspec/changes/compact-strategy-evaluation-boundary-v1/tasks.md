@@ -375,32 +375,44 @@ after its predecessor's gate is confirmed.
   - [x] **I8.B — Spec authored.** `research-batch-lifecycle-v1` written:
         scope boundary (single-instance/Runtime untouched), the
         real-wire-incompatibility finding stated as a requirement I8
-        must fix (not perpetuate), shared-once-per-candidate-isolated
-        acquisition (drop the single `/range-batch` call in favor of N
-        real per-candidate `/range` `.v2` calls, sharing only market-data
-        acquisition), per-candidate release (constant-RSS gate),
-        migration to the canonical `MaterializeBacktestProjectionOutcome`/
-        `PersistSingleInstanceRun` path (closing the I7-to-I8 batch-
-        artifact-readability gap, then deleting the legacy batch-only
-        components), and a two-part regression gate (RSS benchmark +
-        real live-Engine batch run). `research-batch-experiments-v1`'s
-        "Authoritative per-candidate path" requirement amended
-        (MODIFIED) to name the canonical components.
-  - [x] **I8.C — VERIFY.** Re-checked against code; clarified one
-        ambiguity: today's two separate failure-isolation levels
-        (per-variant Engine error inside the shared `/range-batch`
-        response vs. per-candidate materialize/persist failure) collapse
-        into one per-candidate try/isolate boundary once Engine
-        acquisition is no longer a separate shared-response field —
-        does not violate `research-batch-experiments-v1`'s "Failure
-        isolation" requirement (no specific error-level taxonomy is
-        normative there). No other ambiguity found.
-  - [x] **I8.D — strategy_engine companion note.** Recorded in
-        `strategy_engine`'s own `tasks.md`: under this design (N
-        per-candidate `/range` calls, `/range-batch` no longer
-        Research's dependency), Engine needs no route change for I8 —
-        `/range-batch` may stay present, unmodified, unused; its
-        retirement is a separate decision for Engine's own I8 spec pass.
+        must fix (not perpetuate), per-candidate release (constant-RSS
+        gate), migration to the canonical
+        `MaterializeBacktestProjectionOutcome`/`PersistSingleInstanceRun`
+        path (closing the I7-to-I8 batch-artifact-readability gap, then
+        deleting the legacy batch-only components), and a two-part
+        regression gate (RSS benchmark + real live-Engine batch run).
+        `research-batch-experiments-v1`'s "Authoritative per-candidate
+        path" requirement amended (MODIFIED) to name the canonical
+        components. First draft's acquisition design (N per-candidate
+        `/range` calls) was later found blocked — see I8.C.
+  - [x] **I8.C — VERIFY.** Re-checked against code; found and fixed one
+        real blocker: `/range` has no preloaded-`MarketFrame` transport
+        (`EvaluateIndicatorRange._prepare()` always calls
+        `self._market_data.load_range(...)` when `request.market_frame
+        is None`), so the drafted N-independent-`/range`-calls design
+        would cause N separate Engine-side MDS reads, not one shared
+        acquisition — violating the Master Plan's own shared-L0
+        invariant. Corrected: re-read `EvaluateStrategyRangeBatch
+        .execute()` and found it already implements shared-once
+        acquisition + sequential in-process per-variant evaluation
+        (reusing a supplied `market_frame` via `IndicatorRangeRequest
+        ._prepare()`) — its only real problems are calling the old
+        `.execute()` (`.v1`) instead of the `.v2` projection path, and
+        buffering all N outcomes into one response. New requirement
+        "Streamed shared-once acquisition" replaces the blocked one:
+        `/range-batch` cut over to a streamed (NDJSON/chunked) `.v2`
+        response — one shared Engine-side MDS fetch, sequential
+        per-variant evaluation and emission, no N-aggregate held on
+        either side. Also clarified: today's two failure-isolation
+        levels collapse into one per-candidate boundary in the stream-
+        consuming loop — does not violate `research-batch-experiments-
+        v1`'s "Failure isolation" requirement (no specific error-level
+        taxonomy is normative there).
+  - [x] **I8.D — strategy_engine companion note.** Corrected in
+        `strategy_engine`'s own `tasks.md`: Engine DOES need I8 work
+        under the corrected design — `/range-batch`'s response cut over
+        to the streamed `.v2` shape (a new serializer + route change),
+        not "no route change" as the first draft claimed.
       Gate: N=1/2/4/11 benchmark, peak RSS approximately constant in N
       (deferred to actual I8 implementation, not this OpenSpec pass);
       real batch run against a live Engine instance, N>1, succeeds end
