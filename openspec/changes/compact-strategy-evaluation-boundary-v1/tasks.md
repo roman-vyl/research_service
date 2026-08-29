@@ -291,19 +291,32 @@ after its predecessor's gate is confirmed.
         cutover shape (identity subset + reference-by-identity), hard
         diagnostics-generator prerequisite, fail-closed compatibility,
         live E2E regression gate, coordinated rollback.
-  - [ ] **I7.C — Companion capability amendments.** Add MODIFIED
-        requirements to `research-unified-execution-loop-v1` (single-
-        instance execution path wiring, batch explicitly unaffected),
-        `research-run-artifacts-v1` (production `result.json`/
-        `strategy_evaluation.json` shape cutover), `research-
-        diagnostics-projection-v1` (generator existence + `projection.py`
-        migration now mandatory, not just normatively described).
-  - [ ] **I7.D — VERIFY.** Re-check drafted spec against code for any
-        newly surfaced ambiguity; iterate until deterministic.
-  - [ ] **I7.E — strategy_engine companion delta.** `/range` v2-only cutover,
-        `/range-batch` explicitly unchanged, new `StrategyEvaluator`
-        Protocol method, live routes explicitly unaffected, rollback note
-        — mirrored in `strategy_engine`'s own OpenSpec.
+  - [x] **I7.C — Companion capability amendments.** MODIFIED/ADDED
+        requirements added to `research-unified-execution-loop-v1`
+        (single-instance execution path wiring, batch explicitly
+        unaffected), `research-run-artifacts-v1` (production
+        `result.json`/`strategy_evaluation.json` shape cutover),
+        `research-diagnostics-projection-v1` (generator existence +
+        `projection.py` migration made a hard prerequisite).
+  - [x] **I7.D — VERIFY.** Re-checked against code; found and fixed one
+        real blocker: `EvaluateStrategyRangeBatch` calls the same
+        `EvaluateStrategyRange.execute()` `/range` was going to be
+        repurposed to return `.v2` from — would have silently switched
+        `/range-batch` to `.v2` too. Corrected: `/range` gets a new,
+        separate application-service method; `execute()`/
+        `evaluate_execution()` stay unmodified and remain the HTTP path
+        `/range-batch` reaches (not reduced to private/unrouted code).
+  - [x] **I7.E — strategy_engine companion delta.** `/range` v2-only
+        cutover via a new method (not `execute()`), `/range-batch`
+        explicitly unchanged and still HTTP-reachable to the sparse
+        `.v1` path, new additive `StrategyEvaluator` Protocol method,
+        live routes explicitly unaffected, coordinated-rollback note
+        — mirrored in `strategy_engine`'s own OpenSpec
+        (`strategy-research-execution-contract-v1`).
+      OpenSpec pass complete: `I7_OPENSPEC_GATE_READY`. Real cutover
+      code (both repos) and the live N=1 E2E gate below require a
+      separate, explicit go-ahead per the Master Plan's checkpoint
+      gating — not authorized by this OpenSpec pass.
       Gate: N=1 production path green end to end against the live stack
       (deferred to actual I7 implementation, not this OpenSpec pass);
       joint with `strategy_engine`'s Runtime regression fence (this repo
