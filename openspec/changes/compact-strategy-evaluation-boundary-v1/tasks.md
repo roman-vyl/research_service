@@ -60,10 +60,10 @@ after its predecessor's gate is confirmed.
       adversarial scenario as `strategy_engine`'s I2, at the execution-
       loop level (locked profile held correctly across a profile-drift
       scenario; correct attribution on the resulting `TradeRecord`).
-- [ ] **I5 — N=1 End-to-End Proof (joint with `strategy_engine`, the
+- [x] **I5 — N=1 End-to-End Proof (joint with `strategy_engine`, the
       single most important gate in this plan).** Normative requirements:
       `research-historical-execution-parity-v1`. Nothing past this point
-      (I6/I7/I8) starts until this is green. Sub-tasks:
+      (I6/I7/I8) starts until this is green. **I5_GATE_PASSED.** Sub-tasks:
   - [x] **I5.A — Proof harness foundation.** `strategy_engine`-side
         proof-only `v2` envelope serializer (mirrors `strategy_
         serialization.py::serialize_strategy_evaluation_execution`'s
@@ -76,40 +76,91 @@ after its predecessor's gate is confirmed.
         alignment`/`HistoricalExecutionProjectionIndex.build`, and can
         drive `run_projection_execution_loop`. No production code
         changes on either side.
-  - [ ] **I5.B — Lane A reference + new path.** Real `full_available`
-        `BTCUSDT.P`/`5m`, canonical always-on spec, resolved once via
-        `ResolveBacktestWindow` and shared by both paths. Reference:
+  - [x] **I5.B — Lane A reference + new path.** Real `full_available`
+        `BTCUSDT.P`/`5m` (676,246 bars), genuinely profile-insensitive
+        spec (`scripts/fixtures/lane_a_always_on_ema_pullback_spec.json`
+        -- all exit rules under `always_on`, empty per-profile exit
+        lists, so legacy Research's current-profile-only reference is
+        valid evidence for it -- real entry/setup/HTF-context machinery
+        kept), resolved once and shared by both paths. Reference:
         existing legacy `run_unified_execution_loop` (unmodified). New
         path: the I5.A harness → `run_projection_execution_loop` →
-        `account_execution_loop` (unmodified).
-  - [ ] **I5.C — Lane B profile-sensitive proof.** Independent old-BBB
-        trade-lifecycle reference (extends `strategy_engine`'s I2
-        verbatim reference to a full lifecycle — entry/lock/drift/exit/
-        attribution) vs. the same I5.A harness → new path, on the
-        profile-sensitive adversarial spec (I2's scenario shape).
-        Includes the mandatory negative-control evidence (locked vs.
-        current-profile interpretation diverge) -- current-profile
-        evidence sourced proof-only from Engine's native evaluation/the
-        old-BBB reference, never from the `.v2` wire or read by the new
-        execution path itself.
-  - [ ] **I5.D — Semantic diff engine.** Structured comparison over the
-        "Zero-diff comparison surface" fields (entry, locked profile,
-        initial protection + attribution, signal stream while open,
-        exit + attribution, `TradeRecord`, `TradeAccountingResult`,
-        provenance) — exact equality throughout except the one carried-
-        over Engine `ratio` epsilon (see design.md).
-  - [ ] **I5.E — Real full_available acceptance run.** Execute I5.B and
-        I5.C against real Market Data Service data (not `FakeMarketData`
-        fixtures), matching the precedent set by `strategy_engine`'s
-        `scratch/parity_proof.py`. Record results (bar count, diff
-        count, wall time) analogous to that precedent's own reporting.
-  - [ ] **I5.F — Regression fences / final gate.** Confirm during I5
-        work: Strategy Engine `/range`/`/range-batch` unchanged;
-        Research's production `/range` consumer
-        (`RunSingleInstanceBacktest`) still calls the legacy `.v1`
-        contract; no persistence/diagnostics/accounting-formula changes;
-        Runtime untouched. Gate: I5.B and I5.C both report zero semantic
-        diffs.
+        `account_execution_loop` (unmodified). Result: 8317 vs. 8317
+        closed trades, **zero diffs** on the full common-facts surface
+        (entry, initial protection, exit, `TradeRecord`, accounting --
+        `gross_pnl`/`net_pnl` identical to the last decimal digit).
+        Attribution fields differ (legacy always `None`, structurally --
+        the legacy reference never populated them, the pre-existing gap
+        I4 restored on the new path) -- reported informationally, not
+        folded into pass/fail, per `research-historical-execution-
+        parity-v1`'s own scoping.
+
+        **Corrective note**: an earlier attempt used the shared
+        profile-sensitive spec for Lane A too and found 6934 vs. 6928
+        trades. Localized precisely (position index 1366, entry bar
+        133504): legacy exited via the flattened current-bar-profile
+        `signal_exit` field one bar before the new path's
+        locked-profile-correct stop-loss exit -- i.e., the exact
+        locked-profile-vs-current-profile defect this migration exists
+        to fix, exposed by using a reference mechanism
+        (`research-historical-execution-parity-v1` already documents as
+        "valid only for an always-on-only spec") against a spec it
+        cannot validate. Not a defect in the new path; fixed by scoping
+        Lane A to the genuinely profile-insensitive fixture above and
+        moving all profile-sensitive exit configuration to I5.C.
+  - [x] **I5.C — Lane B profile-sensitive proof.** Independent old-BBB
+        trade-lifecycle reference (`scripts/_old_bbb_lifecycle_
+        reference.py` -- verbatim OHLC-gap/fill mechanics from
+        `_bbb_new_gen@cddc836`, extended to a full entry/lock/drift/
+        exit/accounting lifecycle in `scripts/lane_b_parity_proof.py`)
+        vs. the same I5.A-shaped new path, on
+        `scripts/fixtures/lane_b_profile_sensitive_ema_pullback_spec
+        .json` (three distinct profile SL/TP/signal-exit
+        configurations, same real entry/setup/HTF machinery as Lane A).
+        Real MDS window (60,001 bars): 556 vs. 556 closed trades, zero
+        diffs including attribution/`locked_exit_profile`. Mandatory
+        negative control run against the full `full_available` dataset
+        (676,246 bars, 6928 real trades from the independent simulator)
+        found 4 real trades where the locked-profile result provably
+        differs from what a deliberately-wrong current-bar-profile
+        lookup would have produced (different exit bar and/or rule_id)
+        -- e.g. entry bar 203671, locked `neutral`: correct
+        `(203820, sig_neutral)` vs. wrong-current-profile
+        `(203729, sig_aligned)`.
+  - [x] **I5.D — Semantic diff engine.** `scripts/lane_a_parity_proof.py`/
+        `scripts/lane_b_parity_proof.py` implement the structured
+        comparison over the "Zero-diff comparison surface" fields
+        (entry, locked profile, initial protection + attribution,
+        signal stream while open, exit + attribution, `TradeRecord`,
+        `TradeAccountingResult`, provenance) -- exact equality
+        throughout, no new tolerance introduced.
+  - [x] **I5.E — Real full_available acceptance run.** Executed against
+        the real local Market Data Service (not `FakeMarketData`),
+        matching the precedent set by `strategy_engine`'s `scratch/
+        parity_proof.py`. Lane A: 676,246 bars, 8317 trades, 0 diffs.
+        Lane B: 60,001 bars (real MDS window) for the full comparison,
+        plus a 676,246-bar real-data run of the independent simulator
+        alone for the negative-control search (6928 trades, 4 genuine
+        divergences found). Wall time: Lane A's legacy reference stage
+        alone was originally ~4.4h-extrapolated (O(bar_count^2) in
+        `execution/entry.py::_entry_series`, fixed separately --
+        `fd1975a`, 2876x speedup at 50k bars, confirmed
+        semantics-preserving); after the fix, the full Lane A run
+        (fetch + both execution loops + accounting + diff) completes in
+        well under a minute.
+  - [x] **I5.F — Regression fences / final gate.** Confirmed: Strategy
+        Engine `/range`/`/range-batch` unchanged (no commits touched
+        `adapters/http/strategy_routes.py`); Research's production
+        `/range` consumer (`RunSingleInstanceBacktest`/`evaluate_range`)
+        untouched -- Lane A's legacy reference is built proof-only,
+        in-process, from Engine's `evaluate()`, never through the live
+        route or that client method; no persistence/diagnostics changes;
+        no accounting-formula changes (`accounting/service.py`
+        untouched -- only `execution/entry.py`'s validation hot path was
+        fixed, semantics/ordering/fills unchanged, confirmed by the full
+        pre-existing test suite passing unmodified); Runtime untouched.
+        Gate: I5.B and I5.C both report zero semantic diffs.
+        **I5_GATE_PASSED.**
 - [ ] **I6 — Persistence / Diagnostics Split + Persisted-Artifact
       Regression Proof.** Normative requirements: `research-run-
       artifact-parity-v1` (new capability, this revision) plus the
