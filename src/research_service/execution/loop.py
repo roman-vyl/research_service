@@ -19,7 +19,7 @@ from research_service.domain.execution import (
     PositionExecution,
     PositionState,
 )
-from research_service.execution.entry import try_open_position
+from research_service.execution.entry import try_open_position, validated_entry_series
 from research_service.execution.managed_policy import (
     ManagedPolicyTimeline,
     build_managed_policy_timeline,
@@ -54,6 +54,9 @@ def run_unified_execution_loop(
     """
 
     _validate_execution_grid(evaluation, market_frame)
+    # Validated once per run, not once per bar -- see validated_entry_series's
+    # docstring for the O(bar_count^2) this avoids.
+    entries = validated_entry_series(evaluation)
 
     current_position: PositionState | None = None
     current_timeline: ManagedPolicyTimeline | None = None
@@ -106,6 +109,7 @@ def run_unified_execution_loop(
                 policy,
                 bar_index=bar_index,
                 current_position=current_position,
+                entries=entries,
             )
             if opened is not None and opened is not current_position:
                 current_position = opened
