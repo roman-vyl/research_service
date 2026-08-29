@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+from collections.abc import Iterator
 from decimal import Decimal
 from typing import Any, cast
 
@@ -234,7 +236,18 @@ class HttpStrategyEngineClient:
     def evaluate_range_batch(
         self,
         request: StrategyEvaluationBatchRequest,
-    ) -> tuple[StrategyEvaluationBatchVariantOutcome, ...]:
+    ) -> Iterator[StrategyEvaluationBatchVariantOutcome]:
+        """I8 (`compact-strategy-evaluation-boundary-v1`): streamed `.v2`
+        sequence, not a buffered `.v1` array. The HTTP request itself
+        (which triggers Engine's shared `MarketFrame` acquisition/
+        validation) is sent, and its status/headers are read, before this
+        generator yields its first element -- so a whole-batch acquisition
+        failure raises here, synchronously, before any candidate is
+        processed. Each line is decoded and yielded one at a time; callers
+        SHALL process (materialize/persist/release) each outcome before
+        this generator produces the next -- it never buffers the full
+        response."""
+
         payload: dict[str, object] = {
             "market": {
                 "ticker": request.market.ticker,
@@ -253,82 +266,115 @@ class HttpStrategyEngineClient:
                 }
                 for variant in request.variants
             ],
-            "options": {
-                "include_features": True,
-                "include_contexts": True,
-                "include_component_evidence": True,
-                "include_state_artifact": False,
-            },
         }
-        body = self._post_json(
-            "/v1/strategy-evaluations/range-batch",
-            payload,
-            "Strategy Engine range-batch evaluation request failed",
-        )
-        raw_variants = body.get("variants")
-        if not isinstance(raw_variants, list):
+        expected_variant_ids = [variant.variant_id for variant in request.variants]
+        try:
+            with self._client.stream(
+                "POST", "/v1/strategy-evaluations/range-batch", json=payload
+            ) as response:
+                if response.status_code != 200:
+                    response.read()
+                    raise UpstreamServiceError(
+                        service="strategy_engine",
+                        status_code=response.status_code,
+                        message="Strategy Engine range-batch evaluation request failed",
+                        details={"body": _safe_json(response)},
+                    )
+                yield from self._consume_batch_stream(response, expected_variant_ids)
+        except httpx.HTTPError as exc:
             raise UpstreamServiceError(
-                service="strategy_engine",
-                status_code=502,
-                message="Strategy Engine range-batch response field variants is invalid",
-            )
+                service="strategy_engine", status_code=503, message=str(exc)
+            ) from exc
 
-        instance_id_by_variant = {
-            variant.variant_id: variant.instance_id for variant in request.variants
-        }
-        expected_variant_ids = set(instance_id_by_variant)
-        outcomes_by_variant: dict[str, StrategyEvaluationBatchVariantOutcome] = {}
-        for item in raw_variants:
+    def _consume_batch_stream(
+        self, response: httpx.Response, expected_variant_ids: list[str]
+    ) -> Iterator[StrategyEvaluationBatchVariantOutcome]:
+        seen: set[str] = set()
+        expected_by_position = list(expected_variant_ids)
+        position = 0
+        for line in response.iter_lines():
+            if not line:
+                continue
+            try:
+                item = json.loads(line)
+            except ValueError as exc:
+                raise UpstreamServiceError(
+                    service="strategy_engine",
+                    status_code=502,
+                    message="Strategy Engine range-batch stream element is not valid JSON",
+                ) from exc
             if not isinstance(item, dict):
                 raise UpstreamServiceError(
                     service="strategy_engine",
                     status_code=502,
-                    message="Strategy Engine range-batch response variant entry is invalid",
+                    message="Strategy Engine range-batch stream element is not an object",
                 )
-            variant_id = str(item.get("variant_id", ""))
-            if variant_id not in expected_variant_ids:
+            variant_id = item.get("variant_id")
+            if not isinstance(variant_id, str) or not variant_id:
                 raise UpstreamServiceError(
                     service="strategy_engine",
                     status_code=502,
-                    message="Strategy Engine range-batch response has an unrequested variant_id",
-                    details={"variant_id": variant_id},
+                    message="Strategy Engine range-batch stream element has no variant_id",
                 )
-            if variant_id in outcomes_by_variant:
+            if position >= len(expected_by_position):
                 raise UpstreamServiceError(
                     service="strategy_engine",
                     status_code=502,
-                    message="Strategy Engine range-batch response has a duplicate variant_id",
+                    message="Strategy Engine range-batch stream has more elements than requested",
                     details={"variant_id": variant_id},
                 )
+            if variant_id != expected_by_position[position]:
+                raise UpstreamServiceError(
+                    service="strategy_engine",
+                    status_code=502,
+                    message="Strategy Engine range-batch stream element is out of request order",
+                    details={
+                        "expected_variant_id": expected_by_position[position],
+                        "actual_variant_id": variant_id,
+                    },
+                )
+            if variant_id in seen:
+                raise UpstreamServiceError(
+                    service="strategy_engine",
+                    status_code=502,
+                    message="Strategy Engine range-batch stream has a duplicate variant_id",
+                    details={"variant_id": variant_id},
+                )
+            seen.add(variant_id)
+            position += 1
+
             result_raw = item.get("result")
             error_raw = item.get("error")
-            result = (
-                _parse_evaluation_result(
-                    cast("dict[str, object]", result_raw),
-                    instance_id=instance_id_by_variant[variant_id],
+            if (result_raw is None) == (error_raw is None):
+                raise UpstreamServiceError(
+                    service="strategy_engine",
+                    status_code=502,
+                    message=(
+                        "Strategy Engine range-batch stream element must carry exactly "
+                        "one of result/error"
+                    ),
+                    details={"variant_id": variant_id},
                 )
+            result = (
+                parse_historical_execution_projection(cast("dict[str, object]", result_raw))
                 if isinstance(result_raw, dict)
                 else None
             )
             error = error_raw if isinstance(error_raw, dict) else None
-            outcomes_by_variant[variant_id] = StrategyEvaluationBatchVariantOutcome(
+            yield StrategyEvaluationBatchVariantOutcome(
                 variant_id=variant_id,
                 result=result,
                 error=cast("dict[str, object] | None", error),
             )
 
-        missing = expected_variant_ids - set(outcomes_by_variant)
+        missing = expected_variant_ids[position:]
         if missing:
             raise UpstreamServiceError(
                 service="strategy_engine",
                 status_code=502,
-                message="Strategy Engine range-batch response is missing candidate outcome(s)",
-                details={"missing_variant_ids": sorted(missing)},
+                message="Strategy Engine range-batch stream is missing candidate outcome(s)",
+                details={"missing_variant_ids": missing},
             )
-
-        # Correlate by variant_id, not response array order -- return in
-        # request order for a deterministic, easy-to-assert-on sequence.
-        return tuple(outcomes_by_variant[variant.variant_id] for variant in request.variants)
 
     def evaluate_managed_replay(
         self,

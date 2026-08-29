@@ -2,20 +2,12 @@
 
 from research_service.application.backtests.artifacts import (
     PersistedRunArtifacts,
-    PersistSingleInstanceBacktest,
     RunArtifactFile,
     RunArtifactManifest,
 )
-from research_service.application.backtests.contracts import (
-    SingleInstanceBacktestRequest,
-    SingleInstanceBacktestResult,
-)
+from research_service.application.backtests.contracts import SingleInstanceBacktestRequest
 from research_service.application.backtests.from_deployable_instance import (
     build_backtest_request,
-)
-from research_service.application.backtests.materialize_backtest_outcome import (
-    MaterializeBacktestOutcome,
-    SingleInstanceBacktestOutcome,
 )
 from research_service.application.backtests.materialize_backtest_projection import (
     MaterializeBacktestProjectionOutcome,
@@ -37,10 +29,8 @@ from research_service.application.backtests.run_views import (
 
 __all__ = [
     "ArtifactRef",
-    "MaterializeBacktestOutcome",
     "MaterializeBacktestProjectionOutcome",
     "PersistedRunArtifacts",
-    "PersistSingleInstanceBacktest",
     "PersistSingleInstanceRun",
     "ReadResearchRuns",
     "build_backtest_request",
@@ -51,9 +41,7 @@ __all__ = [
     "RunDetailResult",
     "RunSingleInstanceBacktest",
     "RunSummary",
-    "SingleInstanceBacktestOutcome",
     "SingleInstanceBacktestRequest",
-    "SingleInstanceBacktestResult",
     "SingleInstanceRunOutcome",
     "SingleInstanceRunResult",
 ]

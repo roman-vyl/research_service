@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -163,15 +164,15 @@ def strategy_result(*, market: MarketRange | None = None) -> StrategyEvaluationR
 
 
 class FakeStrategyEngine:
-    """Shared fake across both single-instance (`.v2`
-    `evaluate_range_projection`, this module) and batch
-    (`.v1` `evaluate_range`/`evaluate_range_batch`, `test_batch_
-    experiments.py`) test suites -- batch's execution path is
-    unmodified by I7 (`research-production-cutover-v1`: "I7 does not
-    touch batch"), so it still needs the legacy dense
-    `StrategyEvaluationResult` shape. Accepts either fixture type and
-    only wires the methods that type supports; the other side raises if
-    called, catching an accidental cross-wiring in a test."""
+    """Shared fake across single-instance (`evaluate_range_projection`)
+    and batch (`evaluate_range_batch`, `test_batch_experiments.py`) test
+    suites -- since I8 both go through the same `.v2` projection-based
+    path. `evaluate_range`/`StrategyEvaluationResult` construction is
+    retained only because `research-production-cutover-v1`'s port still
+    declares the legacy `evaluate_range` method; nothing in production
+    calls it. Accepts either fixture type and only wires the methods
+    that type supports; the other side raises if called, catching an
+    accidental cross-wiring in a test."""
 
     def __init__(
         self,
@@ -207,9 +208,16 @@ class FakeStrategyEngine:
 
     def evaluate_range_batch(
         self, request: StrategyEvaluationBatchRequest
-    ) -> tuple[StrategyEvaluationBatchVariantOutcome, ...]:
-        if self.result is None:
-            raise AssertionError("not used -- projection-based fixture only")
+    ) -> Iterator[StrategyEvaluationBatchVariantOutcome]:
+        """I8: streamed, projection-based -- mirrors the real Engine's
+        shared-once-acquisition + sequential per-variant `.v2` semantics.
+        `instance_id` is never echoed on the projection (Research-owned,
+        stamped downstream from the candidate's own identity subset) --
+        only `strategy_id` varies per variant here, matching the real
+        wire contract."""
+
+        if self.projection is None:
+            raise AssertionError("not used -- legacy dense fixture only")
         self.batch_requests.append(request)
         outcomes = []
         for variant in request.variants:
@@ -228,17 +236,14 @@ class FakeStrategyEngine:
                 outcomes.append(
                     StrategyEvaluationBatchVariantOutcome(
                         variant_id=variant.variant_id,
-                        result=self.result.model_copy(
-                            update={
-                                "instance_id": variant.instance_id,
-                                "strategy_id": variant.strategy_id,
-                            }
+                        result=self.projection.model_copy(
+                            update={"strategy_id": variant.strategy_id}
                         ),
                     )
                 )
         if self.shuffle_response:
             outcomes = list(reversed(outcomes))
-        return tuple(outcomes)
+        yield from outcomes
 
     def evaluate_managed_replay(self, request: ManagedReplayRequest) -> ManagedReplayResult:
         self.managed_requests.append(request)

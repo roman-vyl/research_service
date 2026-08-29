@@ -202,14 +202,15 @@ class StrategyEvaluationBatchRequest(BaseModel):
 
 
 class StrategyEvaluationBatchVariantOutcome(BaseModel):
-    """One variant's outcome from a `/range-batch` call: either a parsed,
-    instance_id-stamped result, or an Engine-reported per-variant error —
-    never both, never neither."""
+    """One variant's outcome from the streamed `/range-batch` sequence
+    (I8, `compact-strategy-evaluation-boundary-v1`): either a decoded
+    `HistoricalExecutionProjectionDTO` (`.v2`), or an Engine-reported
+    per-variant error — never both, never neither."""
 
     model_config = ConfigDict(frozen=True)
 
     variant_id: str
-    result: StrategyEvaluationResult | None = None
+    result: HistoricalExecutionProjectionDTO | None = None
     error: dict[str, object] | None = None
 
     @model_validator(mode="after")

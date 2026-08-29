@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from typing import Any, Protocol
 
@@ -45,7 +46,15 @@ class StrategyEnginePort(Protocol):
     def evaluate_range_batch(
         self,
         request: StrategyEvaluationBatchRequest,
-    ) -> tuple[StrategyEvaluationBatchVariantOutcome, ...]: ...
+    ) -> Iterator[StrategyEvaluationBatchVariantOutcome]:
+        """I8 (`compact-strategy-evaluation-boundary-v1`): streamed, not
+        buffered — the shared `MarketFrame` acquisition/validation SHALL
+        complete before this returns; a terminal failure there raises
+        directly. Iterating the returned generator drives one HTTP
+        request whose body is consumed incrementally, one decoded variant
+        outcome at a time — callers SHALL NOT materialize the full
+        sequence before processing each element."""
+        ...
 
     def evaluate_managed_replay(
         self,

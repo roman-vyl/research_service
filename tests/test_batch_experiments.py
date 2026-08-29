@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Iterator
 from decimal import Decimal
 from pathlib import Path
 
@@ -11,8 +12,10 @@ from pydantic import ValidationError
 from research_service.accounting import AccountingPolicy
 from research_service.adapters.artifacts.filesystem import FilesystemArtifactStore
 from research_service.adapters.http.strategy_engine_client import HttpStrategyEngineClient
-from research_service.application.backtests import MaterializeBacktestOutcome
-from research_service.application.backtests.artifacts import PersistSingleInstanceBacktest
+from research_service.application.backtests import (
+    MaterializeBacktestProjectionOutcome,
+    PersistSingleInstanceRun,
+)
 from research_service.application.experiments import (
     BatchCandidateRequest,
     BatchExperimentRequest,
@@ -38,7 +41,7 @@ from test_single_instance_backtest import (
     FakeMarketData,
     FakeStrategyEngine,
     market_frame,
-    strategy_result,
+    strategy_projection,
 )
 
 _RAW_SPEC = {"anchor": {"period": 200}}
@@ -86,19 +89,19 @@ def make_request(*candidates: BatchCandidateRequest, **overrides: object) -> Bat
 
 def build_use_case(
     strategy: object, market: FakeMarketData, tmp_path: Path
-) -> tuple[RunBatchExperiment, PersistSingleInstanceBacktest]:
-    persist_backtest = PersistSingleInstanceBacktest(FilesystemArtifactStore(tmp_path))
+) -> tuple[RunBatchExperiment, PersistSingleInstanceRun]:
+    persist_run = PersistSingleInstanceRun(FilesystemArtifactStore(tmp_path))
     use_case = RunBatchExperiment(
         strategy,  # type: ignore[arg-type]
         market,  # type: ignore[arg-type]
-        MaterializeBacktestOutcome(strategy),  # type: ignore[arg-type]
-        persist_backtest,
+        MaterializeBacktestProjectionOutcome(strategy),  # type: ignore[arg-type]
+        persist_run,
     )
-    return use_case, persist_backtest
+    return use_case, persist_run
 
 
 def test_batch_runs_all_candidates_and_shares_one_evaluation(tmp_path: Path) -> None:
-    strategy = FakeStrategyEngine(strategy_result())
+    strategy = FakeStrategyEngine(strategy_projection())
     market = FakeMarketData(market_frame())
     use_case, _ = build_use_case(strategy, market, tmp_path)
 
@@ -120,7 +123,7 @@ def test_batch_runs_all_candidates_and_shares_one_evaluation(tmp_path: Path) -> 
 def test_n_candidates_share_one_window_resolution_one_frame_read_one_batch_call(
     tmp_path: Path,
 ) -> None:
-    strategy = FakeStrategyEngine(strategy_result())
+    strategy = FakeStrategyEngine(strategy_projection())
     market = FakeMarketData(market_frame())
     use_case, _ = build_use_case(strategy, market, tmp_path)
 
@@ -131,11 +134,11 @@ def test_n_candidates_share_one_window_resolution_one_frame_read_one_batch_call(
     assert len(market.requests) == 1  # read_historical_range called once
     assert len(strategy.batch_requests) == 1  # evaluate_range_batch called once
     assert len(strategy.batch_requests[0].variants) == 4
-    assert strategy.range_requests == []  # evaluate_range (single) never called
+    assert strategy.range_requests == []  # evaluate_range_projection (single) never called
 
 
 def test_full_available_shared_window_uses_bounds_once(tmp_path: Path) -> None:
-    strategy = FakeStrategyEngine(strategy_result())
+    strategy = FakeStrategyEngine(strategy_projection())
     market = FakeMarketData(market_frame())
     use_case, _ = build_use_case(strategy, market, tmp_path)
 
@@ -155,7 +158,7 @@ def test_full_available_shared_window_uses_bounds_once(tmp_path: Path) -> None:
 def test_engine_batch_wire_uses_candidate_id_as_variant_id_and_canonical_strategy(
     tmp_path: Path,
 ) -> None:
-    strategy = FakeStrategyEngine(strategy_result())
+    strategy = FakeStrategyEngine(strategy_projection())
     market = FakeMarketData(market_frame())
     use_case, _ = build_use_case(strategy, market, tmp_path)
 
@@ -171,6 +174,34 @@ def test_engine_batch_wire_uses_candidate_id_as_variant_id_and_canonical_strateg
         assert v.instance_id
 
 
+def _v2_stream_line(variant_id: str, projection_body: dict[str, object] | None, error: object) -> str:
+    return json.dumps({"variant_id": variant_id, "result": projection_body, "error": error}) + "\n"
+
+
+def _minimal_v2_body(**overrides: object) -> dict[str, object]:
+    body: dict[str, object] = {
+        "contract_version": "strategy_evaluation_execution.v2",
+        "strategy_id": "ema_pullback",
+        "config_hash": "cfg",
+        "market": {
+            "ticker": "BTCUSDT.P",
+            "base_timeframe": "5m",
+            "from_ms": 0,
+            "to_ms": 300_000,
+            "bar_count": 1,
+            "market_data_hash": "md",
+        },
+        "entry_opportunities": [],
+        "signal_exit_events": {
+            "long": {"aligned": [], "countertrend": [], "neutral": []},
+            "short": {"aligned": [], "countertrend": [], "neutral": []},
+        },
+        "warnings": [],
+    }
+    body.update(overrides)
+    return body
+
+
 def test_http_client_sends_no_enabled_instance_id_or_run_id_on_batch_wire() -> None:
     seen: dict[str, object] = {}
 
@@ -178,57 +209,27 @@ def test_http_client_sends_no_enabled_instance_id_or_run_id_on_batch_wire() -> N
         seen["body"] = json.loads(request.content.decode("utf-8"))
         return httpx.Response(
             200,
-            json={
-                "variants": [
-                    {
-                        "variant_id": "a",
-                        "result": {
-                            "contract_version": "strategy_evaluation.v1",
-                            "strategy_id": "ema_pullback",
-                            "config_hash": "cfg",
-                            "market": {
-                                "ticker": "BTCUSDT.P",
-                                "base_timeframe": "5m",
-                                "from_ms": 0,
-                                "to_ms": 300_000,
-                                "bar_count": 1,
-                                "market_data_hash": "md",
-                            },
-                            "features": {"time_ms": [0]},
-                            "contexts": {},
-                            "entries": {"long": [False]},
-                            "exit_policy": {
-                                "signal_exit": {"long": [False], "short": [False]},
-                                "stop_loss_ratio": {"long": [None], "short": [None]},
-                                "take_profit_ratio": {"long": [None], "short": [None]},
-                                "stop_ready": {"long": [False], "short": [False]},
-                            },
-                            "component_evidence": {},
-                            "validity": {},
-                            "state_artifact": None,
-                            "warnings": [],
-                        },
-                        "error": None,
-                    }
-                ]
-            },
+            content=_v2_stream_line("a", _minimal_v2_body(), None),
+            headers={"content-type": "application/x-ndjson"},
         )
 
     client = HttpStrategyEngineClient("http://strategy")
     client._client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://strategy")
 
-    outcomes = client.evaluate_range_batch(
-        StrategyEvaluationBatchRequest(
-            market=MarketRange(ticker="BTCUSDT.P", timeframe="5m", from_ms=0, to_ms=300_000),
-            variants=(
-                StrategyEvaluationBatchVariant(
-                    variant_id="a",
-                    instance_id="ema_pullback:should-not-appear-on-wire",
-                    strategy_id="ema_pullback",
-                    strategy_spec={"anchor": {"period": 200}},
+    outcomes = tuple(
+        client.evaluate_range_batch(
+            StrategyEvaluationBatchRequest(
+                market=MarketRange(ticker="BTCUSDT.P", timeframe="5m", from_ms=0, to_ms=300_000),
+                variants=(
+                    StrategyEvaluationBatchVariant(
+                        variant_id="a",
+                        instance_id="ema_pullback:should-not-appear-on-wire",
+                        strategy_id="ema_pullback",
+                        strategy_spec={"anchor": {"period": 200}},
+                    ),
                 ),
-            ),
-            expected_market_data_hash="shared-hash",
+                expected_market_data_hash="shared-hash",
+            )
         )
     )
 
@@ -242,14 +243,101 @@ def test_http_client_sends_no_enabled_instance_id_or_run_id_on_batch_wire() -> N
     assert "run_id" not in body
     assert body["expected_market_data_hash"] == "shared-hash"
     assert outcomes[0].result is not None
-    assert outcomes[0].result.instance_id == "ema_pullback:should-not-appear-on-wire"
+    # Engine never echoes instance_id on the .v2 projection (Research-
+    # owned, stamped downstream) -- confirm strategy_id round-trips instead.
+    assert outcomes[0].result.strategy_id == "ema_pullback"
+
+
+def test_http_client_rejects_unknown_variant_id() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=_v2_stream_line("ghost", None, {"error": "x", "message": "x", "details": {}}),
+            headers={"content-type": "application/x-ndjson"},
+        )
+
+    client = HttpStrategyEngineClient("http://strategy")
+    client._client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://strategy")
+
+    with pytest.raises(UpstreamServiceError) as exc_info:
+        tuple(
+            client.evaluate_range_batch(
+                StrategyEvaluationBatchRequest(
+                    market=MarketRange(ticker="BTCUSDT.P", timeframe="5m", from_ms=0, to_ms=300_000),
+                    variants=(
+                        StrategyEvaluationBatchVariant(
+                            variant_id="a",
+                            instance_id="i",
+                            strategy_id="ema_pullback",
+                            strategy_spec={},
+                        ),
+                    ),
+                )
+            )
+        )
+    assert "out of request order" in exc_info.value.message
+
+
+def test_http_client_rejects_duplicate_variant_id() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        line = _v2_stream_line("a", _minimal_v2_body(), None)
+        return httpx.Response(
+            200, content=line + line, headers={"content-type": "application/x-ndjson"}
+        )
+
+    client = HttpStrategyEngineClient("http://strategy")
+    client._client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://strategy")
+
+    with pytest.raises(UpstreamServiceError) as exc_info:
+        tuple(
+            client.evaluate_range_batch(
+                StrategyEvaluationBatchRequest(
+                    market=MarketRange(ticker="BTCUSDT.P", timeframe="5m", from_ms=0, to_ms=300_000),
+                    variants=(
+                        StrategyEvaluationBatchVariant(
+                            variant_id="a",
+                            instance_id="i",
+                            strategy_id="ema_pullback",
+                            strategy_spec={},
+                        ),
+                    ),
+                )
+            )
+        )
+    assert "more elements than requested" in exc_info.value.message
+
+
+def test_http_client_rejects_missing_candidate_outcome() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content="", headers={"content-type": "application/x-ndjson"})
+
+    client = HttpStrategyEngineClient("http://strategy")
+    client._client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://strategy")
+
+    with pytest.raises(UpstreamServiceError) as exc_info:
+        tuple(
+            client.evaluate_range_batch(
+                StrategyEvaluationBatchRequest(
+                    market=MarketRange(ticker="BTCUSDT.P", timeframe="5m", from_ms=0, to_ms=300_000),
+                    variants=(
+                        StrategyEvaluationBatchVariant(
+                            variant_id="a",
+                            instance_id="i",
+                            strategy_id="ema_pullback",
+                            strategy_spec={},
+                        ),
+                    ),
+                )
+            )
+        )
+    assert "missing candidate outcome" in exc_info.value.message
 
 
 # --- Response correlation -----------------------------------------------------
 
 
 def test_shuffled_engine_response_order_still_maps_correctly(tmp_path: Path) -> None:
-    strategy = FakeStrategyEngine(strategy_result(), shuffle_response=True)
+    strategy = FakeStrategyEngine(strategy_projection(), shuffle_response=True)
     market = FakeMarketData(market_frame())
     use_case, _ = build_use_case(strategy, market, tmp_path)
 
@@ -267,92 +355,13 @@ def test_shuffled_engine_response_order_still_maps_correctly(tmp_path: Path) -> 
         assert item.instance_id == expected
 
 
-def test_http_client_rejects_unknown_variant_id() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(
-            200,
-            json={
-                "variants": [
-                    {
-                        "variant_id": "ghost",
-                        "result": None,
-                        "error": {"error": "x", "message": "x", "details": {}},
-                    }
-                ]
-            },
-        )
-
-    client = HttpStrategyEngineClient("http://strategy")
-    client._client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://strategy")
-
-    with pytest.raises(UpstreamServiceError) as exc_info:
-        client.evaluate_range_batch(
-            StrategyEvaluationBatchRequest(
-                market=MarketRange(ticker="BTCUSDT.P", timeframe="5m", from_ms=0, to_ms=300_000),
-                variants=(
-                    StrategyEvaluationBatchVariant(
-                        variant_id="a", instance_id="i", strategy_id="ema_pullback", strategy_spec={}
-                    ),
-                ),
-            )
-        )
-    assert "unrequested variant_id" in exc_info.value.message
-
-
-def test_http_client_rejects_duplicate_variant_id() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        entry = {
-            "variant_id": "a",
-            "result": None,
-            "error": {"error": "x", "message": "x", "details": {}},
-        }
-        return httpx.Response(200, json={"variants": [entry, entry]})
-
-    client = HttpStrategyEngineClient("http://strategy")
-    client._client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://strategy")
-
-    with pytest.raises(UpstreamServiceError) as exc_info:
-        client.evaluate_range_batch(
-            StrategyEvaluationBatchRequest(
-                market=MarketRange(ticker="BTCUSDT.P", timeframe="5m", from_ms=0, to_ms=300_000),
-                variants=(
-                    StrategyEvaluationBatchVariant(
-                        variant_id="a", instance_id="i", strategy_id="ema_pullback", strategy_spec={}
-                    ),
-                ),
-            )
-        )
-    assert "duplicate variant_id" in exc_info.value.message
-
-
-def test_http_client_rejects_missing_candidate_outcome() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"variants": []})
-
-    client = HttpStrategyEngineClient("http://strategy")
-    client._client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://strategy")
-
-    with pytest.raises(UpstreamServiceError) as exc_info:
-        client.evaluate_range_batch(
-            StrategyEvaluationBatchRequest(
-                market=MarketRange(ticker="BTCUSDT.P", timeframe="5m", from_ms=0, to_ms=300_000),
-                variants=(
-                    StrategyEvaluationBatchVariant(
-                        variant_id="a", instance_id="i", strategy_id="ema_pullback", strategy_spec={}
-                    ),
-                ),
-            )
-        )
-    assert "missing candidate outcome" in exc_info.value.message
-
-
 # --- Instance identity ---------------------------------------------------------
 
 
 def test_each_successful_candidate_gets_correct_research_derived_instance_id(
     tmp_path: Path,
 ) -> None:
-    strategy = FakeStrategyEngine(strategy_result())
+    strategy = FakeStrategyEngine(strategy_projection())
     market = FakeMarketData(market_frame())
     use_case, _ = build_use_case(strategy, market, tmp_path)
 
@@ -369,7 +378,7 @@ def test_each_successful_candidate_gets_correct_research_derived_instance_id(
 
 
 def test_different_raw_spec_yields_different_instance_id(tmp_path: Path) -> None:
-    strategy = FakeStrategyEngine(strategy_result())
+    strategy = FakeStrategyEngine(strategy_projection())
     market = FakeMarketData(market_frame())
     use_case, _ = build_use_case(strategy, market, tmp_path)
 
@@ -391,7 +400,7 @@ class DiscontinuousMarketData(FakeMarketData):
 def test_shared_window_failure_makes_zero_batch_calls_and_persists_nothing(
     tmp_path: Path,
 ) -> None:
-    strategy = FakeStrategyEngine(strategy_result())
+    strategy = FakeStrategyEngine(strategy_projection())
     market = DiscontinuousMarketData(market_frame())
     use_case, _ = build_use_case(strategy, market, tmp_path)
 
@@ -403,12 +412,18 @@ def test_shared_window_failure_makes_zero_batch_calls_and_persists_nothing(
 
 
 class FailingBatchStrategyEngine(FakeStrategyEngine):
-    def evaluate_range_batch(self, request: object) -> object:  # type: ignore[override]
+    def evaluate_range_batch(
+        self, request: StrategyEvaluationBatchRequest
+    ) -> Iterator[StrategyEvaluationBatchVariantOutcome]:
+        # No `yield` anywhere in this body -- calling this raises
+        # immediately (not a generator), matching the real client's
+        # "shared acquisition fails before any streaming begins"
+        # contract (research-batch-lifecycle-v1).
         raise UpstreamServiceError(service="strategy_engine", status_code=503, message="down")
 
 
 def test_engine_batch_http_failure_persists_nothing(tmp_path: Path) -> None:
-    strategy = FailingBatchStrategyEngine(strategy_result())
+    strategy = FailingBatchStrategyEngine(strategy_projection())
     market = FakeMarketData(market_frame())
     use_case, _ = build_use_case(strategy, market, tmp_path)
 
@@ -419,7 +434,7 @@ def test_engine_batch_http_failure_persists_nothing(tmp_path: Path) -> None:
 
 
 def test_one_per_variant_engine_error_isolates_that_candidate(tmp_path: Path) -> None:
-    strategy = FakeStrategyEngine(strategy_result(), failing_variant_ids=frozenset({"b"}))
+    strategy = FakeStrategyEngine(strategy_projection(), failing_variant_ids=frozenset({"b"}))
     market = FakeMarketData(market_frame())
     use_case, _ = build_use_case(strategy, market, tmp_path)
 
@@ -441,36 +456,31 @@ def test_one_per_variant_engine_error_isolates_that_candidate(tmp_path: Path) ->
 class MismatchOnBStrategyEngine(FakeStrategyEngine):
     def evaluate_range_batch(
         self, request: StrategyEvaluationBatchRequest
-    ) -> tuple[StrategyEvaluationBatchVariantOutcome, ...]:
+    ) -> Iterator[StrategyEvaluationBatchVariantOutcome]:
+        assert self.projection is not None
         self.batch_requests.append(request)
-        outcomes = []
         for variant in request.variants:
             if variant.variant_id == "b":
-                bad = self.result.model_copy(
+                bad = self.projection.model_copy(
                     update={
-                        "instance_id": variant.instance_id,
+                        "strategy_id": variant.strategy_id,
                         "market": MarketRange(
                             ticker="ETHUSDT.P", timeframe="5m", from_ms=0, to_ms=900_000
                         ),
                     }
                 )
-                outcomes.append(
-                    StrategyEvaluationBatchVariantOutcome(variant_id=variant.variant_id, result=bad)
-                )
+                yield StrategyEvaluationBatchVariantOutcome(variant_id=variant.variant_id, result=bad)
             else:
-                outcomes.append(
-                    StrategyEvaluationBatchVariantOutcome(
-                        variant_id=variant.variant_id,
-                        result=self.result.model_copy(update={"instance_id": variant.instance_id}),
-                    )
+                yield StrategyEvaluationBatchVariantOutcome(
+                    variant_id=variant.variant_id,
+                    result=self.projection.model_copy(update={"strategy_id": variant.strategy_id}),
                 )
-        return tuple(outcomes)
 
 
 def test_one_materialize_failure_isolates_that_candidate_siblings_persist(
     tmp_path: Path,
 ) -> None:
-    strategy = MismatchOnBStrategyEngine(strategy_result())
+    strategy = MismatchOnBStrategyEngine(strategy_projection())
     market = FakeMarketData(market_frame())
     use_case, _ = build_use_case(strategy, market, tmp_path)
 
@@ -496,7 +506,7 @@ def test_one_materialize_failure_isolates_that_candidate_siblings_persist(
 def test_successful_candidates_create_independent_canonical_run_artifacts(
     tmp_path: Path,
 ) -> None:
-    strategy = FakeStrategyEngine(strategy_result())
+    strategy = FakeStrategyEngine(strategy_projection())
     market = FakeMarketData(market_frame())
     use_case, _ = build_use_case(strategy, market, tmp_path)
 
@@ -512,7 +522,7 @@ def test_successful_candidates_create_independent_canonical_run_artifacts(
 
 
 def test_batch_artifacts_are_published_atomically(tmp_path: Path) -> None:
-    strategy = FakeStrategyEngine(strategy_result())
+    strategy = FakeStrategyEngine(strategy_projection())
     market = FakeMarketData(market_frame())
     use_case, _ = build_use_case(strategy, market, tmp_path)
     request = make_request()
@@ -529,11 +539,11 @@ def test_batch_artifacts_are_published_atomically(tmp_path: Path) -> None:
 
 
 def test_batch_candidate_with_managed_policy_persists_real_events(tmp_path: Path) -> None:
-    """Regression: a managed candidate, run through the new shared-evaluation
+    """Regression: a managed candidate, run through the shared-evaluation
     batch path, must persist the real managed-policy events captured by
-    MaterializeBacktestOutcome's one authoritative outcome."""
+    MaterializeBacktestProjectionOutcome's one authoritative outcome."""
 
-    strategy = ManagedEventsStrategyEngine(strategy_result())
+    strategy = ManagedEventsStrategyEngine(strategy_projection())
     market = FakeMarketData(market_frame())
     use_case, _ = build_use_case(strategy, market, tmp_path)
     request = make_request(candidate("managed-a", managed_policy_enabled=True))
@@ -604,7 +614,7 @@ def test_legacy_candidate_backtest_shape_is_rejected() -> None:
 
 
 def test_successful_candidate_row_has_derived_summary_fields(tmp_path: Path) -> None:
-    strategy = FakeStrategyEngine(strategy_result())
+    strategy = FakeStrategyEngine(strategy_projection())
     market = FakeMarketData(market_frame())
     use_case, _ = build_use_case(strategy, market, tmp_path)
 
@@ -620,7 +630,7 @@ def test_successful_candidate_row_has_derived_summary_fields(tmp_path: Path) -> 
 
 
 def test_failed_candidate_row_has_no_summary_fields(tmp_path: Path) -> None:
-    strategy = FakeStrategyEngine(strategy_result(), failing_variant_ids=frozenset({"b"}))
+    strategy = FakeStrategyEngine(strategy_projection(), failing_variant_ids=frozenset({"b"}))
     market = FakeMarketData(market_frame())
     use_case, _ = build_use_case(strategy, market, tmp_path)
 

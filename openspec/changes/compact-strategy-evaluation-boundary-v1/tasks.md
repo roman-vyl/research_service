@@ -351,10 +351,10 @@ after its predecessor's gate is confirmed.
       green in both repos; `pytest`/`ruff check`/`mypy src` green in
       both repos; no dual-shape reader, no `contract_version`
       discrimination, no legacy-compatibility path introduced.
-- [ ] **I8 (Research's share) — Batch Lifetime Redesign.** Only after
+- [x] **I8 (Research's share) — Batch Lifetime Redesign.** Only after
       I7. Normative requirements: new `research-batch-lifecycle-v1` (this
       revision) plus a MODIFIED delta on `research-batch-experiments-v1`.
-      OpenSpec-only this pass — no application code. Sub-tasks:
+      **I8_GATE_PASSED.** Sub-tasks:
   - [x] **I8.A — EXPLORE.** Read `run_batch.py`/`evaluate_range_batch.py`/
         `materialize_backtest_outcome.py`/`artifacts.py`. Confirmed
         design.md's existing analysis: `RunBatchExperiment`'s
@@ -413,11 +413,65 @@ after its predecessor's gate is confirmed.
         under the corrected design — `/range-batch`'s response cut over
         to the streamed `.v2` shape (a new serializer + route change),
         not "no route change" as the first draft claimed.
-      Gate: N=1/2/4/11 benchmark, peak RSS approximately constant in N
-      (deferred to actual I8 implementation, not this OpenSpec pass);
-      real batch run against a live Engine instance, N>1, succeeds end
-      to end. This OpenSpec-only pass's own gate: `openspec validate
-      --strict` green, no `src`/`tests` diff.
+  - [x] **I8.E — Element-shape/boundary/ordering fixes (pre-APPLY
+        review).** Three deterministic corrections applied to both
+        OpenSpecs before implementation: (1) every stream element
+        normatively `{variant_id, result, error}`, `variant_id`
+        mandatory, exactly one of `result`/`error` non-null, `result`
+        the unwrapped canonical `.v2` envelope; (2) batch evaluation
+        goes through `EvaluateStrategyRange.execute_projection()`, never
+        an evaluator's `evaluate_execution_projection()` directly; (3)
+        shared `MarketFrame` acquisition/validation completes before any
+        streaming begins, so acquisition failure is a clean whole-
+        request HTTP error with zero elements streamed.
+  - [x] **I8.F — Real implementation.** Research: `StrategyEnginePort
+        .evaluate_range_batch`/`HttpStrategyEngineClient` rewritten to a
+        streaming generator (`httpx` `.stream()`, NDJSON line-by-line
+        decode via the existing `parse_historical_execution_projection`,
+        strict request-order validation, fail-closed on malformed/
+        out-of-order/duplicate/missing elements).
+        `StrategyEvaluationBatchVariantOutcome.result` retyped to
+        `HistoricalExecutionProjectionDTO`. `RunBatchExperiment` rewritten:
+        shared window/frame acquisition unchanged; per-candidate settle
+        loop now consumes the streaming generator directly, materializing
+        via `MaterializeBacktestProjectionOutcome`/persisting via
+        `PersistSingleInstanceRun` (the same canonical single-instance
+        path) and releasing each candidate before the next is produced;
+        results correlated by `variant_id` into a `candidate_id`-keyed
+        dict so the final summary list is restored to request order
+        regardless of stream arrival order (only the small summaries are
+        held, never the heavy projections). Legacy batch-only
+        `MaterializeBacktestOutcome`/`PersistSingleInstanceBacktest`
+        deleted, along with the now-orphaned `SingleInstanceBacktestResult`/
+        `SingleInstanceBacktestOutcome` types; `application/backtests/
+        artifacts.py` trimmed to the shared manifest models only.
+        Fixed a latent bug surfaced by the new failure path:
+        `RunBatchExperiment`'s per-candidate exception handler used
+        `str(exc)`, which is empty for dataclass-based
+        `ResearchServiceError` subclasses constructed with keyword-only
+        args (`BaseException.args` stays empty) — now prefers `.message`.
+        Test suites updated (`test_single_instance_backtest.py`'s shared
+        `FakeStrategyEngine` gained a streaming, projection-based
+        `evaluate_range_batch`; `test_batch_experiments.py` rewritten
+        throughout; the now-dead `test_materialize_backtest_outcome.py`
+        deleted). `pytest`/`ruff check`/`mypy src` green in both repos.
+  - [x] **I8.G — Live gates.** (1) Real batch run: fresh local Engine
+        (current I8 code) + real Market Data Service + in-process
+        `RunBatchExperiment` wired to the real `HttpStrategyEngineClient`
+        — N=2 candidates, both completed, independently persisted in
+        canonical shape, immediately readable through `ReadResearchRuns`/
+        `GET /runs/{run_id}` (closing the I7-to-I8 batch-artifact-
+        readability gap); single-instance `POST /backtests` re-confirmed
+        unaffected on the same stack. (2) N=1/2/4/11 constant-RSS
+        benchmark: same live Engine process, peak RSS sampled via `ps`
+        during each run — 100928 / 101008 / 101056 / 101184 KB
+        (1.00x/1.00x/1.00x/1.00x of N=1, +0.25% total from N=1 to N=11)
+        — approximately constant, not linear.
+      Gate: N=1/2/4/11 benchmark, peak RSS approximately constant in
+      N — **PASSED (I8.G.2)**; real batch run against a live Engine
+      instance, N>1, succeeds end to end — **PASSED (I8.G.1)**.
+      `openspec validate --strict`/`--all --strict` green;
+      `pytest`/`ruff check`/`mypy src` green in both repos.
 
 ## Spec
 

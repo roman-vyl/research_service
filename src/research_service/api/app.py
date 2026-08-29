@@ -12,8 +12,7 @@ from research_service.adapters.config import FilesystemConfigStore
 from research_service.api.errors import install_error_handlers
 from research_service.api.routers import market, research, system
 from research_service.application.backtests import (
-    MaterializeBacktestOutcome,
-    PersistSingleInstanceBacktest,
+    MaterializeBacktestProjectionOutcome,
     PersistSingleInstanceRun,
     ReadResearchRuns,
     RunSingleInstanceBacktest,
@@ -73,11 +72,9 @@ def _build_services(settings: Settings, container: Container) -> AppServices:
         container.strategy_engine,
         container.market_data,
     )
-    # Batch's own persistence stays on the unmodified legacy writer
-    # (`research-production-cutover-v1`: "Shared batch/single-instance
-    # infrastructure stays batch-shaped") -- not exposed via AppServices,
-    # used only by RunBatchExperiment below.
-    persist_batch_backtest = PersistSingleInstanceBacktest(container.artifacts)
+    # I8 (`compact-strategy-evaluation-boundary-v1`): batch and single-
+    # instance persistence share the same canonical writer -- no separate
+    # batch-only path.
     persist_single_instance_run = PersistSingleInstanceRun(container.artifacts)
     read_research_runs = ReadResearchRuns(container.artifacts)
     return AppServices(
@@ -97,8 +94,8 @@ def _build_services(settings: Settings, container: Container) -> AppServices:
         run_batch_experiment=RunBatchExperiment(
             container.strategy_engine,
             container.market_data,
-            MaterializeBacktestOutcome(container.strategy_engine),
-            persist_batch_backtest,
+            MaterializeBacktestProjectionOutcome(container.strategy_engine),
+            persist_single_instance_run,
         ),
         persist_batch_experiment=PersistBatchExperiment(container.artifacts),
     )

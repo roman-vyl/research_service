@@ -1,12 +1,9 @@
-"""Persist a single-instance run in the canonical I6.D shape (I7,
-`compact-strategy-evaluation-boundary-v1`).
-
-Single-instance-only sibling of `PersistSingleInstanceBacktest` -- batch's
-writer stays completely unmodified
-(`research-production-cutover-v1`: "Shared batch/single-instance
-infrastructure stays batch-shaped"). `strategy_evaluation.json` IS the real
-`HistoricalExecutionProjection`; `result.json` references it (and
-`trades.json`/`execution_events.json`) by sha256 identity, never
+"""Persist a run in the canonical I6.D shape (I7, `compact-strategy-
+evaluation-boundary-v1`) -- both `RunSingleInstanceBacktest` and
+`RunBatchExperiment` use this writer since I8 (the batch-only legacy
+`PersistSingleInstanceBacktest` was deleted). `strategy_evaluation.json`
+IS the real `HistoricalExecutionProjection`; `result.json` references it
+(and `trades.json`/`execution_events.json`) by sha256 identity, never
 re-embedding, plus a lightweight market-identity/provenance subset so
 identity-only consumers don't need to open a second file.
 """

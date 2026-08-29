@@ -1,13 +1,9 @@
-"""Materialize a single-instance backtest outcome from an already-acquired
+"""Materialize a backtest outcome from an already-acquired
 `HistoricalExecutionProjectionDTO` (I7, `compact-strategy-evaluation-
-boundary-v1`).
-
-Single-instance-only sibling of `MaterializeBacktestOutcome` -- deliberately
-NOT shared with batch (`research-production-cutover-v1`'s "Shared batch/
-single-instance infrastructure stays batch-shaped"). `MaterializeBacktest
-Outcome`/`PersistSingleInstanceBacktest` remain completely unmodified and
-keep serving `run_batch.py` against the legacy dense shape.
-"""
+boundary-v1`) -- the canonical path both `RunSingleInstanceBacktest` and
+`RunBatchExperiment` use since I8 (the batch-only legacy
+`MaterializeBacktestOutcome` was deleted; there is no separate batch
+execution path)."""
 
 from __future__ import annotations
 

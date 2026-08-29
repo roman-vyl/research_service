@@ -20,10 +20,9 @@ class RunSingleInstanceBacktest:
     """Resolve the market window, acquire one Strategy Engine
     `HistoricalExecutionProjection` (`.v2`), and delegate the rest
     (execution/managed-replay/accounting) to
-    `MaterializeBacktestProjectionOutcome` (I7,
-    `compact-strategy-evaluation-boundary-v1`). Deliberately NOT
-    `MaterializeBacktestOutcome` -- that class stays batch-only, unmodified
-    (`research-production-cutover-v1`)."""
+    `MaterializeBacktestProjectionOutcome` (I7, `compact-strategy-
+    evaluation-boundary-v1`) -- the same canonical path batch uses since
+    I8."""
 
     def __init__(
         self,
