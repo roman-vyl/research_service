@@ -352,16 +352,60 @@ after its predecessor's gate is confirmed.
       both repos; no dual-shape reader, no `contract_version`
       discrimination, no legacy-compatibility path introduced.
 - [ ] **I8 (Research's share) — Batch Lifetime Redesign.** Only after
-      I7. Change the aggregation pattern so N candidates' evaluations
-      are never held resident simultaneously in either process, while
-      retaining shared-L0 acquisition — coordinate the exact mechanism
-      with `strategy_engine`'s I8 (transport/call-pattern is an
-      implementation decision, not fixed by I0). Re-litigate whether
-      `/range-batch` as one large request/response is even the right
-      shape, per the Master Plan — not just its aggregation timing.
-      `RunBatchExperiment`/`_settle_candidate`'s existing per-candidate
-      loop needs re-confirmation, not assumed structural change. Gate:
-      N=1/2/4/11 benchmark, peak RSS approximately constant in N.
+      I7. Normative requirements: new `research-batch-lifecycle-v1` (this
+      revision) plus a MODIFIED delta on `research-batch-experiments-v1`.
+      OpenSpec-only this pass — no application code. Sub-tasks:
+  - [x] **I8.A — EXPLORE.** Read `run_batch.py`/`evaluate_range_batch.py`/
+        `materialize_backtest_outcome.py`/`artifacts.py`. Confirmed
+        design.md's existing analysis: `RunBatchExperiment`'s
+        per-candidate settle loop is already correct; the actual bloat
+        is `evaluate_range_batch`'s ONE `/range-batch` response holding
+        all N candidates' evaluations resident before that loop starts.
+        **New finding, not previously confirmed against a real Engine**:
+        probed the real, live `/range-batch` route directly — it returns
+        `contract_version: "strategy_evaluation_execution.v1"` with
+        sparse `decision_events`, while Research's real
+        `_parse_evaluation_result` expects the older dense
+        `entries`/`exit_policy`/`component_evidence` shape. Fed a real
+        captured response through the real parser: raised
+        `UpstreamServiceError`. **`RunBatchExperiment` is not currently
+        functional against the live Engine stack** — existing batch
+        tests only exercise an in-process `FakeStrategyEngine`, so this
+        was never previously exposed.
+  - [x] **I8.B — Spec authored.** `research-batch-lifecycle-v1` written:
+        scope boundary (single-instance/Runtime untouched), the
+        real-wire-incompatibility finding stated as a requirement I8
+        must fix (not perpetuate), shared-once-per-candidate-isolated
+        acquisition (drop the single `/range-batch` call in favor of N
+        real per-candidate `/range` `.v2` calls, sharing only market-data
+        acquisition), per-candidate release (constant-RSS gate),
+        migration to the canonical `MaterializeBacktestProjectionOutcome`/
+        `PersistSingleInstanceRun` path (closing the I7-to-I8 batch-
+        artifact-readability gap, then deleting the legacy batch-only
+        components), and a two-part regression gate (RSS benchmark +
+        real live-Engine batch run). `research-batch-experiments-v1`'s
+        "Authoritative per-candidate path" requirement amended
+        (MODIFIED) to name the canonical components.
+  - [x] **I8.C — VERIFY.** Re-checked against code; clarified one
+        ambiguity: today's two separate failure-isolation levels
+        (per-variant Engine error inside the shared `/range-batch`
+        response vs. per-candidate materialize/persist failure) collapse
+        into one per-candidate try/isolate boundary once Engine
+        acquisition is no longer a separate shared-response field —
+        does not violate `research-batch-experiments-v1`'s "Failure
+        isolation" requirement (no specific error-level taxonomy is
+        normative there). No other ambiguity found.
+  - [x] **I8.D — strategy_engine companion note.** Recorded in
+        `strategy_engine`'s own `tasks.md`: under this design (N
+        per-candidate `/range` calls, `/range-batch` no longer
+        Research's dependency), Engine needs no route change for I8 —
+        `/range-batch` may stay present, unmodified, unused; its
+        retirement is a separate decision for Engine's own I8 spec pass.
+      Gate: N=1/2/4/11 benchmark, peak RSS approximately constant in N
+      (deferred to actual I8 implementation, not this OpenSpec pass);
+      real batch run against a live Engine instance, N>1, succeeds end
+      to end. This OpenSpec-only pass's own gate: `openspec validate
+      --strict` green, no `src`/`tests` diff.
 
 ## Spec
 
