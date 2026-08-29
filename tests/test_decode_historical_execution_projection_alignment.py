@@ -163,23 +163,18 @@ def test_drive_loop_fails_closed_on_market_data_hash_mismatch(
 def test_drive_loop_fails_closed_on_bar_count_mismatch(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    # Isolate the bar_count check specifically: market (ticker/timeframe/
+    # from_ms/to_ms) and market_data_hash both match the real MarketFrame
+    # exactly, so neither of those earlier checks in validate_projection_
+    # alignment can fire first. Only projection.bar_count (self-reported,
+    # independent of its own market.to_ms) disagrees with the real
+    # MarketFrame's actual candle count (3) -- 5 vs. 3.
     market_frame = MarketFrame(market=_MARKET, candles=_real_candles(3), market_data_hash=_REAL_HASH)
     _patch_market_data_client(monkeypatch, market_frame)
-    # Projection self-reports bar_count=3 (matching itself) but the real
-    # MarketFrame only has 3 candles too -- so instead mismatch by giving
-    # the projection a bar_count that disagrees with the real MarketFrame's
-    # actual candle count (still 3, matching its own market.to_ms), while
-    # the real MarketFrame is patched to a different candle count below.
-    projection_path = _write_projection(
-        tmp_path, _projection_body(market_data_hash=_REAL_HASH, bar_count=3)
-    )
-    # Patch read_range to return a frame whose candle count differs from
-    # the projection's self-reported bar_count (5 real candles vs. 3).
-    five_bar_market = MarketRange(ticker="BTCUSDT.P", timeframe="5m", from_ms=0, to_ms=300_000 * 5)
-    mismatched_frame = MarketFrame(
-        market=five_bar_market, candles=_real_candles(5), market_data_hash=_REAL_HASH
-    )
-    _patch_market_data_client(monkeypatch, mismatched_frame)
+
+    body = _projection_body(market_data_hash=_REAL_HASH, bar_count=3)
+    body["market"]["bar_count"] = 5  # same market/hash, only bar_count disagrees
+    projection_path = _write_projection(tmp_path, body)
 
     with pytest.raises(UpstreamServiceError):
         _run_main(
