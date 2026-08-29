@@ -179,29 +179,82 @@ once while that position remains open, and the position's actual exit
 is governed by the profile locked at entry — not the profile active on
 the exit bar.
 
+`locked_exit_profile` itself SHALL be sourced only from the matching
+`ExecutableEntryOpportunityDTO.locked_exit_profile` at fill time
+(`HistoricalExecutionProjectionIndex.lookup_entry`), exactly as I4
+already established — this requirement does not change that. What this
+requirement adds is evidence that the drift fixture is genuinely
+adversarial, not a mechanism the new execution path reads from.
+
+**Post-entry current-profile evolution is proof-only evidence, not a
+`HistoricalExecutionProjection` field.** `strategy_evaluation_execution
+.v2` carries no current-bar-profile timeline anywhere — Engine's
+`HistoricalExecutionProjection` is intentionally per-opportunity
+(`locked_exit_profile` on each `ExecutableEntryOpportunityDTO`) and
+per-profile-indexed (`signal_exit_events[side][profile]`), never a flat
+"what is the active profile on bar N" series (`strategy-research-
+execution-contract-v1`: "never a flattened current-bar-profile
+series"). The negative control therefore SHALL derive the current-
+profile value at each post-entry bar from a source outside the v2
+wire — either Strategy Engine's native `EmaPullbackEvaluation`
+(`exit_policy.profile_long`/`profile_short`, the same native series I2
+already reads for this exact purpose) captured directly from the same
+in-process run that produced the projection, or the Lane B old-BBB
+reference's own profile-resolution output. This evidence SHALL be used
+only to construct and verify the fixture and to compute the negative-
+control comparison value — it SHALL NOT be added to the `.v2` envelope,
+SHALL NOT be passed to `parse_historical_execution_projection`/
+`HistoricalExecutionProjectionIndex`, and SHALL NOT be read by
+`run_projection_execution_loop`, `execution/projection_entry.py`, or
+`execution/projection_static_exits.py` at any point. The new execution
+path's actual behavior under test continues to depend on nothing but
+the already-shipped v2 projection and `PositionState.locked_exit_
+profile`; the current-profile series exists only in the proof
+harness's own comparison logic, alongside the run, never inside it.
+
 This scenario SHALL include explicit negative-control evidence: a
-computed value showing what the current-bar-profile interpretation
-would have selected (a different bar and/or a different rule), compared
-against the actual, correct, locked-profile result, asserting they
-differ. Without this negative control, a profile-drift fixture cannot
-be trusted to actually distinguish the two interpretations (this
-mirrors the negative-control discipline `research_service`'s I4 already
-established at the execution-loop unit level — `test_i4_execution_
-parity.py::test_negative_control_current_profile_lookup_would_have_
-chosen_a_different_bar` — extended here to the full real pipeline).
+computed value showing what a **deliberately incorrect** current-
+profile interpretation — one that re-reads the proof-only current-
+profile evidence above on every post-entry bar instead of using the
+value locked at fill — would have selected (a different bar and/or a
+different rule), compared against the actual, correct, locked-profile
+result produced by the real new path, asserting they differ. Without
+this negative control, a profile-drift fixture cannot be trusted to
+actually distinguish the two interpretations (this mirrors the
+negative-control discipline `research_service`'s I4 already established
+at the execution-loop unit level — `test_i4_execution_parity.py::
+test_negative_control_current_profile_lookup_would_have_chosen_a_
+different_bar` — extended here to the full real pipeline, with the
+current-profile side now explicitly sourced outside the v2 wire).
 
 #### Scenario: Locked profile survives a real drift, full pipeline
 
 - **WHEN** a real position enters under profile P through the full new
-  path, the market's current profile (per the same run's projection
-  data) changes to a different profile while the position remains open,
-  and a later bar's locked-profile (P) signal stream fires
+  path (`locked_exit_profile` read only from the matching entry
+  opportunity), and the market's current profile — per Engine's native
+  `EmaPullbackEvaluation` output or the old-BBB reference, captured
+  proof-only alongside the run and never passed into the new execution
+  path — changes to a different profile while the position remains
+  open, and a later bar's locked-profile (P) signal stream fires
 - **THEN** the position exits according to P's own signal fact, not
   whatever the current-bar profile's signal fact would have been at any
   earlier bar
-- **AND** the negative-control computation confirms the current-profile
-  interpretation would have produced a different bar and/or a different
-  attributed rule.
+- **AND** a deliberately incorrect current-profile interpretation,
+  computed proof-only from that same outside-the-wire evidence, is
+  shown to select a different bar and/or a different attributed rule
+  than the actual, correct, locked-profile result.
+
+#### Scenario: Lane A does not need to hold current profile constant
+
+- **WHEN** Lane A's canonical always-on strategy spec is run
+- **THEN** Lane A is not evidence for or against locked-profile
+  lifecycle correctness either way — an always-on spec has no per-
+  profile signal-exit indexing to diverge from a current-profile
+  reading in the first place, so Lane A is simply non-discriminating
+  for this property, not a case where "current profile" is asserted to
+  stay constant
+- **AND** locked-profile lifecycle correctness is proven exclusively by
+  Lane B.
 
 ### Requirement: Existing accounting math is reused unmodified
 

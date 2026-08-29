@@ -88,7 +88,10 @@ after its predecessor's gate is confirmed.
         attribution) vs. the same I5.A harness → new path, on the
         profile-sensitive adversarial spec (I2's scenario shape).
         Includes the mandatory negative-control evidence (locked vs.
-        current-profile interpretation diverge).
+        current-profile interpretation diverge) -- current-profile
+        evidence sourced proof-only from Engine's native evaluation/the
+        old-BBB reference, never from the `.v2` wire or read by the new
+        execution path itself.
   - [ ] **I5.D — Semantic diff engine.** Structured comparison over the
         "Zero-diff comparison surface" fields (entry, locked profile,
         initial protection + attribution, signal stream while open,
