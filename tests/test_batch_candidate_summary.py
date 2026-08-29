@@ -9,6 +9,7 @@ from research_service.accounting.contracts import (
     TradeRecord,
 )
 from research_service.application.experiments.candidate_summary import (
+    _max_drawdown,
     derive_batch_candidate_summary,
 )
 
@@ -172,6 +173,13 @@ def test_max_drawdown_uses_equity_before_not_only_equity_after() -> None:
     # A drawdown implementation that only inspects equity_after per trade
     # would report 0 here; the normative equity-chain walk must catch the
     # 400/1200-1 dip at equity_before.
+    #
+    # This deliberately breaks TradeAccountingResult's own equity-chain
+    # continuity invariant (each trade's equity_before must equal the
+    # previous trade's equity_after) -- a state that can never occur in
+    # real accounting output. It exists only to unit-test `_max_drawdown`'s
+    # walk in isolation, so it calls that pure function directly instead
+    # of round-tripping through TradeAccountingResult's validation.
     trades = (
         trade(Decimal("200"), Decimal("1000")),  # equity_after = 1200
         TradeRecord(
@@ -205,6 +213,6 @@ def test_max_drawdown_uses_equity_before_not_only_equity_after() -> None:
             path=_PATH,
         ),
     )
-    summary = derive_batch_candidate_summary(accounting(trades))
+    max_drawdown = _max_drawdown(trades, Decimal("1000"))
 
-    assert summary.max_drawdown == Decimal("400") / Decimal("1200") - 1
+    assert max_drawdown == Decimal("400") / Decimal("1200") - 1
