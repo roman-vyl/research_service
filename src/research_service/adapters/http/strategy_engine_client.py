@@ -201,15 +201,18 @@ class HttpStrategyEngineClient:
         request: StrategyEvaluationBatchRequest,
     ) -> Iterator[StrategyEvaluationBatchVariantOutcome]:
         """I8 (`compact-strategy-evaluation-boundary-v1`): streamed `.v2`
-        sequence, not a buffered `.v1` array. The HTTP request itself
-        (which triggers Engine's shared `MarketFrame` acquisition/
-        validation) is sent, and its status/headers are read, before this
-        generator yields its first element -- so a whole-batch acquisition
-        failure raises here, synchronously, before any candidate is
-        processed. Each line is decoded and yielded one at a time; callers
-        SHALL process (materialize/persist/release) each outcome before
-        this generator produces the next -- it never buffers the full
-        response."""
+        sequence, not a buffered `.v1` array. This is a generator
+        function (`yield from` below) -- calling it builds nothing and
+        sends no request; the HTTP request, and Engine's shared
+        `MarketFrame` acquisition/validation it triggers, only happen
+        once the caller starts consuming the returned iterator (first
+        `next()`/loop iteration). A terminal acquisition failure
+        therefore surfaces on that first iteration step, before any
+        element is produced -- no candidate is ever settled in that
+        case. Once the response starts, each line is decoded and
+        yielded one at a time; callers SHALL process (materialize/
+        persist/release) each outcome before this generator produces
+        the next -- it never buffers the full response."""
 
         payload: dict[str, object] = {
             "market": {

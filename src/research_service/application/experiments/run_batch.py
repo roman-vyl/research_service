@@ -105,10 +105,15 @@ class RunBatchExperiment:
             ),
             expected_market_data_hash=window.market_data_hash,
         )
-        # Calling this triggers the HTTP request and reads Engine's shared
-        # acquisition/validation result before returning -- a whole-batch
-        # failure raises here, synchronously, before any candidate is
-        # streamed (research-batch-lifecycle-v1).
+        # This call itself sends no request and returns immediately --
+        # `evaluate_range_batch` is a generator function, so nothing here
+        # executes until `outcomes` is iterated below. The real HTTP
+        # request, and Engine's shared acquisition/validation, happen on
+        # the first iteration step (inside the dict comprehension further
+        # down); a terminal acquisition failure surfaces there, before
+        # any candidate is settled, so no candidate is ever persisted in
+        # that case (research-batch-lifecycle-v1) -- but this is not the
+        # same as the failure happening before this method returns.
         outcomes = self._strategy_engine.evaluate_range_batch(batch_request)
         market_frame = self._market_data.read_historical_range(
             window.market,

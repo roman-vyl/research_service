@@ -42,12 +42,15 @@ class StrategyEnginePort(Protocol):
         request: StrategyEvaluationBatchRequest,
     ) -> Iterator[StrategyEvaluationBatchVariantOutcome]:
         """I8 (`compact-strategy-evaluation-boundary-v1`): streamed, not
-        buffered — the shared `MarketFrame` acquisition/validation SHALL
-        complete before this returns; a terminal failure there raises
-        directly. Iterating the returned generator drives one HTTP
-        request whose body is consumed incrementally, one decoded variant
-        outcome at a time — callers SHALL NOT materialize the full
-        sequence before processing each element."""
+        buffered. This method itself only builds the request -- the
+        actual HTTP call, and Engine's shared `MarketFrame` acquisition/
+        validation it triggers, do not happen until the caller starts
+        consuming the returned iterator (first `next()`/loop iteration).
+        A terminal acquisition failure therefore surfaces on that first
+        iteration step, before any element is produced -- callers SHALL
+        NOT materialize the full sequence before processing each
+        element, and SHALL NOT assume the request has been sent, or
+        succeeded, merely because this method returned."""
         ...
 
     def evaluate_managed_replay(
