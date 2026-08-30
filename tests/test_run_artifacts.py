@@ -9,7 +9,7 @@ import pytest
 from research_service.accounting import AccountingPolicy
 from research_service.adapters.artifacts.filesystem import FilesystemArtifactStore
 from research_service.application.backtests import (
-    PersistSingleInstanceBacktest,
+    PersistSingleInstanceRun,
     RunSingleInstanceBacktest,
     SingleInstanceBacktestRequest,
 )
@@ -20,7 +20,7 @@ from test_single_instance_backtest import (
     FakeStrategyEngine,
     market_frame,
     strategy_identity,
-    strategy_result,
+    strategy_projection,
 )
 
 
@@ -37,19 +37,29 @@ def completed_backtest():
         managed_policy_enabled=False,
     )
     outcome = RunSingleInstanceBacktest(
-        FakeStrategyEngine(strategy_result()),
+        FakeStrategyEngine(strategy_projection()),
         FakeMarketData(market_frame()),
     ).execute(request)
-    return request, outcome.result
+    return request, outcome
+
+
+def _persist(store, request, outcome):
+    return PersistSingleInstanceRun(store).execute(
+        request,
+        run_id=outcome.run_id,
+        instance_id=outcome.instance_id,
+        strategy_evaluation=outcome.strategy_evaluation,
+        execution=outcome.execution,
+        accounting=outcome.accounting,
+        managed_policy_events=outcome.managed_policy_events,
+    )
 
 
 def test_persist_backtest_writes_versioned_atomic_bundle(tmp_path) -> None:
-    request, result = completed_backtest()
-    persisted = PersistSingleInstanceBacktest(FilesystemArtifactStore(tmp_path)).execute(
-        request, result
-    )
+    request, outcome = completed_backtest()
+    persisted = _persist(FilesystemArtifactStore(tmp_path), request, outcome)
 
-    run_dir = tmp_path / result.run_id
+    run_dir = tmp_path / outcome.run_id
     assert persisted.artifact_path == str(run_dir)
     assert run_dir.is_dir()
     assert {path.name for path in run_dir.iterdir()} == {
@@ -65,13 +75,21 @@ def test_persist_backtest_writes_versioned_atomic_bundle(tmp_path) -> None:
 
     manifest = json.loads((run_dir / "manifest.json").read_text(encoding="utf-8"))
     assert manifest["contract_version"] == "research_run_artifacts.v1"
-    assert manifest["run_id"] == result.run_id
+    assert manifest["run_id"] == outcome.run_id
     assert manifest["market_data_hash"] == "market-hash"
     assert len(manifest["files"]) == 7
     for record in manifest["files"]:
         payload = (run_dir / record["path"]).read_bytes()
         assert record["sha256"] == hashlib.sha256(payload).hexdigest()
         assert record["size_bytes"] == len(payload)
+
+    # result.json references, not re-embeds, strategy_evaluation/trades/
+    # execution_events -- I6.D shape (research-production-cutover-v1).
+    result = json.loads((run_dir / "result.json").read_text(encoding="utf-8"))
+    assert result["contract_version"] == "research_single_instance_run.v2"
+    assert set(result["strategy_evaluation_ref"]) == {"path", "sha256"}
+    assert result["strategy_evaluation_ref"]["path"] == "strategy_evaluation.json"
+    assert "entry_opportunities" not in result
 
     metrics = json.loads((run_dir / "metrics.json").read_text(encoding="utf-8"))
     assert metrics["realised_trade_count"] == 1
@@ -83,17 +101,17 @@ def test_persist_backtest_writes_versioned_atomic_bundle(tmp_path) -> None:
         (run_dir / "managed_policy_events.json").read_text(encoding="utf-8")
     )
     assert managed_events["contract_version"] == "research_managed_policy_events.v1"
-    assert managed_events["run_id"] == result.run_id
+    assert managed_events["run_id"] == outcome.run_id
     assert managed_events["events"] == []
 
 
 def test_existing_run_is_immutable(tmp_path) -> None:
-    request, result = completed_backtest()
-    use_case = PersistSingleInstanceBacktest(FilesystemArtifactStore(tmp_path))
-    use_case.execute(request, result)
+    request, outcome = completed_backtest()
+    store = FilesystemArtifactStore(tmp_path)
+    _persist(store, request, outcome)
 
     with pytest.raises(FileExistsError, match="already exist"):
-        use_case.execute(request, result)
+        _persist(store, request, outcome)
 
 
 def test_failed_bundle_is_not_published(tmp_path) -> None:
@@ -107,14 +125,14 @@ def test_failed_bundle_is_not_published(tmp_path) -> None:
 
 
 def test_request_result_identity_is_required(tmp_path) -> None:
-    request, result = completed_backtest()
-    # run_id is no longer cross-checked against the request (Research-
-    # generated, not a request field) — instance_id, derived from the
-    # request's own identity subset, is still an enforced invariant.
-    mismatched = result.model_copy(update={"instance_id": "ema_pullback:0000000000000000000000"})
-
+    request, outcome = completed_backtest()
     with pytest.raises(ValueError, match="instance_id does not match"):
-        PersistSingleInstanceBacktest(FilesystemArtifactStore(tmp_path)).execute(
+        PersistSingleInstanceRun(FilesystemArtifactStore(tmp_path)).execute(
             request,
-            mismatched,
+            run_id=outcome.run_id,
+            instance_id="ema_pullback:0000000000000000000000",
+            strategy_evaluation=outcome.strategy_evaluation,
+            execution=outcome.execution,
+            accounting=outcome.accounting,
+            managed_policy_events=outcome.managed_policy_events,
         )

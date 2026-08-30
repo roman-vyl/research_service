@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from decimal import Decimal
 
+import pytest
+from pydantic import ValidationError
+
 from research_service.accounting import AccountingPolicy, account_execution_loop
+from research_service.accounting.contracts import TradeAccountingResult, TradePathMetrics, TradeRecord
 from research_service.domain.contracts import (
     Candle,
     MarketFrame,
@@ -140,3 +144,164 @@ def test_multiple_trades_compound_equity_additively() -> None:
     assert result.realised_trade_count == 1
     assert result.open_position_count == 1
     assert result.final_equity == Decimal("1005.00")
+
+
+def _path() -> TradePathMetrics:
+    return TradePathMetrics(
+        mfe_price=Decimal("1"),
+        mfe_pct=Decimal("0.01"),
+        mfe_bar_index=0,
+        mfe_bars_from_entry=0,
+        mae_price=Decimal("1"),
+        mae_pct=Decimal("0.01"),
+        mae_bar_index=0,
+        mae_bars_from_entry=0,
+        captured_price=Decimal("1"),
+        captured_pct=Decimal("0.01"),
+        bars_from_mfe_to_exit=0,
+    )
+
+
+def _chained_trade(
+    *, ordinal: int, equity_before: Decimal, net_pnl: Decimal
+) -> TradeRecord:
+    """One valid, individually-consistent TradeRecord (fees zero, so
+    gross_pnl == net_pnl) with a real Decimal-computed `equity_after` --
+    `equity_before + net_pnl`, the same operation the accounting engine
+    performs, not a hand-picked round number."""
+
+    equity_after = equity_before + net_pnl
+    return TradeRecord(
+        trade_id=f"trade:{ordinal}",
+        position_id=f"position:{ordinal}",
+        instance_id="instance-1",
+        side="long",
+        entry_bar_index=ordinal,
+        exit_bar_index=ordinal,
+        entry_time_ms=ordinal * 300_000,
+        exit_time_ms=ordinal * 300_000,
+        entry_price=Decimal("100"),
+        exit_price=Decimal("100"),
+        quantity=Decimal("1"),
+        entry_notional=Decimal("100"),
+        exit_notional=Decimal("100"),
+        gross_pnl=net_pnl,
+        entry_fee=Decimal("0"),
+        exit_fee=Decimal("0"),
+        fees_paid=Decimal("0"),
+        net_pnl=net_pnl,
+        gross_return_pct=Decimal("0"),
+        net_return_pct=Decimal("0"),
+        equity_before=equity_before,
+        equity_after=equity_after,
+        hold_bars=1,
+        hold_ms=300_000,
+        exit_candidate_type="take_profit",
+        exit_reason="take_profit",
+        exit_layer="exit_policy",
+        path=_path(),
+    )
+
+
+def _build_chain(*, initial_equity: Decimal, net_pnls: list[Decimal]) -> tuple[TradeRecord, ...]:
+    """Real chained Decimal accumulation, exactly matching
+    `account_execution_loop`'s own `equity = record.equity_after` loop --
+    the mechanism this module's numerical-residue tolerance exists for."""
+
+    trades = []
+    equity = initial_equity
+    for ordinal, net_pnl in enumerate(net_pnls, start=1):
+        trade = _chained_trade(ordinal=ordinal, equity_before=equity, net_pnl=net_pnl)
+        trades.append(trade)
+        equity = trade.equity_after
+    return tuple(trades)
+
+
+def test_long_chain_numerical_residue_is_tolerated() -> None:
+    """Regression: on a long trade sequence, the equity chain (each
+    `equity_after = equity_before + net_pnl`) and the independent
+    `sum(trade.net_pnl)` are two different Decimal accumulation paths over
+    the same values -- they can diverge in the last few digits of the
+    default 28-digit context purely from accumulated rounding (observed:
+    ~1e-23 residue over ~1900 real trades; reproduced here with 50
+    high-precision fractional trades, which is enough to trigger the same
+    context-precision crowding). The equity chain itself must still be
+    exactly continuous -- this is not a relaxation of that guarantee."""
+
+    initial_equity = Decimal("10000")
+    net_pnls = [Decimal("0.123456789012345678901234567") for _ in range(50)]
+    trades = _build_chain(initial_equity=initial_equity, net_pnls=net_pnls)
+
+    chain_final_equity = trades[-1].equity_after
+    independent_sum = sum((t.net_pnl for t in trades), Decimal("0"))
+    residue = abs(chain_final_equity - (initial_equity + independent_sum))
+    assert residue > 0, "test setup must actually reproduce a nonzero residue"
+    assert residue < Decimal("1e-10"), "residue must stay within the tolerated range"
+
+    result = TradeAccountingResult(
+        instance_id="instance-1",
+        initial_equity=initial_equity,
+        final_equity=chain_final_equity,
+        realised_trade_count=len(trades),
+        open_position_count=0,
+        gross_pnl=independent_sum,
+        fees_paid=Decimal("0"),
+        net_pnl=independent_sum,
+        trades=trades,
+    )
+    assert result.final_equity == chain_final_equity
+    assert result.trades[-1].equity_after == result.final_equity
+
+
+def test_equity_chain_break_still_fails_closed() -> None:
+    """Negative control: a genuine equity discontinuity (not numerical
+    residue) must still be rejected -- the tolerance introduced above must
+    not paper over a real bookkeeping bug."""
+
+    initial_equity = Decimal("10000")
+    net_pnls = [Decimal("10"), Decimal("20"), Decimal("30")]
+    trades = list(_build_chain(initial_equity=initial_equity, net_pnls=net_pnls))
+    # Break the chain: the last trade's equity_before/equity_after both
+    # shifted by a real $5 -- far larger than the numerical-residue
+    # tolerance, and not internally self-consistent with the previous
+    # trade's equity_after either.
+    broken_before = trades[-1].equity_before + Decimal("5")
+    trades[-1] = trades[-1].model_copy(
+        update={"equity_before": broken_before, "equity_after": broken_before + trades[-1].net_pnl}
+    )
+
+    with pytest.raises(ValidationError, match="equity_before does not chain"):
+        TradeAccountingResult(
+            instance_id="instance-1",
+            initial_equity=initial_equity,
+            final_equity=trades[-1].equity_after,
+            realised_trade_count=len(trades),
+            open_position_count=0,
+            gross_pnl=sum((t.net_pnl for t in trades), Decimal("0")),
+            fees_paid=Decimal("0"),
+            net_pnl=sum((t.net_pnl for t in trades), Decimal("0")),
+            trades=tuple(trades),
+        )
+
+
+def test_final_equity_mismatch_beyond_tolerance_still_fails_closed() -> None:
+    """Negative control: a `final_equity` that disagrees with the last
+    trade's `equity_after` by a real amount (not numerical residue) must
+    still be rejected."""
+
+    initial_equity = Decimal("10000")
+    net_pnls = [Decimal("10"), Decimal("20"), Decimal("30")]
+    trades = _build_chain(initial_equity=initial_equity, net_pnls=net_pnls)
+
+    with pytest.raises(ValidationError, match="final_equity differs from the last trade"):
+        TradeAccountingResult(
+            instance_id="instance-1",
+            initial_equity=initial_equity,
+            final_equity=trades[-1].equity_after + Decimal("1"),
+            realised_trade_count=len(trades),
+            open_position_count=0,
+            gross_pnl=sum((t.net_pnl for t in trades), Decimal("0")),
+            fees_paid=Decimal("0"),
+            net_pnl=sum((t.net_pnl for t in trades), Decimal("0")),
+            trades=trades,
+        )

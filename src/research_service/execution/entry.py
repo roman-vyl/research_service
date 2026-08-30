@@ -32,16 +32,39 @@ def _entry_series(
     return values
 
 
+def validated_entry_series(
+    evaluation: StrategyEvaluationResult,
+) -> tuple[Sequence[bool], Sequence[bool]]:
+    """Validate both sides' `entries` arrays exactly once (`_entry_series`'s
+    full-array `isinstance`/length checks are O(bar_count) each) so a
+    bar-by-bar caller can validate once per execution run and then do O(1)
+    per-bar lookups, instead of repeating this scan on every bar
+    (`execution/loop.py::run_unified_execution_loop` was doing exactly
+    that -- O(bar_count) work called once per bar, i.e. O(bar_count^2)
+    for a full run -- before this fix). Semantics are unchanged: this is
+    the same validation `entry_decision_at` already ran per call, just
+    hoisted so it runs once instead of once per bar."""
+
+    return _entry_series(evaluation, "long"), _entry_series(evaluation, "short")
+
+
 def entry_decision_at(
     evaluation: StrategyEvaluationResult,
     market_frame: MarketFrame,
     *,
     bar_index: int,
+    entries: tuple[Sequence[bool], Sequence[bool]] | None = None,
 ) -> EntryDecision | None:
     """Return the legacy-compatible executable entry decision for one bar.
 
     Legacy BBB used ``entries & stop_ready`` for each side. Long is evaluated
     first and short only when a ready long entry is absent.
+
+    `entries`: pass the result of `validated_entry_series(evaluation)` when
+    calling this once per bar in a loop, to skip re-validating the full
+    arrays on every call (see that function's docstring). Defaults to
+    `None`, which validates on this call alone -- unchanged behavior for
+    any caller that invokes this occasionally rather than in a bar loop.
     """
 
     if evaluation.market != market_frame.market:
@@ -49,8 +72,10 @@ def entry_decision_at(
     if bar_index < 0 or bar_index >= len(market_frame.candles):
         raise InvalidRequest("bar_index is outside the market frame")
 
-    long_entries = _entry_series(evaluation, "long")
-    short_entries = _entry_series(evaluation, "short")
+    if entries is None:
+        long_entries, short_entries = validated_entry_series(evaluation)
+    else:
+        long_entries, short_entries = entries
 
     side: ExecutionSide | None = None
     if long_entries[bar_index] and protection_ready_at(
@@ -106,15 +131,21 @@ def try_open_position(
     *,
     bar_index: int,
     current_position: PositionState | None,
+    entries: tuple[Sequence[bool], Sequence[bool]] | None = None,
 ) -> PositionState | None:
-    """Open at most one ready, initially protected position for an instance."""
+    """Open at most one ready, initially protected position for an instance.
+
+    `entries`: see `entry_decision_at`'s docstring -- pass
+    `validated_entry_series(evaluation)` once per execution run when
+    calling this in a bar loop.
+    """
 
     if current_position is not None:
         if current_position.instance_id != evaluation.instance_id:
             raise InvalidRequest("current position belongs to another instance")
         return current_position
 
-    decision = entry_decision_at(evaluation, market_frame, bar_index=bar_index)
+    decision = entry_decision_at(evaluation, market_frame, bar_index=bar_index, entries=entries)
     if decision is None:
         return None
     fill = execute_entry(decision, policy)

@@ -5,7 +5,7 @@ import pytest
 
 from research_service.adapters.http.market_data_client import HttpMarketDataClient
 from research_service.adapters.http.strategy_engine_client import HttpStrategyEngineClient
-from research_service.domain.contracts import MarketRange, StrategyEvaluationRequest
+from research_service.domain.contracts import MarketRange
 from research_service.domain.errors import DependencyUnavailable, UpstreamServiceError
 
 
@@ -163,84 +163,6 @@ def test_market_data_client_audit_range_maps_non_200_to_upstream_service_error()
     with pytest.raises(UpstreamServiceError):
         client.audit_range(
             MarketRange(ticker="BTCUSDT.P", timeframe="5m", from_ms=0, to_ms=900_000)
-        )
-
-
-def test_strategy_engine_client_maps_result_and_errors() -> None:
-    def handler(request: httpx.Request) -> httpx.Response:
-        if request.url.path == "/health":
-            return httpx.Response(200, json={"status": "ok"})
-        return httpx.Response(
-            200,
-            json={
-                "contract_version": "strategy_evaluation.v1",
-                "strategy_id": "ema_pullback",
-                "config_hash": "cfg",
-                "market": {
-                    "ticker": "BTCUSDT.P",
-                    "base_timeframe": "5m",
-                    "from_ms": 0,
-                    "to_ms": 300000,
-                    "bar_count": 1,
-                    "market_data_hash": "md",
-                },
-                "features": {"time_ms": [0]},
-                "contexts": {},
-                "entries": {"long": [False]},
-                "exit_policy": {
-                    "signal_exit": {"long": [False], "short": [False]},
-                    "stop_loss_ratio": {"long": [None], "short": [None]},
-                    "take_profit_ratio": {"long": [None], "short": [None]},
-                    "stop_ready": {"long": [False], "short": [False]},
-                },
-                "component_evidence": {},
-                "validity": {},
-                "state_artifact": None,
-                "warnings": [],
-            },
-        )
-
-    client = HttpStrategyEngineClient("http://strategy")
-    client._client = httpx.Client(
-        transport=httpx.MockTransport(handler), base_url="http://strategy"
-    )
-    result = client.evaluate_range(
-        StrategyEvaluationRequest(
-            strategy_id="ema_pullback",
-            instance_id="x",
-            strategy_spec={},
-            market=MarketRange(
-                ticker="BTCUSDT.P",
-                timeframe="5m",
-                from_ms=0,
-                to_ms=300_000,
-            ),
-        )
-    )
-    assert result.config_hash == "cfg"
-    assert result.market_data_hash == "md"
-    assert client.health() is True
-
-    def error_handler(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(503, json={"error": "unavailable"})
-
-    client._client = httpx.Client(
-        transport=httpx.MockTransport(error_handler),
-        base_url="http://strategy",
-    )
-    with pytest.raises(UpstreamServiceError):
-        client.evaluate_range(
-            StrategyEvaluationRequest(
-                strategy_id="ema_pullback",
-                instance_id="x",
-                strategy_spec={},
-                market=MarketRange(
-                    ticker="BTCUSDT.P",
-                    timeframe="5m",
-                    from_ms=0,
-                    to_ms=300_000,
-                ),
-            )
         )
 
 

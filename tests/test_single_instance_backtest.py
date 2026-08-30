@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from collections.abc import Iterator
 from typing import Any
 
 import pytest
@@ -13,19 +14,24 @@ from research_service.application.backtests import (
 from research_service.domain.contracts import (
     Candle,
     ContinuityAudit,
+    ExecutableEntryOpportunityDTO,
+    ExitAttributionDTO,
     ExplicitRange,
+    HistoricalExecutionProjectionDTO,
+    InitialProtectionLegDTO,
     ManagedBarDecision,
     ManagedReplayRequest,
     ManagedReplayResult,
     MarketFrame,
     MarketRange,
+    SignalExitProjectionDTO,
     StrategyEvaluationBatchRequest,
     StrategyEvaluationBatchVariantOutcome,
     StrategyEvaluationRequest,
     StrategyEvaluationResult,
     StreamBounds,
 )
-from research_service.domain.errors import InvalidRequest
+from research_service.domain.errors import InvalidRequest, UpstreamServiceError
 from research_service.domain.execution import ExecutionPolicy
 from research_service.domain.strategy_instance import (
     StrategyInstanceIdentity,
@@ -43,6 +49,12 @@ INSTANCE_ID = derive_strategy_instance_id(
     base_timeframe="5m",
     raw_spec=_RAW_SPEC,
 )
+
+_EMPTY_PROFILE_EVENTS: dict[str, tuple[Any, ...]] = {
+    "aligned": (),
+    "countertrend": (),
+    "neutral": (),
+}
 
 
 def market_frame() -> MarketFrame:
@@ -86,7 +98,49 @@ def strategy_request() -> StrategyEvaluationRequest:
     )
 
 
+def strategy_projection(*, market: MarketRange | None = None) -> HistoricalExecutionProjectionDTO:
+    """The `HistoricalExecutionProjection` (`.v2`) fixture -- a single long
+    executable entry opportunity at bar 0, take-profit at 5%, stop-loss at
+    10%, no signal exits (compact-strategy-evaluation-boundary-v1, I7)."""
+
+    resolved_market = market or market_frame().market
+    return HistoricalExecutionProjectionDTO(
+        contract_version="strategy_evaluation_execution.v2",
+        strategy_id="ema_pullback",
+        config_hash="config-hash",
+        market=resolved_market,
+        market_data_hash="market-hash",
+        bar_count=3,
+        entry_opportunities=(
+            ExecutableEntryOpportunityDTO(
+                bar_index=0,
+                side="long",
+                locked_exit_profile="aligned",
+                initial_stop=InitialProtectionLegDTO(
+                    ratio=0.10,
+                    attribution=ExitAttributionDTO(
+                        rule_id="sl", component_id="c", exit_kind="stop_loss"
+                    ),
+                ),
+                initial_take=InitialProtectionLegDTO(
+                    ratio=0.05,
+                    attribution=ExitAttributionDTO(
+                        rule_id="tp", component_id="c", exit_kind="take_profit"
+                    ),
+                ),
+            ),
+        ),
+        signal_exit_events=SignalExitProjectionDTO(
+            long=_EMPTY_PROFILE_EVENTS, short=_EMPTY_PROFILE_EVENTS
+        ),
+        warnings=(),
+    )
+
+
 def strategy_result(*, market: MarketRange | None = None) -> StrategyEvaluationResult:
+    """Legacy dense fixture -- batch's execution path only
+    (`test_batch_experiments.py`); untouched by I7."""
+
     resolved_market = market or market_frame().market
     return StrategyEvaluationResult(
         contract_version="strategy_evaluation.v1",
@@ -110,30 +164,50 @@ def strategy_result(*, market: MarketRange | None = None) -> StrategyEvaluationR
 
 
 class FakeStrategyEngine:
+    """Shared fake across single-instance (`evaluate_range_projection`)
+    and batch (`evaluate_range_batch`, `test_batch_experiments.py`) test
+    suites -- since I8 both go through the same `.v2` projection-based
+    path. `StrategyEvaluationResult` construction (`strategy_result()`)
+    is retained only for the legacy dense-shape `evaluate_range_batch`
+    fixture path. Accepts either fixture type and only wires the methods
+    that type supports; the other side raises if called, catching an
+    accidental cross-wiring in a test."""
+
     def __init__(
         self,
-        result: StrategyEvaluationResult,
+        result: HistoricalExecutionProjectionDTO | StrategyEvaluationResult,
         *,
         failing_variant_ids: frozenset[str] = frozenset(),
         shuffle_response: bool = False,
     ) -> None:
-        self.result = result
+        self.projection = result if isinstance(result, HistoricalExecutionProjectionDTO) else None
+        self.result = result if isinstance(result, StrategyEvaluationResult) else None
         self.range_requests: list[StrategyEvaluationRequest] = []
         self.batch_requests: list[StrategyEvaluationBatchRequest] = []
         self.managed_requests: list[ManagedReplayRequest] = []
         self.failing_variant_ids = failing_variant_ids
         self.shuffle_response = shuffle_response
 
-    def evaluate_range(self, request: StrategyEvaluationRequest) -> StrategyEvaluationResult:
+    def evaluate_range_projection(
+        self, request: StrategyEvaluationRequest
+    ) -> HistoricalExecutionProjectionDTO:
+        if self.projection is None:
+            raise AssertionError("not used -- legacy dense fixture only")
         self.range_requests.append(request)
-        # Echo back whatever instance_id the request carried — mirrors real
-        # Engine behavior and lets callers vary raw_spec (which varies the
-        # derived instance_id) without invalidating the canned result.
-        return self.result.model_copy(update={"instance_id": request.instance_id})
+        return self.projection
 
     def evaluate_range_batch(
         self, request: StrategyEvaluationBatchRequest
-    ) -> tuple[StrategyEvaluationBatchVariantOutcome, ...]:
+    ) -> Iterator[StrategyEvaluationBatchVariantOutcome]:
+        """I8: streamed, projection-based -- mirrors the real Engine's
+        shared-once-acquisition + sequential per-variant `.v2` semantics.
+        `instance_id` is never echoed on the projection (Research-owned,
+        stamped downstream from the candidate's own identity subset) --
+        only `strategy_id` varies per variant here, matching the real
+        wire contract."""
+
+        if self.projection is None:
+            raise AssertionError("not used -- legacy dense fixture only")
         self.batch_requests.append(request)
         outcomes = []
         for variant in request.variants:
@@ -152,17 +226,14 @@ class FakeStrategyEngine:
                 outcomes.append(
                     StrategyEvaluationBatchVariantOutcome(
                         variant_id=variant.variant_id,
-                        result=self.result.model_copy(
-                            update={
-                                "instance_id": variant.instance_id,
-                                "strategy_id": variant.strategy_id,
-                            }
+                        result=self.projection.model_copy(
+                            update={"strategy_id": variant.strategy_id}
                         ),
                     )
                 )
         if self.shuffle_response:
             outcomes = list(reversed(outcomes))
-        return tuple(outcomes)
+        yield from outcomes
 
     def evaluate_managed_replay(self, request: ManagedReplayRequest) -> ManagedReplayResult:
         self.managed_requests.append(request)
@@ -262,7 +333,7 @@ class FakeMarketData:
 
 
 def test_single_instance_backtest_composes_all_layers() -> None:
-    strategy = FakeStrategyEngine(strategy_result())
+    strategy = FakeStrategyEngine(strategy_projection())
     market = FakeMarketData(market_frame())
     use_case = RunSingleInstanceBacktest(strategy, market)
 
@@ -279,28 +350,25 @@ def test_single_instance_backtest_composes_all_layers() -> None:
             managed_policy_enabled=False,
         )
     )
-    result = outcome.result
     assert outcome.managed_policy_events == ()
 
-    assert result.run_id
-    assert result.instance_id == INSTANCE_ID
-    assert result.contract_version == "research_single_instance_backtest.v1"
+    assert outcome.run_id
+    assert outcome.instance_id == INSTANCE_ID
     assert strategy.range_requests == [
         strategy_request().model_copy(update={"expected_market_data_hash": "market-hash"})
     ]
-    assert len(strategy.range_requests) == 1  # evaluate_range called exactly once
+    assert len(strategy.range_requests) == 1  # evaluate_range_projection called exactly once
     assert market.requests == [strategy_request().market]
-    assert result.contract_acceptance.bar_count == 3
-    assert result.execution.positions[0].exit_fill is not None
-    assert result.execution.positions[0].exit_fill.candidate_type == "take_profit"
-    assert result.accounting.realised_trade_count == 1
-    assert result.accounting.trades[0].net_pnl == Decimal("9.59000")
-    assert result.accounting.final_equity == Decimal("1009.59000")
+    assert outcome.execution.positions[0].exit_fill is not None
+    assert outcome.execution.positions[0].exit_fill.candidate_type == "take_profit"
+    assert outcome.accounting.realised_trade_count == 1
+    assert outcome.accounting.trades[0].net_pnl == Decimal("9.59000")
+    assert outcome.accounting.final_equity == Decimal("1009.59000")
     assert strategy.managed_requests == []
 
 
 def test_managed_replay_request_uses_reference_entry_price() -> None:
-    strategy = FakeStrategyEngine(strategy_result())
+    strategy = FakeStrategyEngine(strategy_projection())
     use_case = RunSingleInstanceBacktest(strategy, FakeMarketData(market_frame()))
 
     use_case.execute(
@@ -331,11 +399,11 @@ def test_market_mismatch_stops_before_execution() -> None:
         }
     )
     use_case = RunSingleInstanceBacktest(
-        FakeStrategyEngine(strategy_result()),
+        FakeStrategyEngine(strategy_projection()),
         FakeMarketData(mismatched),
     )
 
-    with pytest.raises(InvalidRequest, match="market ranges differ"):
+    with pytest.raises(UpstreamServiceError) as exc_info:
         use_case.execute(
             SingleInstanceBacktestRequest(
                 strategy=strategy_identity(),
@@ -343,18 +411,20 @@ def test_market_mismatch_stops_before_execution() -> None:
                 managed_policy_enabled=False,
             )
         )
+    assert "market identity/range" in exc_info.value.message
 
 
 def test_window_resolution_failure_never_reaches_engine_or_continuation() -> None:
-    # Phase-A failure (window/MDS audit), before evaluate_range or the
-    # continuation seam is ever entered -- proves run_id generation (now
-    # owned by MaterializeBacktestOutcome) is unreachable on this path.
+    # Phase-A failure (window/MDS audit), before evaluate_range_projection or
+    # the continuation seam is ever entered -- proves run_id generation (now
+    # owned by MaterializeBacktestProjectionOutcome) is unreachable on this
+    # path.
     class DiscontinuousMarketData(FakeMarketData):
         def audit_range(self, market: MarketRange) -> ContinuityAudit:
             audit = super().audit_range(market)
             return audit.model_copy(update={"is_continuous": False, "gaps": ()})
 
-    strategy = FakeStrategyEngine(strategy_result())
+    strategy = FakeStrategyEngine(strategy_projection())
     use_case = RunSingleInstanceBacktest(strategy, DiscontinuousMarketData(market_frame()))
 
     with pytest.raises(InvalidRequest, match="not continuous"):
@@ -376,7 +446,7 @@ def test_full_available_resolved_market_reaches_every_downstream_stage() -> None
     # (canonical-strategy-instance-v1, "full_available request carries no
     # range").
     resolved_market = market_frame().market
-    strategy = FakeStrategyEngine(strategy_result(market=resolved_market))
+    strategy = FakeStrategyEngine(strategy_projection(market=resolved_market))
     market = FakeMarketData(market_frame())
     use_case = RunSingleInstanceBacktest(strategy, market)
 

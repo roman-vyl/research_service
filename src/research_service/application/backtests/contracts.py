@@ -4,15 +4,12 @@ from __future__ import annotations
 
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
-from research_service.accounting.contracts import AccountingPolicy, TradeAccountingResult
-from research_service.domain.contracts import ExplicitRange, StrategyEvaluationResult
-from research_service.domain.execution import ExecutionLoopResult, ExecutionPolicy
+from research_service.accounting.contracts import AccountingPolicy
+from research_service.domain.contracts import ExplicitRange
+from research_service.domain.execution import ExecutionPolicy
 from research_service.domain.strategy_instance import StrategyInstanceIdentity
-from research_service.application.backtests.strategy_contract import (
-    StrategyExecutionContractAcceptance,
-)
 
 
 class SingleInstanceBacktestRequest(BaseModel):
@@ -41,32 +38,4 @@ class SingleInstanceBacktestRequest(BaseModel):
             raise ValueError("range_policy=explicit_range requires range.from_ms/to_ms")
         if self.range_policy == "full_available" and self.range is not None:
             raise ValueError("range_policy=full_available must not include a range")
-        return self
-
-
-class SingleInstanceBacktestResult(BaseModel):
-    """Immutable result assembled from strategy, execution and accounting facts."""
-
-    model_config = ConfigDict(frozen=True)
-
-    contract_version: Literal["research_single_instance_backtest.v1"] = (
-        "research_single_instance_backtest.v1"
-    )
-    run_id: str = Field(min_length=1)
-    instance_id: str = Field(min_length=1)
-    strategy_evaluation: StrategyEvaluationResult
-    contract_acceptance: StrategyExecutionContractAcceptance
-    execution: ExecutionLoopResult
-    accounting: TradeAccountingResult
-
-    @model_validator(mode="after")
-    def validate_identity(self) -> "SingleInstanceBacktestResult":
-        if self.instance_id != self.strategy_evaluation.instance_id:
-            raise ValueError("backtest instance differs from strategy evaluation")
-        if self.instance_id != self.execution.instance_id:
-            raise ValueError("backtest instance differs from execution result")
-        if self.instance_id != self.accounting.instance_id:
-            raise ValueError("backtest instance differs from accounting result")
-        if self.strategy_evaluation.market != self.execution.market:
-            raise ValueError("strategy and execution markets differ")
         return self

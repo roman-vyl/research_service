@@ -10,7 +10,7 @@ from research_service.accounting import AccountingPolicy
 from research_service.adapters.artifacts.filesystem import FilesystemArtifactStore
 from research_service.api.app import create_app
 from research_service.application.backtests import (
-    PersistSingleInstanceBacktest,
+    PersistSingleInstanceRun,
     RunSingleInstanceBacktest,
     SingleInstanceBacktestRequest,
 )
@@ -23,7 +23,7 @@ from test_single_instance_backtest import (
     FakeStrategyEngine,
     market_frame,
     strategy_identity,
-    strategy_result,
+    strategy_projection,
 )
 
 
@@ -31,10 +31,27 @@ def _container(tmp_path: Path) -> Container:
     settings = Settings(artifacts_root=tmp_path, configs_root=tmp_path / "configs")
     return Container(
         settings=settings,
-        strategy_engine=FakeStrategyEngine(strategy_result()),
+        strategy_engine=FakeStrategyEngine(strategy_projection()),
         market_data=FakeMarketData(market_frame()),
         artifacts=FilesystemArtifactStore(tmp_path),
     )
+
+
+def _persist_outcome(container: Container, request: SingleInstanceBacktestRequest) -> str:
+    outcome = RunSingleInstanceBacktest(
+        container.strategy_engine,
+        container.market_data,
+    ).execute(request)
+    PersistSingleInstanceRun(container.artifacts).execute(
+        request,
+        run_id=outcome.run_id,
+        instance_id=outcome.instance_id,
+        strategy_evaluation=outcome.strategy_evaluation,
+        execution=outcome.execution,
+        accounting=outcome.accounting,
+        managed_policy_events=outcome.managed_policy_events,
+    )
+    return outcome.run_id
 
 
 def _persist(tmp_path: Path, created_at: str) -> str:
@@ -51,14 +68,7 @@ def _persist(tmp_path: Path, created_at: str) -> str:
         managed_policy_enabled=False,
     )
     container = _container(tmp_path)
-    outcome = RunSingleInstanceBacktest(
-        container.strategy_engine,
-        container.market_data,
-    ).execute(request)
-    run_id = outcome.result.run_id
-    PersistSingleInstanceBacktest(container.artifacts).execute(
-        request, outcome.result, outcome.managed_policy_events
-    )
+    run_id = _persist_outcome(container, request)
     manifest_path = tmp_path / run_id / "manifest.json"
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     manifest["created_at_utc"] = created_at
@@ -101,7 +111,7 @@ def test_run_detail_and_summary_project_versioned_artifacts(tmp_path: Path) -> N
 
     assert detail.status_code == 200
     assert detail.json()["manifest"]["contract_version"] == "research_run_artifacts.v1"
-    assert detail.json()["result"]["contract_version"] == "research_single_instance_backtest.v1"
+    assert detail.json()["result"]["contract_version"] == "research_single_instance_run.v2"
     assert detail.json()["strategy_spec"] == {"anchor": {"period": 200}}
     detail_keys = set(detail.json().keys())
     assert {"contract_version", "manifest", "result", "strategy_spec"} <= detail_keys
@@ -176,18 +186,11 @@ def test_summary_reports_resolved_market_not_requested_market(tmp_path: Path) ->
     )
     container = Container(
         settings=Settings(artifacts_root=tmp_path, configs_root=tmp_path / "configs"),
-        strategy_engine=FakeStrategyEngine(strategy_result(market=resolved_market)),
+        strategy_engine=FakeStrategyEngine(strategy_projection(market=resolved_market)),
         market_data=FakeMarketData(market_frame()),
         artifacts=FilesystemArtifactStore(tmp_path),
     )
-    outcome = RunSingleInstanceBacktest(
-        container.strategy_engine,
-        container.market_data,
-    ).execute(request)
-    run_id = outcome.result.run_id
-    PersistSingleInstanceBacktest(container.artifacts).execute(
-        request, outcome.result, outcome.managed_policy_events
-    )
+    run_id = _persist_outcome(container, request)
 
     client = TestClient(create_app(container.settings, container))
     listed = client.get("/api/research/runs")
@@ -206,6 +209,7 @@ def test_runs_routes_are_declared_once(tmp_path: Path) -> None:
         "/api/research/runs/latest",
         "/api/research/runs/{run_id}",
         "/api/research/runs/{run_id}/summary",
+        "/api/research/runs/{run_id}/diagnostics/generate",
         "/api/research/runs/{run_id}/trades",
         "/api/research/runs/{run_id}/metrics",
         "/api/research/runs/{run_id}/signal-trace",

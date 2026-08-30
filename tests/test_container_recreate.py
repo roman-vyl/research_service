@@ -39,12 +39,12 @@ class ValidatingStrategyEngine:
 
 
 def test_persisted_run_survives_container_recreate(tmp_path: Path) -> None:
-    from test_single_instance_backtest import strategy_result
+    from test_single_instance_backtest import strategy_projection
 
     settings = Settings(artifacts_root=tmp_path / "runs", configs_root=tmp_path / "configs")
     old_container = Container(
         settings=settings,
-        strategy_engine=FakeStrategyEngine(strategy_result()),
+        strategy_engine=FakeStrategyEngine(strategy_projection()),
         market_data=FakeMarketData(market_frame()),
         artifacts=FilesystemArtifactStore(tmp_path / "runs"),
     )
@@ -69,7 +69,7 @@ def test_persisted_run_survives_container_recreate(tmp_path: Path) -> None:
     # New container: fresh process wiring, same host-mounted directories.
     new_container = Container(
         settings=settings,
-        strategy_engine=FakeStrategyEngine(strategy_result()),
+        strategy_engine=FakeStrategyEngine(strategy_projection()),
         market_data=FakeMarketData(market_frame()),
         artifacts=FilesystemArtifactStore(tmp_path / "runs"),
     )

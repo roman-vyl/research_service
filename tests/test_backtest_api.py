@@ -20,7 +20,7 @@ from test_single_instance_backtest import (
     FakeMarketData,
     FakeStrategyEngine,
     market_frame,
-    strategy_result,
+    strategy_projection,
 )
 
 _RAW_SPEC = {"anchor": {"period": 200}}
@@ -45,7 +45,7 @@ def build_client(tmp_path: Path) -> TestClient:
             settings,
             Container(
                 settings=settings,
-                strategy_engine=FakeStrategyEngine(strategy_result()),
+                strategy_engine=FakeStrategyEngine(strategy_projection()),
                 market_data=FakeMarketData(market_frame()),
                 artifacts=FilesystemArtifactStore(tmp_path),
             ),

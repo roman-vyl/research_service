@@ -88,6 +88,24 @@ class FilesystemArtifactStore:
             shutil.rmtree(temporary, ignore_errors=True)
             raise
 
+    def write_run_supplementary_file(
+        self, run_id: str, relative_name: str, payload: bytes
+    ) -> Path:
+        if not _SAFE_ID_RE.fullmatch(run_id):
+            raise ValueError("run_id contains unsupported filesystem characters")
+        run_dir = self._root / run_id
+        if not run_dir.is_dir():
+            raise FileNotFoundError(run_id)
+        relative_path = Path(relative_name)
+        if relative_path.is_absolute() or ".." in relative_path.parts:
+            raise ValueError(f"unsafe artifact path: {relative_name}")
+        target = run_dir / relative_path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(payload)
+        with target.open("rb") as handle:
+            os.fsync(handle.fileno())
+        return target
+
     def write_batch_bundle(self, experiment_id: str, files: Mapping[str, bytes]) -> Path:
         self.ensure_ready()
         if not _SAFE_ID_RE.fullmatch(experiment_id):
