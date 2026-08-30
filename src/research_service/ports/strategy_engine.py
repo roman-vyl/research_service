@@ -13,7 +13,6 @@ from research_service.domain.contracts import (
     StrategyEvaluationBatchRequest,
     StrategyEvaluationBatchVariantOutcome,
     StrategyEvaluationRequest,
-    StrategyEvaluationResult,
     ManagedReplayRequest,
     ManagedReplayResult,
 )
@@ -28,11 +27,6 @@ class IndicatorSeriesResult:
 
 
 class StrategyEnginePort(Protocol):
-    def evaluate_range(
-        self,
-        request: StrategyEvaluationRequest,
-    ) -> StrategyEvaluationResult: ...
-
     def evaluate_range_projection(
         self,
         request: StrategyEvaluationRequest,

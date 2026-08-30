@@ -5,20 +5,32 @@
 Define the bar-by-bar execution loop that drives one strategy instance
 through entries, exits, and position lifecycle for v1: execution facts and
 events only, with fees/PnL/equity/metrics out of scope for this layer.
-
 ## Requirements
-
 ### Requirement: Aligned inputs
 
 The execution loop MUST reject Strategy Engine and Market Data Service
-inputs whose market identity, bar count, or timestamps differ.
+inputs whose market identity, `market_data_hash`, `bar_count`, or
+declared range differ. Every projection element's `bar_index` MUST fall
+within `[0, bar_count)` for the aligned range; the loop MUST reject an
+evaluation containing a `bar_index` outside that range. (Strategy
+Engine no longer sends a per-bar timestamp array — `bar_index` plus
+`market_data_hash` plus `bar_count` is the alignment contract; the
+loop's own `MarketFrame` for that identical `market_data_hash` is the
+sole source of each bar's actual timestamp.)
 
 #### Scenario: Misaligned market identity
 
 - **WHEN** the Strategy Engine and MDS inputs to the loop describe
-  different market identity, bar count, or timestamps
+  different market identity, `market_data_hash`, `bar_count`, or range
 - **THEN** the loop rejects the run rather than executing against
   mismatched data.
+
+#### Scenario: Out-of-range bar_index is rejected
+
+- **WHEN** a projection element's `bar_index` falls outside `[0, bar_count)`
+  for the aligned range
+- **THEN** the loop rejects the run rather than executing against an
+  ambiguous or out-of-bounds decision.
 
 ### Requirement: Position cardinality
 
@@ -97,3 +109,27 @@ equity, and trade metrics MUST NOT be calculated in this slice.
 - **THEN** it contains fills, position state, and events, with no fee, PnL,
   equity, or metric fields — those are produced by
   `research-trade-accounting-v1`.
+
+### Requirement: Single-instance production wiring (I7)
+
+`RunSingleInstanceBacktest` SHALL drive this execution loop from a real
+`HistoricalExecutionProjectionDTO` obtained from Strategy Engine's live
+`/strategy-evaluations/range` route (post I7 cutover), not from an
+in-process proof harness. The batch path
+(`application/experiments/run_batch.py`) SHALL continue to use its
+existing legacy-shape execution path unmodified — this loop's I7 wiring
+change applies to the single-instance production caller only. Full
+cutover requirements (shared-infrastructure handling, compatibility,
+rollback, E2E gate) are normative in `research-production-cutover-v1`;
+this requirement records only that this loop itself is the thing being
+wired to a real route for the first time.
+
+#### Scenario: Single-instance run is driven by the real route
+
+- **WHEN** a production `RunSingleInstanceBacktest.execute()` call runs
+  after I7
+- **THEN** this execution loop consumes a `HistoricalExecutionProjectionDTO`
+  decoded from a real HTTP response of the live, cut-over `/range` route
+- **AND** batch's use of this loop's legacy-shape counterpart is
+  unaffected.
+

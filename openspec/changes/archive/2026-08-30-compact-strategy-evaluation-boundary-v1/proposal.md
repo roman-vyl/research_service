@@ -166,15 +166,17 @@ not expanded to cover persisted artifacts.
   fail-closed on provenance mismatch. `application/diagnostics/
   projection.py`'s "No read-time upstream calls" invariant is preserved
   for reading an already-generated artifact.
-- **Batch settlement remains a separate, binding follow-on phase (I8),
-  not automatic.** Unchanged from the original proposal's analysis:
-  `RunBatchExperiment`'s per-candidate loop is already correct on the
-  Research side; what's not yet fixed is the aggregation pattern that
-  still holds N results simultaneously during one `/range-batch` call.
-  This phase is explicitly gated behind I7 in the Master Plan, and I8
-  itself may reconsider whether `/range-batch` as one large
-  request/response is even the right shape — not just its aggregation
-  timing.
+- **Batch settlement was a separate, binding follow-on phase (I8) —
+  now complete.** `RunBatchExperiment`'s per-candidate loop was already
+  correct on the Research side; the aggregation pattern that used to
+  hold N results simultaneously during one `/range-batch` call is fixed:
+  `/range-batch` streams a `.v2` sequence (one shared Engine-side
+  market-data acquisition, sequential per-variant evaluation/emission),
+  and `RunBatchExperiment` consumes it one candidate at a time,
+  materializing/persisting/releasing each through the same canonical
+  single-instance path before the next is produced. Confirmed
+  constant-in-N peak RSS on both the Engine-process and Research-process
+  side (N=1/2/4/11 benchmark, `I8_GATE_PASSED`).
 
 ## What Does Not Change
 

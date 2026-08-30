@@ -21,7 +21,6 @@ from research_service.domain.contracts import (
     StrategyEvaluationBatchRequest,
     StrategyEvaluationBatchVariantOutcome,
     StrategyEvaluationRequest,
-    StrategyEvaluationResult,
 )
 from research_service.domain.errors import UpstreamServiceError
 from research_service.ports.strategy_engine import (
@@ -101,50 +100,14 @@ class HttpStrategyEngineClient:
             valid=bool(body.get("valid", False)), errors=errors
         )
 
-    def evaluate_range(
-        self,
-        request: StrategyEvaluationRequest,
-    ) -> StrategyEvaluationResult:
-        payload: dict[str, object] = {
-            "market": {
-                "ticker": request.market.ticker,
-                "base_timeframe": request.market.timeframe,
-                "from_ms": request.market.from_ms,
-                "to_ms": request.market.to_ms,
-            },
-            "expected_market_data_hash": request.expected_market_data_hash,
-            "strategy": {
-                "strategy_id": request.strategy_id,
-                "raw_spec": request.strategy_spec,
-            },
-            "options": {
-                "include_features": request.include_features,
-                "include_contexts": request.include_contexts,
-                "include_component_evidence": request.include_component_evidence,
-                "include_state_artifact": False,
-            },
-        }
-        body = self._post_json(
-            "/v1/strategy-evaluations/range",
-            payload,
-            "Strategy Engine range evaluation request failed",
-        )
-        # Engine no longer echoes instance_id
-        # (strategy-evaluation-canonical-boundary-v1) — stamp Research's own
-        # already-derived identity instead of parsing it off the wire.
-        return _parse_evaluation_result(body, instance_id=request.instance_id)
-
     def evaluate_range_projection(
         self,
         request: StrategyEvaluationRequest,
     ) -> HistoricalExecutionProjectionDTO:
         """`compact-strategy-evaluation-boundary-v1` I7: production
-        single-instance path. Calls the same `/strategy-evaluations/
-        range` route as `evaluate_range` -- Engine's I7 cutover made
-        this route serve `.v2` only -- and decodes via the real
-        `parse_historical_execution_projection`. `/range-batch`'s
-        consumer (`evaluate_range_batch` above) is untouched and keeps
-        calling `_parse_evaluation_result`."""
+        single-instance path. Calls `/strategy-evaluations/range` --
+        Engine's I7 cutover made this route serve `.v2` only -- and
+        decodes via the real `parse_historical_execution_projection`."""
 
         payload: dict[str, object] = {
             "market": {
@@ -510,41 +473,6 @@ class HttpStrategyEngineClient:
         return body
 
 
-def _parse_evaluation_result(body: dict[str, object], *, instance_id: str) -> StrategyEvaluationResult:
-    """Parse one Strategy Engine range-evaluation response body (shared shape
-    between `/range` and each `/range-batch` variant's `result`), stamping
-    Research's own already-derived `instance_id` -- Engine never echoes it."""
-
-    market = _object(body, "market")
-    features = _object(body, "features")
-    entries_raw = _object(body, "entries")
-    entries = {
-        str(side): tuple(bool(value) for value in values)
-        for side, values in entries_raw.items()
-        if isinstance(values, list)
-    }
-    parsed_market = MarketRange(
-        ticker=str(market.get("ticker", "")),
-        timeframe=str(market.get("base_timeframe", "")),
-        from_ms=_int(market.get("from_ms", -1)),
-        to_ms=_int(market.get("to_ms", -1)),
-    )
-    return StrategyEvaluationResult(
-        contract_version=str(body.get("contract_version", "")),
-        strategy_id=str(body.get("strategy_id", "")),
-        instance_id=instance_id,
-        config_hash=str(body.get("config_hash", "")),
-        market=parsed_market,
-        bar_count=_int(market.get("bar_count", -1)),
-        market_data_hash=str(market.get("market_data_hash", "")),
-        time_ms=tuple(_int(value) for value in _list(features.get("time_ms", []))),
-        entries=entries,
-        exit_policy=_object(body, "exit_policy"),
-        component_evidence=_object(body, "component_evidence"),
-        raw=body,
-    )
-
-
 _HISTORICAL_EXECUTION_PROJECTION_CONTRACT_VERSION = "strategy_evaluation_execution.v2"
 
 
@@ -561,8 +489,7 @@ def parse_historical_execution_projection(body: dict[str, object]) -> Historical
     `market{...}` alongside `base_timeframe` (Strategy Engine's own key
     name, not `timeframe`) -- this function translates that shape into
     `HistoricalExecutionProjectionDTO`'s flat fields and Research's own
-    `MarketRange.timeframe`, exactly the way `_parse_evaluation_result`
-    above already translates the legacy `.v1` envelope. A naive
+    `MarketRange.timeframe`. A naive
     `HistoricalExecutionProjectionDTO.model_validate(body)` on the raw
     body would reject every real Engine response -- this function must
     not skip that translation step.

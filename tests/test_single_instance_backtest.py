@@ -167,10 +167,9 @@ class FakeStrategyEngine:
     """Shared fake across single-instance (`evaluate_range_projection`)
     and batch (`evaluate_range_batch`, `test_batch_experiments.py`) test
     suites -- since I8 both go through the same `.v2` projection-based
-    path. `evaluate_range`/`StrategyEvaluationResult` construction is
-    retained only because `research-production-cutover-v1`'s port still
-    declares the legacy `evaluate_range` method; nothing in production
-    calls it. Accepts either fixture type and only wires the methods
+    path. `StrategyEvaluationResult` construction (`strategy_result()`)
+    is retained only for the legacy dense-shape `evaluate_range_batch`
+    fixture path. Accepts either fixture type and only wires the methods
     that type supports; the other side raises if called, catching an
     accidental cross-wiring in a test."""
 
@@ -188,15 +187,6 @@ class FakeStrategyEngine:
         self.managed_requests: list[ManagedReplayRequest] = []
         self.failing_variant_ids = failing_variant_ids
         self.shuffle_response = shuffle_response
-
-    def evaluate_range(self, request: StrategyEvaluationRequest) -> StrategyEvaluationResult:
-        if self.result is None:
-            raise AssertionError("not used -- projection-based fixture only")
-        self.range_requests.append(request)
-        # Echo back whatever instance_id the request carried — mirrors real
-        # Engine behavior and lets callers vary raw_spec (which varies the
-        # derived instance_id) without invalidating the canned result.
-        return self.result.model_copy(update={"instance_id": request.instance_id})
 
     def evaluate_range_projection(
         self, request: StrategyEvaluationRequest

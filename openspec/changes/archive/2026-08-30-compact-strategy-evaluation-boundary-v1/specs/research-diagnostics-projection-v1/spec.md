@@ -8,11 +8,12 @@ A run that exists but has no diagnostic artifact yet SHALL return a
 stable "diagnostics not yet generated" response, not an error and not
 fabricated/recomputed data.
 
-#### Scenario: Diagnostics for a persisted run with a diagnostic artifact
+#### Scenario: Diagnostics for a persisted run
 
 - **WHEN** signal-trace or chart-events is requested for a persisted run
-  that already has a diagnostic artifact
-- **THEN** the projection is built from that artifact.
+- **AND** that run's diagnostic artifact already exists
+- **THEN** the projection is built from that immutable diagnostic
+  artifact.
 
 #### Scenario: Diagnostics requested before generation
 
