@@ -1,7 +1,11 @@
 # research-historical-execution-parity-v1 Specification
 
 ## Purpose
-TBD - created by archiving change compact-strategy-evaluation-boundary-v1. Update Purpose after archive.
+
+Define I5's end-to-end parity proof gate: zero-diff evidence, on real
+market data, that the `HistoricalExecutionProjection` (`.v2`) path
+reproduces old-BBB trade/accounting semantics before any production
+cutover is authorized.
 ## Requirements
 ### Requirement: N=1 end-to-end parity proof, both lanes mandatory
 

@@ -1,7 +1,11 @@
 # research-batch-lifecycle-v1 Specification
 
 ## Purpose
-TBD - created by archiving change compact-strategy-evaluation-boundary-v1. Update Purpose after archive.
+
+Define I8's batch lifetime redesign: streamed, shared-once Strategy
+Engine acquisition and per-candidate release so batch peak memory is
+approximately constant in N, on the same canonical single-instance
+materialize/persist path as `RunSingleInstanceBacktest`.
 ## Requirements
 ### Requirement: I8 scope — batch lifetime redesign, only after I7
 

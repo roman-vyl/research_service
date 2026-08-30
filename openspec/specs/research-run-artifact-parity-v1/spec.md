@@ -1,7 +1,11 @@
 # research-run-artifact-parity-v1 Specification
 
 ## Purpose
-TBD - created by archiving change compact-strategy-evaluation-boundary-v1. Update Purpose after archive.
+
+Define I6's persisted-artifact regression proof: the diagnostics/
+persistence split onto the I6.D canonical shape preserves every
+common-facts field, verified against an independent old-BBB-grounded
+reference on real market data.
 ## Requirements
 ### Requirement: Persisted-artifact regression proof, after I5, before I7
 

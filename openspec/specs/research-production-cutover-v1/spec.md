@@ -1,7 +1,11 @@
 # research-production-cutover-v1 Specification
 
 ## Purpose
-TBD - created by archiving change compact-strategy-evaluation-boundary-v1. Update Purpose after archive.
+
+Define I7's coordinated single-instance production cutover: the final
+`/range` v2 contract, Research's v2 consumer wiring, canonical
+persistence, and the fail-closed, jointly-deployed compatibility/
+rollback contract between Strategy Engine and Research Service.
 ## Requirements
 ### Requirement: I7 scope — single-instance production cutover only
 
