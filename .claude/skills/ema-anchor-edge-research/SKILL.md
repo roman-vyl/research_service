@@ -89,7 +89,7 @@ For each dimension:
 1. justify a coarse, trading-plausible range from live schema and meaning;
 2. run a comparable batch across the range;
 3. inspect net result/return, PF, drawdown, trade count, win rate, and long/short;
-4. refine only where shape and sample size justify more resolution.
+4. choose the next points for their expected information value about response shape, refining a promising region only after enough exploration identifies what kind of shape would be exploited.
 
 Do not select a final value. Determine whether a dependency exists, its direction and shape, promising and rejected intervals, and whether the dimension deserves more research.
 
@@ -102,7 +102,7 @@ Classify meaningful `Q(x)` as one or more of:
 - U-shape or inverted U-shape; multiple regimes;
 - unstable/noisy spikes; boundary optimum.
 
-A boundary optimum means the function is not localized on the tested domain. It does not automatically mean “extend the boundary.” Decide whether to expand the range, test an interaction, reinterpret the proxy, or stop because further values lose trading meaning. Do not automate boundary chasing.
+A boundary optimum means the function is not localized on the tested domain. It does not automatically mean “extend the boundary” or “densify near the winner.” Choose hypothesis-discriminating points that can separate monotonic continuation, a threshold or plateau, an internal or inverted-U optimum, multiple regimes, and noise. Also ask when further movement loses trading meaning. Boundary exploration and refinement should maximize understanding of topology, not automate boundary chasing; this is an information-gain principle, not a formal optimizer.
 
 ### B3. Use 1D optima as landmarks
 
@@ -112,11 +112,13 @@ An independently promising interval is a search landmark, not a final setting. I
 
 Do not form a Cartesian product of available parameters. Add a dimension only if it measures a new market property and the hypothesis explains why it may condition the response.
 
-If two parameters appear to proxy the same state, test redundancy, correlation, or conditional value before optimizing both. Prioritize interpretable structural interactions; complexity must be earned by evidence.
+If two parameters appear to proxy the same state, test redundancy, correlation, or conditional value before optimizing both. Prioritize interpretable structural interactions; complexity must be earned by evidence or a hypothesis stated before seeing the interaction result.
 
-### B5. Mandatory local two-dimensional search
+### B5. Conditional local two-dimensional search
 
-After 1D discovery, test at least one hypothesis-supported interaction between the most meaningful dimensions. Build the 2D domain around promising regions, not single high points. Cover meaningful plateaus; investigate distinct regimes in separate local domains when appropriate.
+Proceed to `Q(x, y)` when either both dimensions have meaningful independent 1D signal, or one has signal and a trading-plausible hypothesis stated before the 2D result says the other may matter only conditionally. For example, bounce may be marginal alone while a prior hypothesis predicts that repeated touches matter only at particular stack widths.
+
+Do not build an interaction merely because parameters exist, search for a second dimension when neither evidence nor prior conditional hypothesis supports one, or invent the hypothesis after a favorable surface appears. Phase B may end with a robust 1D structural finding. When 2D is justified, build around promising regions rather than single points; cover meaningful plateaus and separate regimes where appropriate.
 
 Keep the data window, execution assumptions, fixed exit, and metric definitions comparable so surface changes reflect entry structure.
 
@@ -181,6 +183,8 @@ Never reduce quality to PF, PnL, or win rate alone, and do not invent a weighted
 
 PF rising while trade count collapses may be statistical thinning; return rising with sharply worse drawdown may be a worse trade-off. A good aggregate result entirely on one side may be directional regime, not a general anchor edge.
 
+For every meaningful improvement ask whether it is specific to the market-state proxy or merely generic thinning, temporal concentration, or broad regime selection. If trade count falls materially versus baseline, inspect concentration through time, by long/short, and by regime when a reasonable diagnostic exists; also require neighboring-parameter stability and persistence on validation windows. Do not confirm structural edge when selecting a small favorable historical segment explains the result equally well.
+
 Compare `Q(x)` shape and `Q(x, y)` topology separately for long and short. Asymmetry is not automatically bad, but label it honestly; do not call a one-sided finding universal.
 
 ## Mandatory reasoning checkpoint
@@ -191,13 +195,14 @@ After every meaningful experiment answer:
 2. What market property did the proxy attempt to measure?
 3. Why is the observed shape economically plausible?
 4. What alternative explanation remains?
-5. Which next experiment best discriminates between explanations?
+5. Could thinning or temporal/directional/regime concentration explain the improvement?
+6. Which next experiment has the greatest information value for discriminating between explanations or response shapes?
 
 The next experiment must follow from these answers. Selection says what worked; causal explanation remains a hypothesis until discriminating evidence supports it.
 
 ## Overfitting defenses
 
-Reject or discount isolated best points, excessive grids, repeated boundary chasing, parameter explosion, retrospective hypotheses, tiny samples, aggregate results masking side failure, and filters chosen after inspecting winners.
+Reject or discount isolated best points, excessive grids, repeated boundary chasing, parameter explosion, retrospective hypotheses, tiny or generically thinned samples, temporal/regime concentration, aggregate results masking side failure, and filters chosen after inspecting winners.
 
 Prefer broad stable regions, smooth reproducible topology, meaningful samples, interpretable interactions, and negative results that remain negative under reasonable perturbation.
 
