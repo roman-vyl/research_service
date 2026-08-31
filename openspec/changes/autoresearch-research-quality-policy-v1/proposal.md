@@ -20,8 +20,9 @@ geometry research, and robustness validation.
   disposition.
 - Define phase-specific metric roles: descriptive facts, primary evidence, secondary/sanity
   evidence, and promotion gates.
-- Make positive after-cost economics, neighborhood support, configured threshold enforcement, and
-  required validation explicit promotion semantics without inventing arbitrary numeric defaults.
+- Make structural evidence, neighborhood support, configured threshold enforcement, and required
+  validation explicit promotion semantics without inventing arbitrary numeric defaults; positive
+  after-cost economics gates promotion out of exit-geometry research, not entry into it.
 - Preserve worker interpretation and supervisor mechanical enforcement: the supervisor never ranks
   candidates or chooses a numeric winner.
 - Require new enclosing AutoResearch contract versions when implemented rather than silently adding

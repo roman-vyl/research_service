@@ -19,8 +19,10 @@
 
 - [ ] Validate exact policy and assessment shapes, stage binding, evidence references, and durable
       advancement.
-- [ ] Enforce positive after-cost promotion semantics, canonical metric consistency, configured
-      thresholds, neighborhood support, side-policy restrictions, and required validation.
+- [ ] Enforce structural gates for entry into exit-geometry research, positive after-cost semantics
+      for promotion out of exit geometry and later/final viability, canonical metric consistency,
+      configured thresholds, neighborhood support, side-policy restrictions, and required
+      validation.
 - [ ] Ensure null optional thresholds create no implicit gate and that the supervisor never ranks
       candidates or computes a weighted score.
 

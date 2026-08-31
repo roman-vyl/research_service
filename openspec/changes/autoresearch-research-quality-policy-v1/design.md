@@ -82,7 +82,7 @@ not relabel Phase-B PF as its sole primary objective.
 | `descriptive_baseline` | opportunity/trade count, long/short distribution, hit behavior, gross/fees/net, PF, return, drawdown | adequacy and comparability of the control | none used to optimize | none |
 | `structural_entry` | shared-window/control identities and all canonical metrics | win/hit-rate uplift versus naked baseline, long/short hit behavior, response topology, neighborhood behavior, trade count and thinning | PF, gross/net/return, fees, drawdown | evidence completeness only; no profitability rejection |
 | `structural_interaction` | comparable surface/slice identities | ridge/plateau/surface topology, perturbation stability, conditional entry-quality behavior, sample and side behavior | PF, gross/net/return, fees, drawdown | structural support only; no final-economics gate |
-| `entry_region_selection` | prior structural evidence | stable region, after-cost direction, risk, meaningful sample, side scope, market interpretation and competing explanation | other canonical metrics | positive after-cost economics, neighborhood support, configured thresholds, required directional/validation evidence |
+| `entry_region_selection` | prior structural evidence and symmetric-exit economics | stable/broad supported region, neighborhood support, meaningful sample, low thinning/concentration risk, side classification, market interpretation, competing explanation, configured structural evidence | symmetric-exit PF, gross/net/return, fees, drawdown as recorded sanity/context facts | structural support, neighborhood support, meaningful sample, no disqualifying thinning/concentration, explicit side classification, configured structural evidence; no positive-after-cost gate |
 | `exit_geometry` | fixed entry-region identity and symmetric control | net/return after costs, PF, trade-close drawdown, realistic payoff geometry, trade count, side economics, neighboring exit stability | hit rate and diagnostic facts | positive after-cost economics plus configured gates |
 | `robustness_validation` | discovery and validation universe identities | holdout/temporal/regime/side/perturbation evidence, sample persistence, topology persistence, justified alternate window/ticker evidence | discovery-window economics | no failed required validation, neighborhood support, positive after-cost economics, configured gates |
 
@@ -92,8 +92,10 @@ Consequences:
 - Phase-B symmetric-exit net PnL near zero cannot by itself reject structural entry quality.
 - Phase-B win rate is primary evidence but cannot outrank trade count, thinning, topology,
   neighborhood stability, or side behavior.
-- Economic viability becomes mandatory only when carrying a stable entry region into exit research
-  or making a later promotion claim.
+- A stable structural entry region may enter exit research even when neutral/symmetric-exit
+  after-cost net result is zero or slightly negative.
+- Economic viability becomes mandatory only when promoting out of exit-geometry research into an
+  economically viable candidate, or making a later/final promotion claim.
 - Phase-C economics are not interchangeable with Phase-B neutral/symmetric-exit economics.
 
 ## Decision 4: Resolved session policy contract
@@ -132,10 +134,12 @@ provenance are persisted. The supervisor does not perform hidden precedence or f
 at runtime.
 
 Every threshold field is required but nullable. `null` means no numeric threshold exists and the
-supervisor must not invent one. No field can disable the hard positive-after-cost or neighborhood
-invariants. `required_evidence` uses: `parameter_perturbation`, `temporal_holdout`, `regime_split`,
-`side_decomposition`, `alternate_window`, and `alternate_ticker`. Alternate market evidence is
-required only when explicitly configured or methodologically claimed.
+supervisor must not invent one. No field can disable the hard neighborhood invariant for promotion
+into exit-geometry research, and no field can disable the hard positive-after-cost invariant for
+promotion out of exit-geometry research or later/final viability claims. `required_evidence` uses:
+`parameter_perturbation`, `temporal_holdout`, `regime_split`, `side_decomposition`,
+`alternate_window`, and `alternate_ticker`. Alternate market evidence is required only when
+explicitly configured or methodologically claimed.
 
 ## Decision 5: Durable assessment contract
 
@@ -292,10 +296,28 @@ Because current enclosing schemas are exact and versioned, implementation introd
 carrying the assessment. V1 documents remain v1 documents; no silent in-place shape expansion is
 allowed.
 
-## Decision 6: Hard economic consistency and configurable gates
+## Decision 6: Lifecycle gates economic viability after exit research
 
-For a promotion subject in `entry_region_selection`, `exit_geometry`, or
-`robustness_validation`, every representative candidate must satisfy the non-configurable
+The lifecycle is:
+
+```text
+descriptive_baseline
+  -> structural_entry
+  -> structural_interaction
+  -> entry_region_selection
+  -> exit_geometry
+  -> economically_viable_candidate
+  -> robustness_validation
+```
+
+For promotion from `entry_region_selection` into `exit_geometry`, the supervisor enforces
+structural requirements only: a stable/broad supported region, neighborhood support, meaningful
+sample, no disqualifying thinning or concentration, explicit side classification, and any configured
+structural evidence. Neutral/symmetric-exit economics are recorded and interpreted at this stage,
+but zero or negative after-cost net result alone cannot block exit-geometry research.
+
+For promotion out of `exit_geometry` into an economically viable candidate, or for any later
+robustness/final viability claim, every representative candidate must satisfy the non-configurable
 after-cost invariant:
 
 - `net_pnl > 0` and `return_pct > 0`;
@@ -311,8 +333,9 @@ representative candidate. A null threshold produces no implicit gate. A configur
 with null PF uses the canonical null semantics above rather than treating null as zero.
 
 An economically negative Phase-B region may remain structurally promising. It simply cannot be
-declared a final viable entry region or promoted beyond the point where positive after-cost
-economics is required.
+declared an economically viable candidate or promoted beyond the point where positive after-cost
+economics is required. Exit geometry is the research stage that tests whether the entry-quality
+improvement converts into after-cost economics under realistic payoff geometry.
 
 ## Decision 7: Neighborhood and validation are not numeric leaderboards
 
@@ -380,7 +403,10 @@ Hard invariants, not operator-relaxable:
 - no scalar/weighted winner selection;
 - phase-specific metric roles follow the normative stage table;
 - Phase A is descriptive and Phase B economics cannot act as a final-economics pruning gate;
-- final entry/later promotion requires positive, internally consistent after-cost economics;
+- transition from entry-region selection into exit geometry requires structural support, not
+  positive after-cost economics;
+- promotion out of exit geometry and later/final promotion requires positive, internally
+  consistent after-cost economics;
 - isolated spikes or unsupported neighborhoods cannot be promoted;
 - directional findings have narrow scope and require directional temporal/regime validation before
   strong promotion;

@@ -65,17 +65,41 @@ during structural discovery.
 - **THEN** the broad region may remain `investigate_region`; infrastructure SHALL NOT prune it in
   favor of the higher-PF point.
 
-### Requirement: Positive after-cost economics gates final entry promotion
+### Requirement: Entry-region selection promotes structural regions into exit geometry
 
-A region carried from stable entry selection into exit research, or promoted in any later economic
-stage, SHALL be positive after costs on its representative canonical candidates. Positive after-cost
-economics requires positive `net_pnl` and `return_pct`, consistency with `gross_pnl - fees_paid`,
-and directionally consistent PF when PF is non-null. This invariant SHALL NOT be applied as a
-Phase-A or Phase-B pruning rule.
+Promotion from `entry_region_selection` into `exit_geometry` SHALL require structural evidence: a
+stable or broad supported region, neighborhood support, meaningful sample, no disqualifying
+thinning or temporal/regime concentration, explicit side classification, and any configured
+structural evidence. Symmetric-exit economics SHALL be recorded and interpreted, but zero or
+negative after-cost net result alone SHALL NOT block transition into `exit_geometry`.
+
+#### Scenario: Slightly negative symmetric-exit region can enter exit geometry
+
+- **WHEN** a neutral symmetric-exit entry region has stable topology, neighborhood support,
+  meaningful sample, low thinning/concentration risk, explicit side classification, and slightly
+  negative after-cost net PnL
+- **THEN** it may be `eligible_for_next_stage` into `exit_geometry`; the negative symmetric-exit
+  economics remain durable context rather than a blocking viability verdict.
+
+#### Scenario: Profitable unsupported Phase-B spike cannot enter exit geometry
+
+- **WHEN** a Phase-B point is profitable but lacks neighborhood support or broad/stable structural
+  evidence
+- **THEN** it SHALL NOT enter `exit_geometry` merely because PF, PnL, return, or drawdown is
+  favorable.
+
+### Requirement: Positive after-cost economics gates promotion out of exit geometry
+
+Promotion out of `exit_geometry` into an economically viable candidate, and any later/final
+economic viability or robustness promotion, SHALL be positive after costs on representative
+canonical candidates. Positive after-cost economics requires positive `net_pnl` and `return_pct`,
+consistency with `gross_pnl - fees_paid`, and directionally consistent PF when PF is non-null. This
+invariant SHALL NOT be applied as a Phase-A, Phase-B, or entry-to-exit-geometry pruning rule.
 
 #### Scenario: After-cost negative final region cannot pass
 
-- **WHEN** a proposed final entry region has zero or negative canonical net PnL/return after fees
+- **WHEN** realistic exit geometry remains zero or negative after costs for the proposed
+  economically viable candidate
 - **THEN** its economic viability is `not_viable` and it cannot be `eligible_for_next_stage`, even
   if another isolated metric is favorable.
 
@@ -182,6 +206,11 @@ Each configured phase string SHALL bind to exactly one stage kind: `descriptive_
 `robustness_validation`. The supervisor SHALL enforce assessment requirements for the bound stage
 but SHALL NOT choose the next phase.
 
+The normative lifecycle SHALL be descriptive baseline, structural entry, structural interaction,
+entry-region selection, exit geometry, economically viable candidate, and robustness validation.
+The economically viable candidate state is reached after exit-geometry evidence satisfies economic
+viability gates; it is not a separate early structural-discovery gate.
+
 #### Scenario: Unknown phase binding fails closed
 
 - **WHEN** an iteration reports a phase absent from the resolved policy or with conflicting bindings
@@ -222,6 +251,12 @@ fees, and drawdown SHALL be secondary sanity evidence and SHALL NOT dominate int
 During `exit_geometry`, the structural entry region SHALL remain fixed and primary evidence SHALL
 shift to after-cost net result/return, PF, trade-close drawdown, realistic payoff geometry, trade
 count, side profitability, and neighboring exit-parameter stability.
+
+#### Scenario: Exit geometry is first economic-primary stage
+
+- **WHEN** a stable structural entry region enters `exit_geometry`
+- **THEN** profitability, PF, drawdown, payoff geometry, side economics, trade count, and
+  neighboring exit stability become primary decision evidence rather than secondary sanity facts.
 
 #### Scenario: Symmetric discovery economics are not final economics
 
