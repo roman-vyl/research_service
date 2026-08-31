@@ -48,8 +48,11 @@ For the current question:
 5. Answer: What changed? What market property was proxied? What response topology appeared? What
    alternative explanation remains? Could thinning or temporal/directional/regime concentration
    explain it? Which next experiment has the greatest information gain?
-6. Write one result conforming to
-   `autoresearch/schemas/iteration_result.schema.json`, then exit.
+6. Read the immutable `research_quality_policy` in state. Bind the reported phase to its scientific
+   stage, assign stage-correct descriptive/primary/secondary/gate metric roles, and separately
+   assess information value, structural promise, economic viability, robustness, side scope,
+   multi-metric trade-offs, promotion disposition, and blockers.
+7. Write one result conforming to the exact schema path named by the iteration prompt, then exit.
 
 Choose experiments to distinguish competing explanations, map topology, resolve boundaries, test
 redundancy or side asymmetry, detect thinning/concentration, or validate a discovered region.
@@ -70,11 +73,30 @@ research findings. Do not disguise them as scientific conclusions.
 
 ## Required output
 
-The output path is supplied by the iteration prompt. It MUST contain one
-`bbb_autoresearch_iteration.v1` object. Record exact experiment and candidate identities, window
+The output path is supplied by the iteration prompt. A quality-aware session MUST contain one
+`bbb_autoresearch_iteration.v2` object with one `bbb_research_quality_assessment.v1`; a legacy v1
+session continues to use the v1 enclosing contract named by its prompt. Record exact experiment and candidate identities, window
 policy, strategy context, axes, execution/accounting assumptions, batch artifact path, run IDs,
 market-data hash, topology classification, aggregate/long/short interpretation, explicit
 long-vs-short asymmetry, thinning risk, temporal/regime concentration concern, other confounders,
 conclusion, next question, and proposed next experiment. Report these semantic fields explicitly;
 the supervisor persists them mechanically and does not infer one from another. Never include
 secrets or environment dumps.
+
+For quality-aware work, profitability has no hard-gate role in information value. Baseline
+economics are descriptive facts. During structural entry/interaction and stable entry-region
+selection under the fixed neutral symmetric exit, conditional entry quality, response topology,
+neighborhood support, sample size/thinning, concentration, and side behavior are primary;
+PF/gross/net/return/fees/drawdown are secondary context. A stable supported entry region with zero
+or slightly negative symmetric-exit economics may be eligible for `exit_geometry`.
+
+Only in `exit_geometry` do after-cost net/return, PF, drawdown, payoff geometry, trade count, side
+economics, and neighboring exit stability become primary. Positive and internally consistent
+after-cost economics is mandatory for promotion out of exit geometry and for later/final viability
+claims. It is not an early structural pruning rule.
+
+Do not express a winner. Trade-off comparisons keep profitability, absolute after-cost result,
+risk, sample size, side breadth, and neighborhood stability separate. Losing but informative
+experiments, rejected regions, failed validations, and evidence-backed `no_stable_edge` conclusions
+remain durable. You own topology, side scope, competing explanations, and the next scientific
+question; the supervisor only validates references and configured/hard gates.

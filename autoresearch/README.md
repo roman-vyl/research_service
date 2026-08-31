@@ -1,4 +1,4 @@
-# BBB AutoResearch v1
+# BBB AutoResearch
 
 BBB AutoResearch is a local autonomous research-control plane over the existing Research Service.
 It is not a strategy optimizer, evaluator, backtester, accounting engine, production promotion
@@ -72,6 +72,19 @@ trade truth remains under the configured canonical Research artifact root; batch
 IDs are references in the iteration result/journal. Each retry is another fresh process and retains
 separate retry logs. If a process dies before state commit, the same iteration number is resumed and
 its durable attempt metadata bounds retries.
+
+The bundled EMA session template is quality-aware and initializes
+`bbb_autoresearch_state.v2`. Its immutable nested policy is
+`bbb_research_quality_policy.v1`; workers return `bbb_autoresearch_iteration.v2` containing
+`bbb_research_quality_assessment.v1`, and the journal uses `bbb_autoresearch_journal.v2`.
+State retains the latest full assessment and compact promotion history; iteration results and
+journal rows retain the full assessment.
+
+Legacy templates without `research_quality_policy` still initialize exact
+`bbb_autoresearch_state.v1` sessions, accept only `bbb_autoresearch_iteration.v1`, and write
+`bbb_autoresearch_journal.v1`. There is no silent migration. To adopt quality policy, the operator
+initializes a new session from a fully resolved quality-aware template and explicitly carries over
+only reviewed research context.
 
 Inspect the files directly when needed:
 

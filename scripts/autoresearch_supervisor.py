@@ -25,9 +25,20 @@ from research_service.application.experiments import (
 )
 from research_service.runtime.settings import Settings
 
+from autoresearch_quality_contracts import (
+    PromotionBlocker,
+    enforce_quality_policy,
+    phase_binding,
+    validate_assessment,
+    validate_policy,
+)
+
 STATE_VERSION = "bbb_autoresearch_state.v1"
+STATE_VERSION_V2 = "bbb_autoresearch_state.v2"
 ITERATION_VERSION = "bbb_autoresearch_iteration.v1"
+ITERATION_VERSION_V2 = "bbb_autoresearch_iteration.v2"
 JOURNAL_VERSION = "bbb_autoresearch_journal.v1"
+JOURNAL_VERSION_V2 = "bbb_autoresearch_journal.v2"
 TERMINAL_STATUSES = frozenset({"hard_stopped", "completed", "cancelled"})
 SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -43,12 +54,17 @@ _STATE_KEYS = {
     "validation_status", "next_discriminating_question", "next_experiment",
     "last_iteration_result", "budgets", "stop_reason",
 }
+_STATE_V2_KEYS = _STATE_KEYS | {
+    "research_quality_policy", "active_stage_binding", "latest_quality_assessment",
+    "promotion_history",
+}
 _ITERATION_KEYS = {
     "contract_version", "session_id", "iteration_id", "status", "phase", "hypothesis",
     "market_property_proxy", "experiment", "execution_result", "observed_response",
     "side_interpretation", "risk_assessment", "conclusion", "next_discriminating_question",
     "proposed_next_experiment", "hard_stop_reason",
 }
+_ITERATION_V2_KEYS = _ITERATION_KEYS | {"research_quality_assessment"}
 _EXPERIMENT_KEYS = {
     "kind", "experiment_id", "axes", "candidate_ids", "candidate_count", "window_policy",
     "strategy_context", "execution_accounting_assumptions",
@@ -68,6 +84,14 @@ _RISK_ASSESSMENT_KEYS = {
 _BUDGET_KEYS = {
     "max_iterations", "max_wall_clock_seconds", "max_consecutive_agent_failures",
     "max_candidates_per_iteration",
+}
+_JOURNAL_V2_KEYS = {
+    "contract_version", "session_id", "iteration_id", "timestamp", "baseline_git_sha",
+    "research_phase", "hypothesis", "competing_explanation", "experiment_id",
+    "candidate_ids", "window_policy", "strategy_context", "parameter_axes",
+    "execution_accounting_assumptions", "batch_artifact_path", "run_ids",
+    "market_data_hash", "outcome_classification", "side_interpretation",
+    "risk_assessment", "conclusion", "next_question", "research_quality_assessment",
 }
 
 
@@ -158,9 +182,14 @@ def _validate_datetime(value: object, context: str) -> None:
 
 
 def validate_state(state: dict[str, Any]) -> None:
-    if state.get("contract_version") != STATE_VERSION:
-        raise ContractError(f"contract_version must be {STATE_VERSION}")
-    _require_exact_keys(state, _STATE_KEYS, "state")
+    version = state.get("contract_version")
+    if version not in {STATE_VERSION, STATE_VERSION_V2}:
+        raise ContractError(
+            f"contract_version must be {STATE_VERSION} or {STATE_VERSION_V2}"
+        )
+    _require_exact_keys(
+        state, _STATE_V2_KEYS if version == STATE_VERSION_V2 else _STATE_KEYS, "state"
+    )
     if not isinstance(state.get("session_id"), str):
         raise ContractError("session_id must be a string")
     validate_session_id(state["session_id"])
@@ -240,6 +269,49 @@ def validate_state(state: dict[str, Any]) -> None:
             raise ContractError(f"{state['status']} state requires stop_reason")
     elif stop_reason is not None:
         raise ContractError("stop_reason must be null unless state is hard_stopped or cancelled")
+    if version == STATE_VERSION_V2:
+        try:
+            policy = validate_policy(state["research_quality_policy"])
+            binding = phase_binding(policy, state["phase"])
+            if state["active_stage_binding"] != binding.model_dump(mode="json"):
+                raise ContractError("active_stage_binding differs from current policy phase binding")
+            latest = state["latest_quality_assessment"]
+            if latest is not None:
+                assessment = validate_assessment(latest)
+                if assessment.applied_policy_id != policy.policy_id:
+                    raise ContractError("latest assessment uses a different policy")
+            history = state["promotion_history"]
+            if not isinstance(history, list):
+                raise ContractError("promotion_history must be an array")
+            history_keys = {"iteration_id", "region_id", "decision", "blockers"}
+            for index, entry in enumerate(history):
+                if not isinstance(entry, dict):
+                    raise ContractError(f"promotion_history[{index}] must be an object")
+                _require_exact_keys(entry, history_keys, f"promotion_history[{index}]")
+                if type(entry["iteration_id"]) is not int or entry["iteration_id"] < 1:
+                    raise ContractError(f"promotion_history[{index}].iteration_id is invalid")
+                if entry["region_id"] is not None and (
+                    not isinstance(entry["region_id"], str) or not entry["region_id"].strip()
+                ):
+                    raise ContractError(f"promotion_history[{index}].region_id is invalid")
+                if entry["decision"] not in {
+                    "continue_discovery", "investigate_region", "eligible_for_next_stage",
+                    "validation_required", "rejected_structurally",
+                    "demoted_after_validation", "no_stable_edge",
+                }:
+                    raise ContractError(f"promotion_history[{index}].decision is invalid")
+                if not isinstance(entry["blockers"], list) or any(
+                    not isinstance(blocker, dict) for blocker in entry["blockers"]
+                ):
+                    raise ContractError(f"promotion_history[{index}].blockers is invalid")
+                for blocker in entry["blockers"]:
+                    PromotionBlocker.model_validate(blocker)
+        except ValidationError as exc:
+            raise ContractError(f"invalid research quality state contract: {exc}") from exc
+        except ValueError as exc:
+            if isinstance(exc, ContractError):
+                raise
+            raise ContractError(f"invalid research quality state semantics: {exc}") from exc
 
 
 def validate_state_transition(previous: dict[str, Any], current: dict[str, Any]) -> None:
@@ -251,6 +323,10 @@ def validate_state_transition(previous: dict[str, Any], current: dict[str, Any])
         raise ContractError("session_id is immutable")
     if previous["baseline_git_sha"] != current["baseline_git_sha"]:
         raise ContractError("baseline_git_sha is immutable")
+    if previous["contract_version"] != current["contract_version"]:
+        raise ContractError("state contract_version is immutable; migration must be operator-driven")
+    if previous.get("research_quality_policy") != current.get("research_quality_policy"):
+        raise ContractError("research_quality_policy is immutable")
     if current["iteration"] < previous["iteration"]:
         raise ContractError("iteration cannot move backwards")
     if previous["status"] in TERMINAL_STATUSES and current != previous:
@@ -263,9 +339,13 @@ def validate_iteration_result(
     *,
     artifacts_root: Path | None = None,
 ) -> None:
-    if result.get("contract_version") != ITERATION_VERSION:
-        raise ContractError(f"contract_version must be {ITERATION_VERSION}")
-    _require_exact_keys(result, _ITERATION_KEYS, "iteration result")
+    quality_aware = state.get("contract_version") == STATE_VERSION_V2
+    expected_version = ITERATION_VERSION_V2 if quality_aware else ITERATION_VERSION
+    if result.get("contract_version") != expected_version:
+        raise ContractError(f"contract_version must be {expected_version}")
+    _require_exact_keys(
+        result, _ITERATION_V2_KEYS if quality_aware else _ITERATION_KEYS, "iteration result"
+    )
     if result.get("session_id") != state["session_id"]:
         raise ContractError("iteration result session_id differs from state")
     expected = state["iteration"] + 1
@@ -344,6 +424,7 @@ def validate_iteration_result(
             raise ContractError("proposed_next_experiment must be an object or null")
         for key in ("kind", "reason"):
             _require_string(proposed, key)
+    canonical_summary: BatchExperimentResult | None = None
     if experiment["kind"] == "batch":
         if not isinstance(experiment.get("experiment_id"), str) or not experiment["experiment_id"]:
             raise ContractError("batch experiment requires experiment_id")
@@ -352,17 +433,40 @@ def validate_iteration_result(
         artifact_path = execution.get("batch_artifact_path")
         if not isinstance(artifact_path, str) or not artifact_path:
             raise ContractError("batch execution requires batch_artifact_path")
-        _verify_batch_artifact(result, artifacts_root=artifacts_root)
+        canonical_summary = _verify_batch_artifact(result, artifacts_root=artifacts_root)
     elif execution["completed_candidates"] + execution["failed_candidates"] != count:
         raise ContractError("execution candidate counts must match experiment candidate_count")
     candidate_budget = state["budgets"].get("max_candidates_per_iteration")
     if candidate_budget is not None and count > candidate_budget:
         raise ContractError("candidate count exceeds session budget")
+    if quality_aware:
+        try:
+            policy = validate_policy(state["research_quality_policy"])
+            assessment = validate_assessment(result["research_quality_assessment"])
+            candidate_facts = (
+                {
+                    candidate.candidate_id: candidate.model_dump(mode="python")
+                    for candidate in canonical_summary.candidates
+                    if candidate.status == "completed"
+                }
+                if canonical_summary is not None
+                else {}
+            )
+            enforce_quality_policy(
+                policy,
+                assessment,
+                phase=result["phase"],
+                candidate_facts=candidate_facts,
+                prior_iteration=state["iteration"],
+                analysis_path=execution["analysis_path"],
+            )
+        except (ValidationError, ValueError) as exc:
+            raise ContractError(f"invalid research quality assessment: {exc}") from exc
 
 
 def _verify_batch_artifact(
     result: dict[str, Any], *, artifacts_root: Path | None = None
-) -> None:
+) -> BatchExperimentResult:
     experiment = result["experiment"]
     execution = result["execution_result"]
     artifact = Path(execution["batch_artifact_path"])
@@ -460,6 +564,7 @@ def _verify_batch_artifact(
             raise ContractError("iteration market_data_hash differs from canonical batch summary")
     elif claimed_hash is not None:
         raise ContractError("iteration cannot claim market_data_hash with no completed candidates")
+    return summary
 
 
 def atomic_write_json(path: Path, value: dict[str, Any]) -> None:
@@ -484,8 +589,24 @@ def atomic_write_json(path: Path, value: dict[str, Any]) -> None:
 
 
 def append_journal(path: Path, event: dict[str, Any]) -> None:
-    if event.get("contract_version") != JOURNAL_VERSION:
-        raise ContractError(f"journal contract_version must be {JOURNAL_VERSION}")
+    if event.get("contract_version") not in {JOURNAL_VERSION, JOURNAL_VERSION_V2}:
+        raise ContractError(
+            f"journal contract_version must be {JOURNAL_VERSION} or {JOURNAL_VERSION_V2}"
+        )
+    if event["contract_version"] == JOURNAL_VERSION_V2:
+        _require_exact_keys(event, _JOURNAL_V2_KEYS, "journal event")
+        if type(event["iteration_id"]) is not int or event["iteration_id"] < 1:
+            raise ContractError("journal iteration_id must be positive")
+        _validate_datetime(event["timestamp"], "journal timestamp")
+        for key in ("session_id", "baseline_git_sha", "research_phase", "hypothesis",
+                    "outcome_classification", "conclusion", "next_question"):
+            _require_string(event, key)
+        for key in ("candidate_ids", "run_ids", "competing_explanation"):
+            _require_string_array(event, key, "journal event")
+        try:
+            validate_assessment(event["research_quality_assessment"])
+        except ValidationError as exc:
+            raise ContractError(f"invalid journal quality assessment: {exc}") from exc
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n"
     with path.open("a", encoding="utf-8") as handle:
@@ -541,6 +662,11 @@ def render_prompt(state: dict[str, Any], root: Path, iteration_root: Path) -> st
         "iteration_dir": iteration_root,
         "result_path": iteration_root / "iteration_result.json",
         "iteration_id": state["iteration"] + 1,
+        "result_schema_path": root / "autoresearch" / "schemas" / (
+            "iteration_result.v2.schema.json"
+            if state["contract_version"] == STATE_VERSION_V2
+            else "iteration_result.schema.json"
+        ),
     }
     rendered = template.format(**{key: str(value) for key, value in values.items()})
     if state["iteration"] == 0:
@@ -607,8 +733,12 @@ def _budget_reason(state: dict[str, Any], max_iterations: int | None) -> str | N
 def _journal_event(state: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
     experiment = result["experiment"]
     execution = result["execution_result"]
-    return {
-        "contract_version": JOURNAL_VERSION,
+    event = {
+        "contract_version": (
+            JOURNAL_VERSION_V2
+            if state["contract_version"] == STATE_VERSION_V2
+            else JOURNAL_VERSION
+        ),
         "session_id": state["session_id"],
         "iteration_id": result["iteration_id"],
         "timestamp": utc_now(),
@@ -633,6 +763,9 @@ def _journal_event(state: dict[str, Any], result: dict[str, Any]) -> dict[str, A
         "conclusion": result["conclusion"],
         "next_question": result["next_discriminating_question"],
     }
+    if state["contract_version"] == STATE_VERSION_V2:
+        event["research_quality_assessment"] = result["research_quality_assessment"]
+    return event
 
 
 def _advance_state(state: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
@@ -694,6 +827,24 @@ def _advance_state(state: dict[str, Any], result: dict[str, Any]) -> dict[str, A
             else None
         ),
     )
+    if state["contract_version"] == STATE_VERSION_V2:
+        policy = validate_policy(state["research_quality_policy"])
+        assessment = result["research_quality_assessment"]
+        promotion = assessment["promotion"]
+        subject = assessment["promotion_subject"]
+        updated.update(
+            active_stage_binding=phase_binding(policy, result["phase"]).model_dump(mode="json"),
+            latest_quality_assessment=assessment,
+            promotion_history=[
+                *state["promotion_history"],
+                {
+                    "iteration_id": result["iteration_id"],
+                    "region_id": subject["region_id"] if subject is not None else None,
+                    "decision": promotion["decision"],
+                    "blockers": promotion["blockers"],
+                },
+            ],
+        )
     validate_state(updated)
     validate_state_transition(state, updated)
     return updated

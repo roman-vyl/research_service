@@ -12,12 +12,14 @@ from typing import Any
 from autoresearch_supervisor import (
     REPO_ROOT,
     STATE_VERSION,
+    STATE_VERSION_V2,
     atomic_write_json,
     git_sha,
     session_dir,
     utc_now,
     validate_state,
 )
+from autoresearch_quality_contracts import phase_binding, validate_policy
 
 
 def initialize_session(session_id: str, template_path: Path, repo_root: Path = REPO_ROOT) -> Path:
@@ -29,8 +31,12 @@ def initialize_session(session_id: str, template_path: Path, repo_root: Path = R
     except (OSError, json.JSONDecodeError) as exc:
         raise ValueError(f"invalid session template: {exc}") from exc
     now = utc_now()
+    policy_value = template.get("research_quality_policy")
+    policy = validate_policy(policy_value) if policy_value is not None else None
+    state_version = STATE_VERSION_V2 if policy is not None else STATE_VERSION
+    phase = template.get("phase", "baseline")
     state: dict[str, Any] = {
-        "contract_version": STATE_VERSION,
+        "contract_version": state_version,
         "session_id": session_id,
         "research_program": template["research_program"],
         "skill_path": template["skill_path"],
@@ -40,7 +46,7 @@ def initialize_session(session_id: str, template_path: Path, repo_root: Path = R
         "created_at": now,
         "updated_at": now,
         "iteration": 0,
-        "phase": template.get("phase", "baseline"),
+        "phase": phase,
         "completed_phases": template.get("completed_phases", []),
         "current_hypothesis": template.get("current_hypothesis"),
         "competing_explanations": template.get("competing_explanations", []),
@@ -78,6 +84,13 @@ def initialize_session(session_id: str, template_path: Path, repo_root: Path = R
         },
         "stop_reason": None,
     }
+    if policy is not None:
+        state.update(
+            research_quality_policy=policy.model_dump(mode="json"),
+            active_stage_binding=phase_binding(policy, phase).model_dump(mode="json"),
+            latest_quality_assessment=None,
+            promotion_history=[],
+        )
     validate_state(state)
     skill = repo_root / state["skill_path"]
     if not skill.is_file():

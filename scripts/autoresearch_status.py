@@ -30,6 +30,13 @@ def main(argv: list[str] | None = None) -> int:
         "budgets": state["budgets"],
         "recent_journal": [json.loads(line) for line in rows[-args.journal_rows :]],
     }
+    if state["contract_version"] == "bbb_autoresearch_state.v2":
+        output.update(
+            research_quality_policy=state["research_quality_policy"],
+            active_stage_binding=state["active_stage_binding"],
+            latest_quality_assessment=state["latest_quality_assessment"],
+            promotion_history=state["promotion_history"],
+        )
     print(json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True))
     return 0
 

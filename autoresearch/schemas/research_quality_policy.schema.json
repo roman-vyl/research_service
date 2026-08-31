@@ -1,0 +1,269 @@
+{
+  "$defs": {
+    "PhaseBinding": {
+      "additionalProperties": false,
+      "properties": {
+        "phase": {
+          "minLength": 1,
+          "title": "Phase",
+          "type": "string"
+        },
+        "stage_kind": {
+          "enum": [
+            "descriptive_baseline",
+            "structural_entry",
+            "structural_interaction",
+            "entry_region_selection",
+            "exit_geometry",
+            "robustness_validation"
+          ],
+          "title": "Stage Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "phase",
+        "stage_kind"
+      ],
+      "title": "PhaseBinding",
+      "type": "object"
+    },
+    "PromotionThresholds": {
+      "additionalProperties": false,
+      "properties": {
+        "maximum_trade_close_drawdown_magnitude": {
+          "anyOf": [
+            {
+              "ge": 0,
+              "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Maximum Trade Close Drawdown Magnitude"
+        },
+        "maximum_trade_count_reduction_fraction": {
+          "anyOf": [
+            {
+              "ge": 0,
+              "le": 1,
+              "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Maximum Trade Count Reduction Fraction"
+        },
+        "minimum_after_cost_return": {
+          "anyOf": [
+            {
+              "gt": 0,
+              "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Minimum After Cost Return"
+        },
+        "minimum_long_trade_count": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Minimum Long Trade Count"
+        },
+        "minimum_profit_factor": {
+          "anyOf": [
+            {
+              "gt": 0,
+              "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Minimum Profit Factor"
+        },
+        "minimum_realised_trade_count": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Minimum Realised Trade Count"
+        },
+        "minimum_short_trade_count": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Minimum Short Trade Count"
+        }
+      },
+      "required": [
+        "minimum_realised_trade_count",
+        "minimum_profit_factor",
+        "minimum_after_cost_return",
+        "maximum_trade_close_drawdown_magnitude",
+        "minimum_long_trade_count",
+        "minimum_short_trade_count",
+        "maximum_trade_count_reduction_fraction"
+      ],
+      "title": "PromotionThresholds",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "properties": {
+        "rationale": {
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "references": {
+          "items": {
+            "type": "string"
+          },
+          "title": "References",
+          "type": "array"
+        },
+        "source": {
+          "enum": [
+            "session",
+            "strategy_family",
+            "resolved_combination"
+          ],
+          "title": "Source",
+          "type": "string"
+        }
+      },
+      "required": [
+        "source",
+        "references",
+        "rationale"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "SidePolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "promotable_classifications": {
+          "items": {
+            "enum": [
+              "two_sided_consistent",
+              "long_dominant",
+              "short_dominant",
+              "regime_specific_directional"
+            ],
+            "type": "string"
+          },
+          "title": "Promotable Classifications",
+          "type": "array"
+        }
+      },
+      "required": [
+        "promotable_classifications"
+      ],
+      "title": "SidePolicy",
+      "type": "object"
+    },
+    "ValidationPolicy": {
+      "additionalProperties": false,
+      "properties": {
+        "required_before_entry_region_promotion": {
+          "title": "Required Before Entry Region Promotion",
+          "type": "boolean"
+        },
+        "required_evidence": {
+          "items": {
+            "enum": [
+              "parameter_perturbation",
+              "temporal_holdout",
+              "regime_split",
+              "side_decomposition",
+              "alternate_window",
+              "alternate_ticker"
+            ],
+            "type": "string"
+          },
+          "title": "Required Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "required_before_entry_region_promotion",
+        "required_evidence"
+      ],
+      "title": "ValidationPolicy",
+      "type": "object"
+    }
+  },
+  "$id": "bbb_research_quality_policy.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "contract_version": {
+      "const": "bbb_research_quality_policy.v1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "phase_bindings": {
+      "items": {
+        "$ref": "#/$defs/PhaseBinding"
+      },
+      "minItems": 1,
+      "title": "Phase Bindings",
+      "type": "array"
+    },
+    "policy_id": {
+      "minLength": 1,
+      "title": "Policy Id",
+      "type": "string"
+    },
+    "promotion_thresholds": {
+      "$ref": "#/$defs/PromotionThresholds"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "side_policy": {
+      "$ref": "#/$defs/SidePolicy"
+    },
+    "validation_policy": {
+      "$ref": "#/$defs/ValidationPolicy"
+    }
+  },
+  "required": [
+    "contract_version",
+    "policy_id",
+    "provenance",
+    "phase_bindings",
+    "promotion_thresholds",
+    "side_policy",
+    "validation_policy"
+  ],
+  "title": "ResearchQualityPolicy",
+  "type": "object"
+}

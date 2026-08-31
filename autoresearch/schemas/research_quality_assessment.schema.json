@@ -1,0 +1,954 @@
+{
+  "$defs": {
+    "EconomicViability": {
+      "additionalProperties": false,
+      "properties": {
+        "after_cost_status": {
+          "enum": [
+            "positive",
+            "zero",
+            "negative",
+            "mixed",
+            "unknown",
+            "not_applicable"
+          ],
+          "title": "After Cost Status",
+          "type": "string"
+        },
+        "gate_results": {
+          "items": {
+            "$ref": "#/$defs/GateResult"
+          },
+          "title": "Gate Results",
+          "type": "array"
+        },
+        "metric_consistency": {
+          "enum": [
+            "consistent",
+            "inconsistent",
+            "not_assessed"
+          ],
+          "title": "Metric Consistency",
+          "type": "string"
+        },
+        "rationale": {
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "viable",
+            "not_viable",
+            "insufficient_evidence",
+            "not_applicable"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "after_cost_status",
+        "metric_consistency",
+        "gate_results",
+        "rationale"
+      ],
+      "title": "EconomicViability",
+      "type": "object"
+    },
+    "EvidenceRef": {
+      "additionalProperties": false,
+      "properties": {
+        "analysis_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Analysis Path"
+        },
+        "candidate_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Candidate Id"
+        },
+        "claim_id": {
+          "minLength": 1,
+          "title": "Claim Id",
+          "type": "string"
+        },
+        "iteration_id": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Iteration Id"
+        },
+        "kind": {
+          "enum": [
+            "canonical_metric",
+            "prior_assessment",
+            "analysis_artifact"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "metric_path": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Metric Path"
+        }
+      },
+      "required": [
+        "kind",
+        "claim_id",
+        "candidate_id",
+        "metric_path",
+        "iteration_id",
+        "analysis_path"
+      ],
+      "title": "EvidenceRef",
+      "type": "object"
+    },
+    "GateResult": {
+      "additionalProperties": false,
+      "properties": {
+        "candidate_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Candidate Ids",
+          "type": "array"
+        },
+        "evidence_refs": {
+          "items": {
+            "$ref": "#/$defs/EvidenceRef"
+          },
+          "minItems": 1,
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "gate_id": {
+          "enum": [
+            "after_cost_positive",
+            "economic_metric_consistency",
+            "neighborhood_supported",
+            "minimum_realised_trade_count",
+            "minimum_profit_factor",
+            "minimum_after_cost_return",
+            "maximum_trade_close_drawdown_magnitude",
+            "minimum_long_trade_count",
+            "minimum_short_trade_count",
+            "maximum_trade_count_reduction_fraction",
+            "side_classification_permitted",
+            "required_validation"
+          ],
+          "title": "Gate Id",
+          "type": "string"
+        },
+        "observed_by_candidate": {
+          "additionalProperties": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "integer"
+              },
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "title": "Observed By Candidate",
+          "type": "object"
+        },
+        "source": {
+          "enum": [
+            "hard_invariant",
+            "configured_threshold"
+          ],
+          "title": "Source",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "pass",
+            "fail"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "threshold": {
+          "anyOf": [
+            {
+              "pattern": "^-?(?:0|[1-9][0-9]*)(?:\\.[0-9]+)?$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Threshold"
+        }
+      },
+      "required": [
+        "gate_id",
+        "source",
+        "candidate_ids",
+        "threshold",
+        "observed_by_candidate",
+        "status",
+        "evidence_refs"
+      ],
+      "title": "GateResult",
+      "type": "object"
+    },
+    "InformationValue": {
+      "additionalProperties": false,
+      "properties": {
+        "evidence_refs": {
+          "items": {
+            "$ref": "#/$defs/EvidenceRef"
+          },
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "outcomes": {
+          "items": {
+            "enum": [
+              "flat_response",
+              "monotonic_response",
+              "threshold",
+              "plateau",
+              "broad_optimum",
+              "isolated_spike",
+              "boundary_running",
+              "u_shape",
+              "inverted_u",
+              "side_asymmetry",
+              "thinning_detected",
+              "temporal_concentration_detected",
+              "regime_concentration_detected",
+              "hypothesis_supported",
+              "hypothesis_rejected"
+            ],
+            "type": "string"
+          },
+          "title": "Outcomes",
+          "type": "array"
+        },
+        "rationale": {
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "informative",
+            "limited",
+            "uninformative"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "outcomes",
+        "rationale",
+        "evidence_refs"
+      ],
+      "title": "InformationValue",
+      "type": "object"
+    },
+    "MetricRoles": {
+      "additionalProperties": false,
+      "properties": {
+        "descriptive": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Descriptive",
+          "type": "array"
+        },
+        "primary": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Primary",
+          "type": "array"
+        },
+        "promotion_gates": {
+          "items": {
+            "enum": [
+              "after_cost_positive",
+              "economic_metric_consistency",
+              "neighborhood_supported",
+              "minimum_realised_trade_count",
+              "minimum_profit_factor",
+              "minimum_after_cost_return",
+              "maximum_trade_close_drawdown_magnitude",
+              "minimum_long_trade_count",
+              "minimum_short_trade_count",
+              "maximum_trade_count_reduction_fraction",
+              "side_classification_permitted",
+              "required_validation"
+            ],
+            "type": "string"
+          },
+          "title": "Promotion Gates",
+          "type": "array"
+        },
+        "secondary": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Secondary",
+          "type": "array"
+        }
+      },
+      "required": [
+        "descriptive",
+        "primary",
+        "secondary",
+        "promotion_gates"
+      ],
+      "title": "MetricRoles",
+      "type": "object"
+    },
+    "Promotion": {
+      "additionalProperties": false,
+      "properties": {
+        "blockers": {
+          "items": {
+            "$ref": "#/$defs/PromotionBlocker"
+          },
+          "title": "Blockers",
+          "type": "array"
+        },
+        "decision": {
+          "enum": [
+            "continue_discovery",
+            "investigate_region",
+            "eligible_for_next_stage",
+            "validation_required",
+            "rejected_structurally",
+            "demoted_after_validation",
+            "no_stable_edge"
+          ],
+          "title": "Decision",
+          "type": "string"
+        },
+        "rationale": {
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "decision",
+        "blockers",
+        "rationale"
+      ],
+      "title": "Promotion",
+      "type": "object"
+    },
+    "PromotionBlocker": {
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "enum": [
+            "missing_evidence",
+            "no_structural_response",
+            "isolated_spike",
+            "boundary_unresolved",
+            "thin_sample",
+            "configured_gate_failed",
+            "after_cost_nonpositive",
+            "economic_inconsistency",
+            "neighborhood_unsupported",
+            "directional_validation_missing",
+            "required_validation_missing",
+            "validation_failed",
+            "temporal_concentration",
+            "regime_concentration",
+            "side_masking",
+            "other"
+          ],
+          "title": "Code",
+          "type": "string"
+        },
+        "evidence_refs": {
+          "items": {
+            "$ref": "#/$defs/EvidenceRef"
+          },
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "gate_id": {
+          "anyOf": [
+            {
+              "enum": [
+                "after_cost_positive",
+                "economic_metric_consistency",
+                "neighborhood_supported",
+                "minimum_realised_trade_count",
+                "minimum_profit_factor",
+                "minimum_after_cost_return",
+                "maximum_trade_close_drawdown_magnitude",
+                "minimum_long_trade_count",
+                "minimum_short_trade_count",
+                "maximum_trade_count_reduction_fraction",
+                "side_classification_permitted",
+                "required_validation"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Gate Id"
+        },
+        "message": {
+          "minLength": 1,
+          "title": "Message",
+          "type": "string"
+        }
+      },
+      "required": [
+        "code",
+        "gate_id",
+        "message",
+        "evidence_refs"
+      ],
+      "title": "PromotionBlocker",
+      "type": "object"
+    },
+    "PromotionSubject": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline_candidate_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Baseline Candidate Id"
+        },
+        "neighborhood_candidate_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Neighborhood Candidate Ids",
+          "type": "array"
+        },
+        "region_id": {
+          "minLength": 1,
+          "title": "Region Id",
+          "type": "string"
+        },
+        "representative_candidate_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Representative Candidate Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "region_id",
+        "baseline_candidate_id",
+        "representative_candidate_ids",
+        "neighborhood_candidate_ids"
+      ],
+      "title": "PromotionSubject",
+      "type": "object"
+    },
+    "Robustness": {
+      "additionalProperties": false,
+      "properties": {
+        "dimensions": {
+          "items": {
+            "$ref": "#/$defs/RobustnessDimension"
+          },
+          "title": "Dimensions",
+          "type": "array"
+        },
+        "rationale": {
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "supported",
+            "failed",
+            "insufficient_evidence",
+            "not_tested",
+            "not_applicable"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "status",
+        "dimensions",
+        "rationale"
+      ],
+      "title": "Robustness",
+      "type": "object"
+    },
+    "RobustnessDimension": {
+      "additionalProperties": false,
+      "properties": {
+        "dimension": {
+          "enum": [
+            "neighborhood",
+            "parameter_perturbation",
+            "sample_size",
+            "thinning",
+            "temporal",
+            "regime",
+            "side",
+            "holdout",
+            "alternate_window",
+            "alternate_ticker"
+          ],
+          "title": "Dimension",
+          "type": "string"
+        },
+        "evidence_refs": {
+          "items": {
+            "$ref": "#/$defs/EvidenceRef"
+          },
+          "title": "Evidence Refs",
+          "type": "array"
+        },
+        "rationale": {
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "supported",
+            "failed",
+            "not_tested",
+            "not_available",
+            "not_applicable"
+          ],
+          "title": "Status",
+          "type": "string"
+        }
+      },
+      "required": [
+        "dimension",
+        "status",
+        "evidence_refs",
+        "rationale"
+      ],
+      "title": "RobustnessDimension",
+      "type": "object"
+    },
+    "SideAssessment": {
+      "additionalProperties": false,
+      "properties": {
+        "claim_scope": {
+          "enum": [
+            "two_sided",
+            "long_only",
+            "short_only",
+            "regime_specific",
+            "unresolved",
+            "not_applicable"
+          ],
+          "title": "Claim Scope",
+          "type": "string"
+        },
+        "classification": {
+          "enum": [
+            "two_sided_consistent",
+            "long_dominant",
+            "short_dominant",
+            "regime_specific_directional",
+            "aggregate_masks_side_failure",
+            "mixed_unresolved",
+            "not_applicable"
+          ],
+          "title": "Classification",
+          "type": "string"
+        },
+        "rationale": {
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "classification",
+        "claim_scope",
+        "rationale"
+      ],
+      "title": "SideAssessment",
+      "type": "object"
+    },
+    "StageAssessment": {
+      "additionalProperties": false,
+      "properties": {
+        "metric_roles": {
+          "$ref": "#/$defs/MetricRoles"
+        },
+        "phase": {
+          "minLength": 1,
+          "title": "Phase",
+          "type": "string"
+        },
+        "stage_kind": {
+          "enum": [
+            "descriptive_baseline",
+            "structural_entry",
+            "structural_interaction",
+            "entry_region_selection",
+            "exit_geometry",
+            "robustness_validation"
+          ],
+          "title": "Stage Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "phase",
+        "stage_kind",
+        "metric_roles"
+      ],
+      "title": "StageAssessment",
+      "type": "object"
+    },
+    "StructuralPromise": {
+      "additionalProperties": false,
+      "properties": {
+        "baseline_comparison": {
+          "enum": [
+            "improved",
+            "mixed",
+            "unchanged",
+            "degraded",
+            "not_applicable"
+          ],
+          "title": "Baseline Comparison",
+          "type": "string"
+        },
+        "competing_explanation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Competing Explanation"
+        },
+        "economic_direction": {
+          "enum": [
+            "improved",
+            "mixed",
+            "unchanged",
+            "degraded",
+            "not_applicable"
+          ],
+          "title": "Economic Direction",
+          "type": "string"
+        },
+        "market_state_interpretation": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Market State Interpretation"
+        },
+        "neighborhood_stability": {
+          "enum": [
+            "supported",
+            "unsupported",
+            "not_tested",
+            "not_applicable"
+          ],
+          "title": "Neighborhood Stability",
+          "type": "string"
+        },
+        "rationale": {
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        },
+        "sample_adequacy": {
+          "enum": [
+            "adequate",
+            "thin",
+            "unknown",
+            "not_applicable"
+          ],
+          "title": "Sample Adequacy",
+          "type": "string"
+        },
+        "status": {
+          "enum": [
+            "promising",
+            "not_promising",
+            "insufficient_evidence",
+            "not_applicable"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "topology": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Topology"
+        }
+      },
+      "required": [
+        "status",
+        "baseline_comparison",
+        "topology",
+        "neighborhood_stability",
+        "sample_adequacy",
+        "economic_direction",
+        "market_state_interpretation",
+        "competing_explanation",
+        "rationale"
+      ],
+      "title": "StructuralPromise",
+      "type": "object"
+    },
+    "TradeoffComparison": {
+      "additionalProperties": false,
+      "properties": {
+        "dimensions": {
+          "items": {
+            "$ref": "#/$defs/TradeoffDimension"
+          },
+          "minItems": 1,
+          "title": "Dimensions",
+          "type": "array"
+        },
+        "left_subject_ref": {
+          "minLength": 1,
+          "title": "Left Subject Ref",
+          "type": "string"
+        },
+        "relation": {
+          "enum": [
+            "left_dominates",
+            "right_dominates",
+            "tradeoff",
+            "equivalent",
+            "incomparable"
+          ],
+          "title": "Relation",
+          "type": "string"
+        },
+        "right_subject_ref": {
+          "minLength": 1,
+          "title": "Right Subject Ref",
+          "type": "string"
+        },
+        "same_market_universe": {
+          "title": "Same Market Universe",
+          "type": "boolean"
+        },
+        "stage_kind": {
+          "enum": [
+            "descriptive_baseline",
+            "structural_entry",
+            "structural_interaction",
+            "entry_region_selection",
+            "exit_geometry",
+            "robustness_validation"
+          ],
+          "title": "Stage Kind",
+          "type": "string"
+        }
+      },
+      "required": [
+        "left_subject_ref",
+        "right_subject_ref",
+        "stage_kind",
+        "same_market_universe",
+        "dimensions",
+        "relation"
+      ],
+      "title": "TradeoffComparison",
+      "type": "object"
+    },
+    "TradeoffDimension": {
+      "additionalProperties": false,
+      "properties": {
+        "assessment": {
+          "enum": [
+            "left_better",
+            "right_better",
+            "equivalent",
+            "uncertain"
+          ],
+          "title": "Assessment",
+          "type": "string"
+        },
+        "dimension": {
+          "enum": [
+            "profitability",
+            "absolute_after_cost_result",
+            "risk",
+            "sample_size",
+            "side_breadth",
+            "neighborhood_stability"
+          ],
+          "title": "Dimension",
+          "type": "string"
+        },
+        "evidence_refs": {
+          "items": {
+            "$ref": "#/$defs/EvidenceRef"
+          },
+          "title": "Evidence Refs",
+          "type": "array"
+        }
+      },
+      "required": [
+        "dimension",
+        "assessment",
+        "evidence_refs"
+      ],
+      "title": "TradeoffDimension",
+      "type": "object"
+    },
+    "TradeoffSummary": {
+      "additionalProperties": false,
+      "properties": {
+        "comparisons": {
+          "items": {
+            "$ref": "#/$defs/TradeoffComparison"
+          },
+          "title": "Comparisons",
+          "type": "array"
+        },
+        "rationale": {
+          "minLength": 1,
+          "title": "Rationale",
+          "type": "string"
+        }
+      },
+      "required": [
+        "comparisons",
+        "rationale"
+      ],
+      "title": "TradeoffSummary",
+      "type": "object"
+    }
+  },
+  "$id": "bbb_research_quality_assessment.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "properties": {
+    "applied_policy_id": {
+      "minLength": 1,
+      "title": "Applied Policy Id",
+      "type": "string"
+    },
+    "contract_version": {
+      "const": "bbb_research_quality_assessment.v1",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "economic_viability": {
+      "$ref": "#/$defs/EconomicViability"
+    },
+    "information_value": {
+      "$ref": "#/$defs/InformationValue"
+    },
+    "promotion": {
+      "$ref": "#/$defs/Promotion"
+    },
+    "promotion_subject": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/PromotionSubject"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "robustness": {
+      "$ref": "#/$defs/Robustness"
+    },
+    "side_assessment": {
+      "$ref": "#/$defs/SideAssessment"
+    },
+    "stage": {
+      "$ref": "#/$defs/StageAssessment"
+    },
+    "structural_promise": {
+      "$ref": "#/$defs/StructuralPromise"
+    },
+    "tradeoff_summary": {
+      "$ref": "#/$defs/TradeoffSummary"
+    }
+  },
+  "required": [
+    "contract_version",
+    "applied_policy_id",
+    "stage",
+    "promotion_subject",
+    "information_value",
+    "structural_promise",
+    "economic_viability",
+    "robustness",
+    "side_assessment",
+    "tradeoff_summary",
+    "promotion"
+  ],
+  "title": "ResearchQualityAssessment",
+  "type": "object"
+}

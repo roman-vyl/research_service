@@ -14,7 +14,7 @@ Research batch path through `scripts/autoresearch_execute_batch.py`; validate li
 semantics before expensive compute. Do not edit tracked source or any file outside
 `{iteration_dir}` except canonical artifacts written by the existing application path.
 
-Write the exact structured result required by `autoresearch/schemas/iteration_result.schema.json`
+Write the exact structured result required by `{result_schema_path}`
 to `{result_path}`. Supplementary analysis may be written only under `{iteration_dir}`. Do not edit
 state or journal. Exit after this one iteration; the supervisor will validate, persist continuity,
 and launch a fresh context if continuation is warranted.

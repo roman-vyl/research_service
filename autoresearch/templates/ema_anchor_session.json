@@ -22,6 +22,44 @@
   "unresolved_questions": [],
   "next_discriminating_question": null,
   "next_experiment": null,
+  "research_quality_policy": {
+    "contract_version": "bbb_research_quality_policy.v1",
+    "policy_id": "ema-anchor-stage-aware-v1",
+    "provenance": {
+      "source": "session",
+      "references": ["openspec/changes/autoresearch-research-quality-policy-v1"],
+      "rationale": "Resolved stage-aware policy for this session; no numeric threshold is implied."
+    },
+    "phase_bindings": [
+      {"phase": "baseline", "stage_kind": "descriptive_baseline"},
+      {"phase": "structural_1d", "stage_kind": "structural_entry"},
+      {"phase": "structural_interaction", "stage_kind": "structural_interaction"},
+      {"phase": "entry_region_selection", "stage_kind": "entry_region_selection"},
+      {"phase": "exit_geometry", "stage_kind": "exit_geometry"},
+      {"phase": "robustness_validation", "stage_kind": "robustness_validation"}
+    ],
+    "promotion_thresholds": {
+      "minimum_realised_trade_count": null,
+      "minimum_profit_factor": null,
+      "minimum_after_cost_return": null,
+      "maximum_trade_close_drawdown_magnitude": null,
+      "minimum_long_trade_count": null,
+      "minimum_short_trade_count": null,
+      "maximum_trade_count_reduction_fraction": null
+    },
+    "side_policy": {
+      "promotable_classifications": [
+        "two_sided_consistent",
+        "long_dominant",
+        "short_dominant",
+        "regime_specific_directional"
+      ]
+    },
+    "validation_policy": {
+      "required_before_entry_region_promotion": false,
+      "required_evidence": []
+    }
+  },
   "budgets": {
     "max_iterations": null,
     "max_wall_clock_seconds": null,
