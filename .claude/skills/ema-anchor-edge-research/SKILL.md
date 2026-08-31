@@ -1,551 +1,251 @@
 ---
 name: ema-anchor-edge-research
-description: "Use when asked to autonomously research whether price interaction with a given EMA-stack's anchor EMA (touch/pullback) has a statistically stable entry edge for the ema_pullback strategy, and to progressively evolve any confirmed edge into a candidate strategy — via Research Service batch experiments, not one-off backtests. Triggered by requests like 'find an edge around anchor EMA', 'research the ema_pullback anchor touch', or 'run a coarse-to-fine parameter search for ema_pullback'. Not for running a single known-good backtest, not for editing strategy/component code, not for anything outside ema_pullback anchor-touch discovery."
+description: "Research whether price interaction with an anchor EMA has a stable trading edge by testing market-state hypotheses, response functions, parameter interactions, and robustness. Use for EMA-anchor touch/pullback discovery; not for one-off backtests, infrastructure documentation, or strategy/component implementation."
 ---
 
-# EMA anchor-touch edge research
+# EMA anchor edge research
 
-## What this is
+## Purpose and boundaries
 
-A methodology, not a script. It walks a future agent session through disciplined,
-staged research into one question:
+Use this methodology to answer:
 
-> Does price interaction with a given anchor EMA — inside a given fast/anchor/slow
-> EMA stack — contain a statistically stable entry edge, once good pullback/touch
-> regimes are separated from noise?
+> Under which market states does price interaction with an anchor EMA have predictive or execution value, and is that value stable enough to matter?
 
-It does not know the answer. It does not assume the answer is yes. It is reusable
-across different EMA-stack configurations (fast/anchor/slow periods, ticker, base
-timeframe) supplied at the start of each research run — none of that is hardcoded
-here.
+The goal is not a winning parameter tuple. It is an interpretable, reproducible region of market states where the interaction behaves differently from the naked-anchor baseline. `NO_STABLE_EDGE` is a valid conclusion.
 
-This document is deliberately implementation-detail-light. It names Research
-Service *concepts and capabilities*, not file paths or line numbers, because the
-code will keep evolving. Before relying on any specific field name, class name, or
-HTTP shape mentioned below, re-derive it from the live source (`grep`/`Read`) or
-the live component catalog — never trust this document over the code.
+This is a research method, not documentation for Research Service, Strategy Engine, HTTP, persistence, or deployment. Inspect current code and live contracts for operations when a research run begins.
 
-## Non-negotiable ground rules
+## Non-negotiable constraints
 
-1. **No look-ahead into prior research.** Do not read old `var/runs/*`,
-   `var/runs/batches/*`, historical CSV/heatmap exports, or any prior research
-   report to learn what parameter values, ranges, or "winners" a past search
-   found. It is fine to open an *old run's raw request/response JSON shape*
-   purely to confirm today's request/response format still matches — but never
-   to extract a numeric value, threshold, or ranking from it. If you are unsure
-   whether you are about to use a file for format vs. for values, stop and ask.
-2. **No hardcoded search values.** No EMA periods, ATR multipliers/periods, width
-   thresholds, lookback bars, SL/TP distances, or reward/risk ratios belong in
-   this document or in any config this skill writes before a search starts. All
-   of that is either supplied by the user at First Run Procedure time, or derived
-   live from component catalog schemas plus reasoned coarse ranges the agent
-   states and justifies before running them.
-3. **No new trading logic.** Use only strategy components that already exist in
-   the live component catalog. If the research question cannot be expressed with
-   existing components, stop the branch, write down exactly what's missing and
-   why, and hand that back as a proposed component/strategy change — do not
-   improvise new component logic inside a research loop.
-4. **Batch, not loops of single backtests.** Every sweep of N candidate
-   configurations over the same ticker/timeframe/window is one Research batch
-   experiment (shared window resolution, one Strategy Engine range-batch call,
-   one shared market frame, N materializations) — never N standalone backtest
-   calls. See "Batch execution" below.
-5. **Ridge, not point.** A single high-scoring candidate is never sufficient
-   evidence. Every promising result must be checked against its parameter
-   neighborhood before being trusted.
+- Conduct independent research. When the task requires a fresh investigation, do not inspect previous winners, rankings, heatmaps, or reports. Prior artifacts may clarify a current data shape, never seed values or hypotheses.
+- Do not hardcode EMA periods, thresholds, lookbacks, ATR distances, grid sizes, or historical winners. Derive search spaces from the supplied strategy specification, live component catalog, parameter meaning, and the current experiment.
+- Use only components present in the current live catalog. If a hypothesis cannot be expressed, report the missing capability; do not invent trading logic or modify production code.
+- State a market hypothesis before creating candidates. No random exploration or retrospective stories about winners.
+- Compare regions, not isolated maxima. Preserve negative results and rejected regions.
+- Keep entry discovery causally separate from exit optimization.
 
-## Research capabilities this skill relies on
+## Parameters are proxies for market state
 
-Confirm each of these still exists and still means what's described here before
-starting — don't assume; read the current code.
+Do not ask, “What is the magic value?” Ask:
 
-- **Canonical strategy-instance identity** (`research_service.domain.strategy_instance`):
-  a strategy instance is the tuple `{strategy_id, ticker, base_timeframe, raw_spec}`.
-  `instance_id` is *derived*, never chosen — build every candidate as this
-  identity subset (plus `enabled` where a full deployable document is needed),
-  never invent an `instance_id`.
-- **Component catalog** — Research Service's `GetComponentCatalog` application
-  service (proxying Strategy Engine's composer catalog for a `strategy_id`). This
-  is the *only* authoritative source for: which setup/blocker/trigger/exit/context
-  components exist, their `component_id`s, their parameter names, types, and
-  allowed ranges. Read it fresh at the start of every research session (and again
-  whenever you're about to touch a component family you haven't used yet this
-  session) — do not remember catalog shapes across sessions or code versions.
-- **Config validation** (`ValidateStrategyConfig` / the Strategy Engine authoring
-  validation it delegates to) — use it to catch a malformed candidate `raw_spec`
-  before wasting a batch slot on it, not as a substitute for reading the catalog.
-- **Batch experiments** (`RunBatchExperiment` + `PersistBatchExperiment`, backed
-  by `application/experiments/*`): one experiment = one `strategy_id` + one
-  `ticker` + one `base_timeframe` + one comparison window (`range_policy` +
-  optional explicit `range`), shared by every candidate; each candidate
-  contributes only what legitimately varies (`raw_spec`, execution/accounting
-  policy, `managed_policy_enabled`, free-form `metadata`). Internally this
-  resolves the window once, makes exactly one Strategy Engine `/range-batch`
-  (evaluate-many-variants) call, reads exactly one shared Market Data Service
-  historical frame, then materializes and persists each candidate independently
-  with per-candidate failure isolation. This is "shared-L0": the expensive,
-  identity-defining work (window resolution, Engine evaluation, market read)
-  happens once per experiment, not once per candidate.
-- **No HTTP route currently exposes batch experiments.** As of this writing the
-  only way to actually invoke `RunBatchExperiment`/`PersistBatchExperiment` is to
-  drive them directly from a short Python driver against the installed
-  `research_service` package — build a `Container` the same way
-  `runtime/wiring.py`/`api/app.py` already do (real `HttpStrategyEngineClient`,
-  real `HttpMarketDataClient`, real `FilesystemArtifactStore` pointed at the
-  running stack's actual `/data` or `var/` root), construct a
-  `BatchExperimentRequest`, call `.execute()`. This is orchestration of an
-  existing capability, not new trading logic — it belongs in a throwaway script
-  under your experiment workspace (see First Run Procedure), not inside
-  `src/research_service`. If a proper HTTP/CLI entrypoint for batch experiments
-  has since been added, prefer that instead and update your notes accordingly.
-- **Range/window policy**: `range_policy="full_available"` resolves against
-  Market Data Service's real committed stream bounds and continuity audit for
-  the ticker/timeframe, producing one `market_data_hash` every candidate in the
-  experiment shares. `range_policy="explicit_range"` takes a caller-supplied
-  `from_ms`/`to_ms`. Use `full_available` for the main discovery search (see
-  "Full history by default" below); explicit narrower ranges are for the later
-  validation stage only.
-- **Persisted artifacts**: every completed single-instance backtest (including
-  each batch candidate) is written as an immutable, atomically-published run
-  bundle (request/result/manifest/trades/metrics, content-hashed) under the
-  artifact store's runs root; every batch experiment additionally gets its own
-  persisted batch summary under the artifact store's batches root. Read these
-  back through the same application services that already parse them
-  (`ReadResearchRuns` / the batch artifact reader) rather than hand-parsing JSON
-  where you don't have to.
-- **Trade-level accounting, not pre-computed ratios.** Research's accounting
-  result gives you `net_pnl`, `gross_pnl`, `fees_paid`, `realised_trade_count`,
-  and a full list of individual `TradeRecord`s (side, entry/exit price and time,
-  gross/net pnl per trade, fees, equity before/after, hold time, exit
-  attribution, MFE/MAE path metrics). It does **not** hand you a pre-computed
-  profit factor, win rate, drawdown, or long/short split — you derive those
-  yourself from the trade list (see "Decision metrics" below). Confirm this is
-  still true before assuming otherwise.
+> What market property does this parameter express, and does changing that property alter the conditional outcome of an anchor interaction?
 
-## Phase sequence (do not skip or reorder without a documented reason)
+Interpret only parameters confirmed in the live catalog. Examples, when such dimensions exist:
 
-```
-Phase A  naked anchor symmetric baseline            (one FIXED symmetric SL/TP, not swept)
-Phase B  structural entry discovery                 (SL/TP stays FIXED from Phase A)
-Phase C  entry candidate selection                   (gate: must pass before D)
-Phase D  SL/TP optimization                          (symmetric first, then asymmetric)
-Phase E  secondary filters (RSI / ADX-DMI / HTF context / other blockers)
-Phase F  managed-exit research                      (only after a frozen static candidate exists)
-Phase G  validation
-Phase H  final research report
-```
+- **Untouched/freshness lookback** proxies how long price stayed away from the anchor, whether the return is first or rare, and whether fresh interaction differs from a repeatedly tested level.
+- **Anchor-stack width** proxies trend organisation, EMA separation, compression versus expansion, structural maturity, and possible overextension at extreme separation.
+- **Bounce count and bounce lookback** proxy the number, frequency, and temporal concentration of prior interactions. Repetition may confirm significance or exhaust the level.
 
-Every phase transition is a decision, not a formality. State the decision and its
-justification in the journal (see below) before moving on. It is entirely valid
-for a phase to end in a stop condition instead of an advance.
+These interpretations generate hypotheses; they are not canonical rules. Verify actual component semantics before using them.
 
-**Causality this sequence enforces, and why it must not be reordered:**
+## Hypothesis-first protocol
 
-```
-naked anchor
-  ↓
-ONE fixed neutral symmetric exit          (Phase A)
-  ↓
-find WHICH anchor-touch is a quality entry
-  freshness / repeat-touch lookback, stack width, optional bounce count
-  (Phase B — SL/TP still fixed)
-  ↓
-select stable, profitable, lower-DD entry candidates   (Phase C)
-  ↓
-ONLY THEN optimize execution geometry: SL/TP            (Phase D)
-  ↓
-secondary filters / managed exits, later                (Phase E/F)
-```
+Before every sweep, record:
 
-**DO NOT optimize SL/TP before structural entry discovery is complete. During
-structural discovery (Phase B), SL/TP MUST remain fixed at the Phase A value.**
-Sweeping SL/TP before the entry itself is understood optimizes the exit of a mix
-of good and bad entries indiscriminately — it can make a weak entry *look* good
-by pure payout skew, which is exactly the failure mode this ordering exists to
-prevent.
+1. **Market phenomenon** — what behavior is expected?
+2. **Proxy** — which live component and parameter express it?
+3. **Confirmation** — what response shape or conditional result supports it?
+4. **Refutation** — what observation weakens or rejects it?
+5. **Confounder** — what alternative explanation could produce the result?
 
-### Phase A — naked anchor symmetric baseline
+Reasoning examples, not strategy rules: “A fresh touch may be more valuable than a repeated touch when the EMA structure is organised”; “Bounce history may matter only at particular degrees of EMA separation.” Only then define an experiment that can discriminate between explanations.
 
-Build the simplest possible `ema_pullback` instance around the supplied
-fast/anchor/slow EMA stack and the existing canonical anchor-touch trigger
-component (find its exact `component_id` in the live catalog — likely something
-like an anchor-touch/reclaim trigger family; do not guess the name, read it).
-No setups, no blockers, no context filters, no managed exits.
+## Causal sequence
 
-Use **one fixed symmetric static exit** — the existing ATR-based stop-loss and
-take-profit components, with **equal** SL and TP distance (same ATR period,
-same multiplier, same everything except which side of price they sit on). Pick
-this single distance from the ATR component's schema (min/max/allowed
-granularity), the base timeframe, and reasoned judgment about typical
-bar-to-bar/swing-scale volatility for this instrument — state and justify the
-choice in the journal. This is a fixed reference exit for the rest of Phase A
-and all of Phase B, not something to sweep here; sweeping SL/TP is Phase D's
-job, done later, on selected structural entry candidates only.
+1. Naked anchor baseline.
+2. Independent structural entry discovery.
+3. Structural interaction discovery.
+4. Selection of a stable entry region.
+5. Static exit geometry research.
+6. Additional independently motivated filters.
+7. Managed exits, if justified.
+8. Robustness validation and report.
 
-Purpose of this phase: confirm the setup is not dead, and establish the
-baseline everything in Phase B is measured against. Measure, from the trade
-list:
-- trade count (and whether it's non-trivial at all — a handful of trades over a
-  multi-year window is not evidence of anything);
-- gross result vs. net (after-fee) result — these are different conclusions;
-- fees as a fraction of gross;
-- win rate, profit factor;
-- long vs. short trade count and PnL, separately;
-- a simple drawdown measure from the reconstructed equity curve;
-- turnover (trades per unit time, or notional traded relative to equity).
+Do not optimize SL/TP to rescue an entry condition without structural value. During entry discovery, one fixed neutral static exit is a measurement instrument for comparable entries, not an optimization target.
 
-Explicitly distinguish and record which of these you found:
-- **no interaction edge** — close to zero net signal regardless of fees;
-- **edge before fees, destroyed by turnover/fees** — gross positive, net
-  negative or negligible;
-- **full after-fee edge** — net positive with a trade count you consider
-  meaningful.
+## Phase A — naked-anchor baseline
 
-Do not add anything beyond the naked trigger plus its one fixed symmetric exit
-in this phase, even if it's tempting. Freeze this exact configuration (raw
-trigger + fixed symmetric SL/TP) as the Phase B parent baseline before moving
-on.
+Build the simplest valid anchor-interaction strategy from the supplied spec and live catalog. Add no structural filters. Use one fixed, reasoned symmetric static exit and keep it unchanged throughout structural discovery.
 
-### Phase B — structural entry discovery
+Establish aggregate, long, and short baseline behavior using at least:
 
-Purpose: find out *which* anchor touches are quality entries — not yet how to
-exit them. **Keep the Phase A symmetric SL/TP completely fixed** through this
-entire phase; every candidate here varies only the entry-side structural
-filter(s), never the exit.
+- net result or return, plus gross result and fees when available;
+- profit factor and win rate;
+- maximum drawdown or a comparable risk measure;
+- realised trade count.
 
-Investigate one axis at a time — do not combine these into one giant grid
-before understanding each independently:
+Record whether the naked interaction is positive after costs, positive only before costs, indistinguishable from noise, or too thin to judge. It is the control every structural condition must explain.
 
-1. **`untouched_anchor_setup`** (or the catalog's current equivalent — verify):
-   does the time since the anchor was last touched (freshness of the anchor
-   level, repeat-touch lookback) predict touch quality? Sweep its lookback/
-   freshness parameter(s) as their own axis, coarse → refine → ridge.
-2. **`anchor_stack_width_setup`** (or the catalog's current equivalent name —
-   verify): investigate, in this order:
-   - current stack width (fast-to-slow or anchor-to-slow separation, per the
-     component's actual parameters) alone;
-   - recent/historical stack width alone;
-   - freshness/lookback of a recent width expansion alone;
-   - only once each shows something, local combinations around the promising
-     regions found for each.
-   Research question: does a wider/more-expanded EMA stack at touch time predict
-   a better subsequent touch?
-3. **`ema_bounce_counter_setup`** (if its current schema/semantics fit this
-   question — confirm from the catalog before using it) — an optional
-   additional axis, investigated only after the two primary axes above are
-   each independently understood: does the count/frequency of recent prior
-   anchor interactions predict the next touch's quality?
+## Phase B — discover the structural response
 
-For each component/axis: run its own coarse→refine→ridge batch experiment(s)
-against the exact Phase A frozen baseline (fixed symmetric exit unchanged), and
-explicitly answer "does this structural condition improve on the naked
-baseline — profitability, and especially drawdown — on its own?" before moving
-to the next axis or to combinations. Objective throughout: a profitable,
-materially lower-drawdown, sufficiently populated, *stable* entry region — not
-the single highest-PF point. Analyze total/long/short for every axis and every
-promising region.
+Phase B asks which market states make an anchor interaction useful. The Phase A exit stays fixed for every candidate.
 
-### Phase C — entry candidate selection (gate)
+### B1. Independent one-dimensional discovery
 
-Before Phase D is permitted, select several robust structural entry candidates
-from Phase B's findings (a single component/axis result, or a considered
-combination of the axes that each showed real independent value). Do not
-optimize SL/TP here — this phase is about which entries to carry forward, still
-under the Phase A fixed symmetric exit.
+Test each meaningful structural dimension independently against the naked baseline. Write the response as `Q(x)`, where `Q` is a multi-metric assessment, not necessarily one scalar.
 
-Each selected candidate must show, under the still-fixed Phase A symmetric
-exit:
+For each dimension:
 
-- positive after-fee net PnL;
-- PF > 1 driven by the distribution of trades, not by one outsized trade;
-- a materially lower drawdown than the Phase A naked baseline (state what
-  "materially lower" means for this run, and why);
-- a trade count you consider statistically non-trivial for the window used;
-- a contiguous region of good neighboring parameters, not an isolated point —
-  reject isolated parameter spikes even if their raw score looked best;
-- a clear understanding of whether the candidate's edge is `BOTH_SIDES_EDGE`,
-  `LONG_ONLY_EDGE`, `SHORT_ONLY_EDGE`, or effectively `NO_STABLE_EDGE` (see
-  "Long/short independence" below).
+1. justify a coarse, trading-plausible range from live schema and meaning;
+2. run a comparable batch across the range;
+3. inspect net result/return, PF, drawdown, trade count, win rate, and long/short;
+4. refine only where shape and sample size justify more resolution.
 
-If nothing in Phase B clears this bar: either go back into Phase B with a
-different structural axis or combination, or conclude the branch with
-`NO_EDGE_FOUND` (or `STOP_OVERFIT_RISK` if the only positive results were
-isolated spikes — see Stop conditions).
+Do not select a final value. Determine whether a dependency exists, its direction and shape, promising and rejected intervals, and whether the dimension deserves more research.
 
-### Phase D — SL/TP optimization
+### B2. Classify each 1D response
 
-Only on the structural entry candidates selected in Phase C — never on the
-naked baseline, and never before Phase C's selection. Two sub-steps, in order:
+Classify meaningful `Q(x)` as one or more of:
 
-1. **Symmetric distance exploration first.** For each selected structural
-   candidate, sweep symmetric SL==TP distance (coarse → refine → ridge, same
-   discipline as every other phase) around the Phase A fixed value, to see
-   whether a different symmetric distance materially changes the picture for
-   this specific entry. This re-confirms (or revises) the symmetric edge now
-   that the entry itself is understood, before touching payout skew.
-2. **Asymmetric SL/TP payoff optimization.** Only after step 1. Vary SL
-   distance and TP distance independently (reward/risk ratio becomes a derived
-   quantity, not an input you pick first). Coarse sweep first, batch
-   experiment, then refine around promising regions. Always keep the step-1
-   symmetric finalist as a labeled control candidate in these comparisons, so
-   you can tell whether asymmetric payout added real value or just increased
-   variance around the same underlying edge.
+- flat/absent effect; monotonic improvement or deterioration;
+- threshold; plateau/broad optimum; narrow optimum;
+- U-shape or inverted U-shape; multiple regimes;
+- unstable/noisy spikes; boundary optimum.
 
-Evaluate trade count, PF, net PnL, drawdown, fees, and long/short split for
-every candidate under consideration in both steps, not just PnL. Seek a broad
-stable region, not a single optimum.
+A boundary optimum means the function is not localized on the tested domain. It does not automatically mean “extend the boundary.” Decide whether to expand the range, test an interaction, reinterpret the proxy, or stop because further values lose trading meaning. Do not automate boundary chasing.
 
-### Phase E — secondary filters
+### B3. Use 1D optima as landmarks
 
-Only after a frozen static (symmetric-or-asymmetric, whichever Phase D's
-evidence supports) candidate exists. Existing components only — RSI-based
-blockers, ADX/DMI-based conditions, HTF contexts, other entry blockers or
-signal-exit components already in the catalog. Add **one at a time** as an
-incremental change against the exact frozen parent baseline; do not run a
-combinatorial sweep of several new filters simultaneously before understanding
-each one's own marginal contribution.
+An independently promising interval is a search landmark, not a final setting. If `x` is promising in `X*` and `y` in `Y*`, next investigate `Q(x, y)` around `X* × Y*`; do not freeze the best x and y. Preserve plateaus and distinct regimes as regions.
 
-### Phase F — managed-exit research (late, separate)
+### B4. Select interaction dimensions by meaning
 
-Break-even shifts, protected phase, runner behavior, active stop/take
-switching, and other managed-exit machinery must never be used to *establish*
-entry edge — they belong strictly after a frozen static entry/exit candidate
-exists. Maintain this boundary explicitly:
+Do not form a Cartesian product of available parameters. Add a dimension only if it measures a new market property and the hypothesis explains why it may condition the response.
 
-```
-ENTRY EDGE FOUND  →  STATIC EXIT CANDIDATE FROZEN  →  MANAGED EXIT RESEARCH
+If two parameters appear to proxy the same state, test redundancy, correlation, or conditional value before optimizing both. Prioritize interpretable structural interactions; complexity must be earned by evidence.
+
+### B5. Mandatory local two-dimensional search
+
+After 1D discovery, test at least one hypothesis-supported interaction between the most meaningful dimensions. Build the 2D domain around promising regions, not single high points. Cover meaningful plateaus; investigate distinct regimes in separate local domains when appropriate.
+
+Keep the data window, execution assumptions, fixed exit, and metric definitions comparable so surface changes reflect entry structure.
+
+### B6. Draw the response “blanket”
+
+For every meaningful `Q(x, y)`, produce:
+
+1. a 3D response surface — “draw the quality-function blanket”;
+2. preferably a 2D heatmap of the same surface.
+
+Use X and Y for structural parameters and Z for a hypothesis-relevant metric. When conclusions depend on trade-offs, inspect a small set of parallel surfaces such as PF, net return, drawdown, or trade count. Every plot must inform a decision.
+
+### B7. Interpret surface topology
+
+Topology matters more than the highest cell. Look for:
+
+- broad plateaus, ridges, valleys, and diagonal ridges;
+- isolated spikes, cliffs, and noisy checkerboards;
+- smooth transitions, multiple regimes, and boundary-running optima.
+
+Give geometry a trading interpretation. A diagonal ridge such as greater stack organisation paired with a weaker freshness requirement may suggest a conditional relationship between those properties. Report it as a hypothesis supported by response geometry, not proven causality.
+
+### B8. Ridge, not point
+
+A promising 2D region must tolerate perturbation along X, Y, and preferably both simultaneously. A high cell surrounded by poor cells is suspect. Prefer an interior representative of a broad elevated region over an absolute maximum at its edge.
+
+Economic outcome, risk, sample size, and side behavior must remain qualitatively acceptable in the neighborhood. Stability in one metric alone is insufficient.
+
+### B9. Optional third dimension
+
+Add a third parameter only if it has its own 1D signal, distinct trading meaning, and a plausible interaction with the discovered 2D structure.
+
+Do not reduce it to gigantic grid ranking. Prefer slices such as `Q(x, y | z = z₁)`, `Q(x, y | z = z₂)`, and `Q(x, y | z = z₃)`. Ask whether the ridge appears, disappears, moves, widens, narrows, or changes by side. The third dimension should explain an existing structure, not create more chances for a winner.
+
+## Phase C — select a stable entry region
+
+Carry forward regions, not leaderboard rows. A credible region needs:
+
+- economically relevant after-cost outcome and controlled risk versus baseline;
+- meaningful trade count rather than statistical thinning;
+- neighborhood stability across important dimensions;
+- explicit aggregate/long/short interpretation;
+- plausible market-state meaning and a competing explanation.
+
+If only isolated peaks survive, stop for overfit risk. If no structural region credibly improves the baseline, report `NO_STABLE_EDGE` rather than tuning exits.
+
+## Later phases
+
+Only after Phase C research static exits: first symmetric distance locally, then asymmetric SL/TP only if justified. Keep a stable structural candidate and symmetric control; judge response regions rather than payout-skew winners.
+
+Add secondary filters one at a time, each with a prior hypothesis about a new market property. Do not add filters after viewing winners merely because they improve in-sample PnL. Managed exits come only after a robust static candidate and must not establish or disguise entry edge.
+
+## Multi-metric and side-aware reasoning
+
+Never reduce quality to PF, PnL, or win rate alone, and do not invent a weighted score without need. For every promising region reason across:
+
+- economic outcome and costs;
+- drawdown and other relevant risk;
+- trade count and concentration;
+- aggregate, long-only, and short-only behavior;
+- stability under neighboring parameters.
+
+PF rising while trade count collapses may be statistical thinning; return rising with sharply worse drawdown may be a worse trade-off. A good aggregate result entirely on one side may be directional regime, not a general anchor edge.
+
+Compare `Q(x)` shape and `Q(x, y)` topology separately for long and short. Asymmetry is not automatically bad, but label it honestly; do not call a one-sided finding universal.
+
+## Mandatory reasoning checkpoint
+
+After every meaningful experiment answer:
+
+1. What changed?
+2. What market property did the proxy attempt to measure?
+3. Why is the observed shape economically plausible?
+4. What alternative explanation remains?
+5. Which next experiment best discriminates between explanations?
+
+The next experiment must follow from these answers. Selection says what worked; causal explanation remains a hypothesis until discriminating evidence supports it.
+
+## Overfitting defenses
+
+Reject or discount isolated best points, excessive grids, repeated boundary chasing, parameter explosion, retrospective hypotheses, tiny samples, aggregate results masking side failure, and filters chosen after inspecting winners.
+
+Prefer broad stable regions, smooth reproducible topology, meaningful samples, interpretable interactions, and negative results that remain negative under reasonable perturbation.
+
+## Validate the discovered region
+
+Depending on available data, test adjacent parameter perturbations, temporal holdout, regime splits, long/short, another suitable ticker, and other reasonable windows not reused for discovery.
+
+Ask whether the *shape* persists. A ridge may move across periods while preserving its structural relationship; that is stronger evidence than exact repetition of one best tuple. Report topology changes and failures as well as successes.
+
+## Research journal
+
+Store knowledge, not request/response logs. After each experiment record:
+
+```text
+HYPOTHESIS
+WHAT_MARKET_PROPERTY_IS_BEING_PROXIED
+DIMENSIONS_TESTED
+RANGES_TESTED
+OBSERVED_RESPONSE_SHAPE
+PROMISING_REGION
+REJECTED_REGION
+LONG_SHORT_DIFFERENCE
+ALTERNATIVE_EXPLANATION
+NEXT_DISCRIMINATING_EXPERIMENT
+CURRENT_STRUCTURAL_HYPOTHESIS
 ```
 
-Do not let a managed exit's complexity mask a weak entry earlier in the chain.
+Keep exact specs, data windows, code revision, technical identifiers, and result locations as reproducibility metadata, not the journal's substance. Never delete negative experiments.
 
-### Phase G — validation
+## Final report
 
-Before calling anything final: check the finalist against parameter
-perturbations one step away in every varied dimension; check performance on
-distinct time subperiods within the same discovery-universe history (not a
-different universe — see "Full history by default"); reconfirm long/short
-attribution; if there's a second liquid, catalog-supported ticker available and
-it's reasonable to check, do so; sanity-check sensitivity to the fee/slippage
-assumptions used throughout. A single full-history winner is not, by itself,
-sufficient evidence of robustness.
+Answer:
 
-### Phase H — final research report
+1. Was a stable EMA-anchor edge found, and which market state is associated with it?
+2. Which dimensions mattered, and what were their 1D response shapes?
+3. Which interactions appeared in the 2D surface?
+4. Was there a broad ridge/plateau or only an isolated peak?
+5. How did aggregate, long, and short differ?
+6. Did response topology survive validation?
+7. Which regions and hypotheses were rejected?
+8. What remains unknown, and which next experiment has highest information value?
 
-Summarize the whole chain: hypothesis, what was tested at each phase, what was
-rejected and why, the final candidate (or the `NO_EDGE_FOUND` conclusion),
-long/short attribution, stability evidence, validation results, and explicit
-next steps if any. This is the terminal artifact of a research session — see
-"Experiment journal" for the running version kept throughout, and produce a
-clean final version here.
+A parameter tuple may appear as a representative configuration inside a stable region, never as the main scientific conclusion.
 
-## Long/short independence
+## Minimal operational discipline
 
-At every phase that matters (Phase A baseline, Phase B/C structural findings,
-Phase D verdict, Phase E), report aggregate, long-only, and short-only results as three separate rows,
-not one blended number. A positive aggregate result driven entirely by one
-long-only bull-regime stretch of history is not evidence of a general edge.
-Label each meaningful result with one of: `BOTH_SIDES_EDGE`, `LONG_ONLY_EDGE`,
-`SHORT_ONLY_EDGE`, `NO_STABLE_EDGE`. You are not required to force long and short
-into equal profitability — you are required to know, and state, which side is
-actually generating the result.
-
-## Coarse → refine → ridge loop (applies to every swept axis, every phase)
-
-```
-1. Read the current component/parameter schema live.
-2. State a coarse range + step, and justify it from schema/timeframe/observed
-   behavior — never from memory of a prior search's winner.
-3. Run ONE batch experiment covering the coarse range (batch, not a loop of
-   single backtests — see below).
-4. Score every candidate on the full metric set (see "Decision metrics"), not
-   PnL alone.
-5. Identify contiguous promising region(s), not the single best point.
-6. If a region exists: run a second, narrower batch experiment refining inside
-   it, plus its immediate neighbors, to check stability.
-7. If the "best" result is an isolated spike with much worse neighbors on every
-   side: flag STOP_OVERFIT_RISK for that region and do not adopt it, even though
-   its raw score looked best.
-8. Freeze the winning region's representative candidate as the new baseline for
-   the next axis, and record the decision in the journal before moving on.
-```
-
-Batches can be large — hundreds or low thousands of candidates for one
-experimental axis is fine if the axis's dimensionality justifies it — but stay
-disciplined about **one axis's Cartesian space at a time**, not the full
-cross-product of every axis discussed in this document at once. That combinatorial
-explosion is exactly what this staged sequence exists to avoid.
-
-## Batch execution — mandatory shape
-
-For any sweep of N ≥ 2 candidate configurations over the same comparison window:
-build **one** `BatchExperimentRequest` (one `strategy_id`, one `ticker`, one
-`base_timeframe`, one `range_policy`/`range`, one candidate list) and call
-`RunBatchExperiment.execute()` once. This gets you the shared-L0 property for
-free: one window resolution, one Strategy Engine `/range-batch` call, one shared
-Market Data Service historical read, one shared `market_data_hash` every
-candidate in the batch is validated against, N independent
-materialize+persist steps with per-candidate failure isolation.
-
-Never write `for candidate in candidates: run_single_instance_backtest(...)` for
-a sweep — that silently reintroduces N separate window resolutions, N separate
-Engine calls, and N separate market reads, defeats the whole point of the batch
-path, and risks candidates in the "same" sweep actually being compared against
-subtly different market data if anything changes between calls.
-
-## Full history by default
-
-Use `range_policy="full_available"` for the main discovery search in every
-phase through Phase F. Every candidate inside one experiment is already forced
-to share one window by `BatchExperimentRequest`'s own invariants — this rule is
-about *experiment-to-experiment* consistency: don't compare a Phase B result
-computed over one window against a Phase D result computed over a different
-one. Subperiod / walk-forward / out-of-sample slicing is Phase G validation
-work, done deliberately and labeled as such, after discovery is complete —
-never mixed into the discovery loop itself.
-
-## Search-space generation
-
-Ranges come from, in this order: (1) the live component schema's declared
-min/max/units, (2) the base timeframe and what it implies about bar-to-bar and
-swing-scale behavior, (3) what you actually observed in the previous phase's
-trade data, (4) plain reasoning about what a "coarse but sane" starting grid
-looks like for that parameter's semantics. State this reasoning before running
-anything. It is never acceptable to choose a range because "the old research
-winner was around X" — you do not have access to that information for this
-purpose, and even if you did, using it would defeat the point of this exercise.
-
-## Fees are mandatory, always
-
-Never conclude anything from gross PnL alone. Every phase's evaluation must
-separately report gross behavior (where meaningful), total fees, and net PnL.
-This matters most in high-turnover symmetric-exit experiments, where fees can
-plausibly consume an entire gross edge. `SIGNAL_EXISTS_BUT_FEES_DESTROY_EDGE` is
-a real, useful, reportable conclusion — not a failure to find something better.
-
-## Decision metrics
-
-Minimum set for every candidate you seriously evaluate, computed from the raw
-trade list (see "Research capabilities" above — Research does not hand you
-pre-computed ratios):
-
-- net PnL, gross PnL, total fees;
-- profit factor (gross profit / gross loss, or the net equivalent — pick one
-  convention and use it consistently within a research session, document
-  which);
-- realised trade count;
-- win rate;
-- a drawdown measure from the reconstructed equity curve;
-- long-only and short-only versions of the above;
-- local parameter-neighborhood stability (does a one-step perturbation in any
-  varied dimension preserve the qualitative result?).
-
-Use a broader **discovery score** (weighting toward "does this region look
-promising at all") to decide what to refine into next — but the final
-**acceptance decision** for a candidate must weigh robustness, trade count, and
-neighboring-candidate agreement, not the discovery score or raw PnL alone.
-Additional trade-quality diagnostics already available on each `TradeRecord`
-(MFE/MAE path metrics, hold time, exit attribution) are useful supporting
-evidence when they help explain *why* a result looks the way it does.
-
-## Experiment journal
-
-Maintain both a machine-readable and a human-readable trail. Do not rely on
-individual persisted run/batch artifacts alone to reconstruct what happened —
-they record *what ran*, not *why*, *what was learned*, or *what's next*.
-
-For every research iteration, record at minimum:
-- hypothesis being tested;
-- frozen parent configuration (the exact `raw_spec` this iteration varies from);
-- exactly which parameter(s) were varied and their ranges;
-- candidate count and the experiment/batch id used;
-- the shared window/`market_data_hash` for that experiment;
-- key metrics per candidate or per region;
-- the promising region(s) identified;
-- the region(s) explicitly rejected, and why;
-- the next planned step and its reason.
-
-After each phase, refresh a concise current-state summary (own document or
-top-of-journal block — your choice, but keep exactly one canonical copy):
-
-```
-CURRENT_HYPOTHESIS
-CURRENT_FROZEN_BASELINE
-WHAT_WAS_TESTED
-WHAT_WAS_LEARNED
-WHAT_WAS_REJECTED
-NEXT_EXPERIMENT
-```
-
-This must be enough for a brand-new agent session, with no memory of this one,
-to pick up the research exactly where it left off — not restart from Phase A.
-
-**Never delete a negative or failed experiment's record.** A rejected region is
-part of the evidence base; losing it risks re-running (and re-rejecting) the
-same dead end in a future session. Keep the record of what was tried and why it
-didn't hold up, even when — especially when — the result was negative.
-
-## Stop conditions
-
-Use these labels (or, if repository/journal conventions have since introduced
-different names, use those instead — but preserve the underlying meaning):
-
-- **`NO_EDGE_FOUND`** — several consecutive Phase B structural searches fail to
-  produce a candidate that clears Phase C's gate, or Phase E filters fail to
-  rescue a marginal candidate.
-- **`STOP_OVERFIT_RISK`** — a positive result exists only at one narrow point
-  and collapses at its immediate parameter neighbors.
-- **`SYMMETRIC_EDGE_CONFIRMED`** — Phase C's gate criteria are met: at least
-  one structural entry candidate, under the fixed Phase A symmetric exit, is
-  profitable, materially lower-drawdown, and stable.
-- **`STATIC_STRATEGY_CANDIDATE_FOUND`** — after Phase D (and, if used, Phase
-  E), a robust, validated static candidate exists.
-- **`READY_FOR_MANAGED_EXIT_RESEARCH`** — the static candidate is stable enough
-  that Phase F is a reasonable next investment.
-
-Any of these is a legitimate, complete terminal (or phase-terminal) outcome.
-`NO_EDGE_FOUND` is not a failure of the research process — it's the process
-working correctly on a hypothesis that didn't hold up.
-
-## Do not touch the trading core
-
-Use only strategy components that already exist in the live catalog. If a
-research question genuinely cannot be expressed with what exists:
-
-1. stop the current search branch;
-2. write the precise missing capability/hypothesis down;
-3. explain concretely why existing components can't express it;
-4. hand this back as a proposed strategy/component-catalog change request — do
-   not write new component/trading logic inside this research loop.
-
-## First Run Procedure
-
-Before Phase A of any new research run:
-
-1. Record the current repository branch and commit SHA.
-2. Confirm Research Service, Strategy Engine, and Market Data Service are all
-   reachable and healthy (whatever the current health/readiness mechanism is —
-   check it live, don't assume the shape from memory).
-3. Read the live component catalog for the target `strategy_id` (`ema_pullback`
-   unless told otherwise).
-4. Take from the user (do not invent): `ticker`, `base_timeframe`, `fast EMA
-   period`, `anchor EMA period`, `slow EMA period`. If any is missing, ask —
-   don't guess or default to a value you happen to recall.
-5. Confirm the target ticker/timeframe is actually enabled/covered by the
-   running Market Data Service configuration before relying on
-   `full_available` — a stream that isn't configured will simply fail, and
-   that failure means "check the config," not "no edge."
-6. Create an isolated, clearly-named experiment workspace/namespace for this
-   research run (distinct experiment-id prefix, distinct journal file/dir) so
-   it never collides with or silently reuses another run's candidates,
-   artifacts, or journal.
-7. Write down the initial hypothesis and the frozen Phase-A baseline
-   configuration in the journal.
-8. Only then begin Phase A.
-
-## What this skill deliberately does not run
-
-This document is methodology only. Following it does not itself execute any
-backtest, create any batch, or read any historical result. A session invoking
-this skill should treat "run the First Run Procedure and begin Phase A" as an
-explicit next action to confirm with the user before spending compute, not an
-implicit instruction to start immediately.
+- Before running, inspect the live component catalog, current strategy spec, production contracts, and available research capabilities. Current code is authoritative.
+- Prefer current batch comparison for candidates sharing a window; do not launch many independent heavy backtests when batch capability exists.
+- Keep candidates comparable and preserve enough metadata and results for reproducibility.
+- Confirm component semantics and validate specs before spending a batch. Never use an old winner as an unspoken prior.
+- Do not begin compute-intensive research without an explicit research request. Invoking this skill alone does not authorize a parameter sweep.
