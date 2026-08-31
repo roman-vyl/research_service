@@ -7,7 +7,7 @@
   "required": [
     "contract_version", "session_id", "iteration_id", "status", "phase", "hypothesis",
     "market_property_proxy", "experiment", "execution_result", "observed_response",
-    "side_interpretation", "confounders", "conclusion", "next_discriminating_question",
+    "side_interpretation", "risk_assessment", "conclusion", "next_discriminating_question",
     "proposed_next_experiment", "hard_stop_reason"
   ],
   "properties": {
@@ -22,12 +22,19 @@
     "execution_result": {"$ref": "#/$defs/executionResult"},
     "observed_response": {"$ref": "#/$defs/observedResponse"},
     "side_interpretation": {"$ref": "#/$defs/sideInterpretation"},
-    "confounders": {"type": "array", "items": {"type": "string"}},
+    "risk_assessment": {"$ref": "#/$defs/riskAssessment"},
     "conclusion": {"type": "string", "minLength": 1},
     "next_discriminating_question": {"type": "string", "minLength": 1},
     "proposed_next_experiment": {"oneOf": [{"$ref": "#/$defs/proposedExperiment"}, {"type": "null"}]},
-    "hard_stop_reason": {"type": ["string", "null"]}
+    "hard_stop_reason": {"type": ["string", "null"], "minLength": 1}
   },
+  "allOf": [
+    {
+      "if": {"properties": {"status": {"const": "hard_stop"}}},
+      "then": {"properties": {"hard_stop_reason": {"type": "string", "minLength": 1}}},
+      "else": {"properties": {"hard_stop_reason": {"type": "null"}}}
+    }
+  ],
   "$defs": {
     "semanticObject": {"type": "object", "additionalProperties": true},
     "experiment": {
@@ -36,46 +43,71 @@
       "required": ["kind", "experiment_id", "axes", "candidate_ids", "candidate_count", "window_policy", "strategy_context", "execution_accounting_assumptions"],
       "properties": {
         "kind": {"enum": ["batch", "artifact_diagnostic", "none"]},
-        "experiment_id": {"type": ["string", "null"]},
+        "experiment_id": {"type": ["string", "null"], "minLength": 1},
         "axes": {"type": "array", "items": {"$ref": "#/$defs/semanticObject"}},
         "candidate_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
         "candidate_count": {"type": "integer", "minimum": 0},
         "window_policy": {"oneOf": [{"$ref": "#/$defs/semanticObject"}, {"type": "null"}]},
         "strategy_context": {"oneOf": [{"$ref": "#/$defs/semanticObject"}, {"type": "null"}]},
         "execution_accounting_assumptions": {"oneOf": [{"$ref": "#/$defs/semanticObject"}, {"type": "null"}]}
-      }
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"kind": {"const": "batch"}}},
+          "then": {
+            "properties": {
+              "experiment_id": {"type": "string", "minLength": 1},
+              "candidate_count": {"type": "integer", "minimum": 1}
+            }
+          }
+        }
+      ]
     },
     "executionResult": {
       "type": "object",
       "additionalProperties": false,
       "required": ["batch_artifact_path", "run_ids", "market_data_hash", "completed_candidates", "failed_candidates", "analysis_path"],
       "properties": {
-        "batch_artifact_path": {"type": ["string", "null"]},
-        "run_ids": {"type": "array", "items": {"type": "string"}},
-        "market_data_hash": {"type": ["string", "null"]},
+        "batch_artifact_path": {"type": ["string", "null"], "minLength": 1},
+        "run_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "market_data_hash": {"type": ["string", "null"], "minLength": 1},
         "completed_candidates": {"type": "integer", "minimum": 0},
         "failed_candidates": {"type": "integer", "minimum": 0},
-        "analysis_path": {"type": ["string", "null"]}
+        "analysis_path": {"type": ["string", "null"], "minLength": 1}
       }
     },
     "observedResponse": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["topology", "structural_dimensions", "tested_ranges", "promising_regions", "rejected_regions", "temporal_regime_concentration_concern"],
+      "required": ["topology", "structural_dimensions", "tested_ranges", "promising_regions", "rejected_regions"],
       "properties": {
         "topology": {"type": "string", "minLength": 1},
         "structural_dimensions": {"type": "array", "items": {"type": "string"}},
         "tested_ranges": {"type": "array", "items": {"$ref": "#/$defs/semanticObject"}},
         "promising_regions": {"type": "array", "items": {"$ref": "#/$defs/semanticObject"}},
-        "rejected_regions": {"type": "array", "items": {"$ref": "#/$defs/semanticObject"}},
-        "temporal_regime_concentration_concern": {"type": ["string", "null"]}
+        "rejected_regions": {"type": "array", "items": {"$ref": "#/$defs/semanticObject"}}
       }
     },
     "sideInterpretation": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["aggregate", "long", "short"],
-      "properties": {"aggregate": {"type": "string"}, "long": {"type": "string"}, "short": {"type": "string"}}
+      "required": ["aggregate", "long", "short", "asymmetry"],
+      "properties": {
+        "aggregate": {"type": "string", "minLength": 1},
+        "long": {"type": "string", "minLength": 1},
+        "short": {"type": "string", "minLength": 1},
+        "asymmetry": {"type": "string", "minLength": 1}
+      }
+    },
+    "riskAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["thinning_risk", "temporal_regime_concentration_concern", "other_confounders"],
+      "properties": {
+        "thinning_risk": {"type": ["string", "null"], "minLength": 1},
+        "temporal_regime_concentration_concern": {"type": ["string", "null"], "minLength": 1},
+        "other_confounders": {"type": "array", "items": {"type": "string"}}
+      }
     },
     "proposedExperiment": {
       "type": "object",

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -16,12 +17,57 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from pydantic import ValidationError
+
+from research_service.application.experiments import (
+    BatchExperimentRequest,
+    BatchExperimentResult,
+)
+
 STATE_VERSION = "bbb_autoresearch_state.v1"
 ITERATION_VERSION = "bbb_autoresearch_iteration.v1"
 JOURNAL_VERSION = "bbb_autoresearch_journal.v1"
 TERMINAL_STATUSES = frozenset({"hard_stopped", "completed", "cancelled"})
 SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 REPO_ROOT = Path(__file__).resolve().parents[1]
+
+_STATE_KEYS = {
+    "contract_version", "session_id", "research_program", "skill_path", "strategy_context",
+    "status", "baseline_git_sha", "created_at", "updated_at", "iteration", "phase",
+    "completed_phases", "current_hypothesis", "competing_explanations", "findings",
+    "structural_dimensions_known", "tested_ranges", "observed_response_shapes",
+    "promising_regions", "rejected_regions", "aggregate_interpretation",
+    "long_interpretation", "short_interpretation", "side_asymmetry", "thinning_risk",
+    "temporal_regime_concentration_concern", "other_confounders", "unresolved_questions",
+    "validation_status", "next_discriminating_question", "next_experiment",
+    "last_iteration_result", "budgets", "stop_reason",
+}
+_ITERATION_KEYS = {
+    "contract_version", "session_id", "iteration_id", "status", "phase", "hypothesis",
+    "market_property_proxy", "experiment", "execution_result", "observed_response",
+    "side_interpretation", "risk_assessment", "conclusion", "next_discriminating_question",
+    "proposed_next_experiment", "hard_stop_reason",
+}
+_EXPERIMENT_KEYS = {
+    "kind", "experiment_id", "axes", "candidate_ids", "candidate_count", "window_policy",
+    "strategy_context", "execution_accounting_assumptions",
+}
+_EXECUTION_RESULT_KEYS = {
+    "batch_artifact_path", "run_ids", "market_data_hash", "completed_candidates",
+    "failed_candidates", "analysis_path",
+}
+_OBSERVED_RESPONSE_KEYS = {
+    "topology", "structural_dimensions", "tested_ranges", "promising_regions",
+    "rejected_regions",
+}
+_SIDE_INTERPRETATION_KEYS = {"aggregate", "long", "short", "asymmetry"}
+_RISK_ASSESSMENT_KEYS = {
+    "thinning_risk", "temporal_regime_concentration_concern", "other_confounders"
+}
+_BUDGET_KEYS = {
+    "max_iterations", "max_wall_clock_seconds", "max_consecutive_agent_failures",
+    "max_candidates_per_iteration",
+}
 
 
 class ContractError(ValueError):
@@ -62,15 +108,61 @@ def _require_string(value: dict[str, Any], key: str, *, nullable: bool = False) 
         raise ContractError(f"{key} must be a non-empty string")
 
 
-def _require_list(value: dict[str, Any], key: str) -> None:
-    if not isinstance(value.get(key), list):
-        raise ContractError(f"{key} must be an array")
+def _require_exact_keys(value: dict[str, Any], expected: set[str], context: str) -> None:
+    actual = set(value)
+    if actual != expected:
+        missing = sorted(expected - actual)
+        extra = sorted(actual - expected)
+        raise ContractError(f"{context} fields differ: missing={missing}, extra={extra}")
+
+
+def _require_nullable_string(value: dict[str, Any], key: str, context: str) -> None:
+    item = value[key]
+    if item is not None and (not isinstance(item, str) or not item.strip()):
+        raise ContractError(f"{context}.{key} must be a non-empty string or null")
+
+
+def _require_string_array(value: dict[str, Any], key: str, context: str) -> list[str]:
+    item = value[key]
+    if not isinstance(item, list) or any(not isinstance(entry, str) for entry in item):
+        raise ContractError(f"{context}.{key} must be an array of strings")
+    return item
+
+
+def _require_object_array(value: dict[str, Any], key: str, context: str) -> list[dict[str, Any]]:
+    item = value[key]
+    if not isinstance(item, list) or any(not isinstance(entry, dict) for entry in item):
+        raise ContractError(f"{context}.{key} must be an array of objects")
+    return item
+
+
+def _require_nullable_object(value: dict[str, Any], key: str, context: str) -> None:
+    item = value[key]
+    if item is not None and not isinstance(item, dict):
+        raise ContractError(f"{context}.{key} must be an object or null")
+
+
+def _validate_datetime(value: object, context: str) -> None:
+    if not isinstance(value, str) or not re.fullmatch(
+        r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})",
+        value,
+    ):
+        raise ContractError(f"{context} must be an RFC 3339 date-time string")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ContractError(f"{context} must be an RFC 3339 date-time string") from exc
+    if parsed.tzinfo is None:
+        raise ContractError(f"{context} must include a timezone")
 
 
 def validate_state(state: dict[str, Any]) -> None:
     if state.get("contract_version") != STATE_VERSION:
         raise ContractError(f"contract_version must be {STATE_VERSION}")
-    validate_session_id(str(state.get("session_id", "")))
+    _require_exact_keys(state, _STATE_KEYS, "state")
+    if not isinstance(state.get("session_id"), str):
+        raise ContractError("session_id must be a string")
+    validate_session_id(state["session_id"])
     for key in (
         "research_program",
         "skill_path",
@@ -80,6 +172,12 @@ def validate_state(state: dict[str, Any]) -> None:
         "phase",
     ):
         _require_string(state, key)
+    if not re.fullmatch(r"[0-9a-f]{40}", state["baseline_git_sha"]):
+        raise ContractError("baseline_git_sha must be a 40-character lowercase SHA")
+    _validate_datetime(state["created_at"], "created_at")
+    _validate_datetime(state["updated_at"], "updated_at")
+    if not isinstance(state["strategy_context"], dict):
+        raise ContractError("strategy_context must be an object")
     if state.get("status") not in {
         "initialized",
         "running",
@@ -88,22 +186,28 @@ def validate_state(state: dict[str, Any]) -> None:
         "cancelled",
     }:
         raise ContractError("invalid state status")
-    if not isinstance(state.get("iteration"), int) or state["iteration"] < 0:
+    if type(state.get("iteration")) is not int or state["iteration"] < 0:
         raise ContractError("iteration must be a non-negative integer")
-    for key in (
-        "competing_explanations",
-        "findings",
-        "structural_dimensions_known",
-        "tested_ranges",
-        "observed_response_shapes",
-        "promising_regions",
-        "rejected_regions",
-        "unresolved_questions",
-        "completed_phases",
-    ):
-        _require_list(state, key)
+    for key in ("competing_explanations", "structural_dimensions_known", "unresolved_questions",
+                "completed_phases", "other_confounders"):
+        _require_string_array(state, key, "state")
+    for key in ("tested_ranges", "observed_response_shapes", "promising_regions",
+                "rejected_regions"):
+        _require_object_array(state, key, "state")
+    findings = _require_object_array(state, "findings", "state")
+    for index, finding in enumerate(findings):
+        if "conclusion" not in finding or not isinstance(finding["conclusion"], str):
+            raise ContractError(f"state.findings[{index}].conclusion must be a string")
+        iteration = finding.get("iteration_id")
+        if "iteration_id" in finding and (
+            type(iteration) is not int or iteration < 0
+        ):
+            raise ContractError(f"state.findings[{index}].iteration_id is invalid")
     for key in (
         "current_hypothesis",
+        "aggregate_interpretation",
+        "long_interpretation",
+        "short_interpretation",
         "side_asymmetry",
         "thinning_risk",
         "temporal_regime_concentration_concern",
@@ -111,27 +215,30 @@ def validate_state(state: dict[str, Any]) -> None:
         "next_discriminating_question",
         "stop_reason",
     ):
-        item = state.get(key)
-        if item is not None and not isinstance(item, str):
-            raise ContractError(f"{key} must be a string or null")
+        _require_nullable_string(state, key, "state")
     for key in ("next_experiment", "last_iteration_result"):
-        item = state.get(key)
-        if item is not None and not isinstance(item, dict):
-            raise ContractError(f"{key} must be an object or null")
+        _require_nullable_object(state, key, "state")
     budgets = state.get("budgets")
     if not isinstance(budgets, dict):
         raise ContractError("budgets must be an object")
+    _require_exact_keys(budgets, _BUDGET_KEYS, "state.budgets")
     for key in (
         "max_iterations",
         "max_wall_clock_seconds",
         "max_candidates_per_iteration",
     ):
         item = budgets.get(key)
-        if item is not None and (not isinstance(item, int) or item < 1):
+        if item is not None and (type(item) is not int or item < 1):
             raise ContractError(f"budgets.{key} must be a positive integer or null")
     failures = budgets.get("max_consecutive_agent_failures")
-    if not isinstance(failures, int) or failures < 1:
+    if type(failures) is not int or failures < 1:
         raise ContractError("budgets.max_consecutive_agent_failures must be positive")
+    stop_reason = state["stop_reason"]
+    if state["status"] in {"hard_stopped", "cancelled"}:
+        if not isinstance(stop_reason, str) or not stop_reason.strip():
+            raise ContractError(f"{state['status']} state requires stop_reason")
+    elif stop_reason is not None:
+        raise ContractError("stop_reason must be null unless state is hard_stopped or cancelled")
 
 
 def validate_state_transition(previous: dict[str, Any], current: dict[str, Any]) -> None:
@@ -152,10 +259,11 @@ def validate_state_transition(previous: dict[str, Any], current: dict[str, Any])
 def validate_iteration_result(result: dict[str, Any], state: dict[str, Any]) -> None:
     if result.get("contract_version") != ITERATION_VERSION:
         raise ContractError(f"contract_version must be {ITERATION_VERSION}")
+    _require_exact_keys(result, _ITERATION_KEYS, "iteration result")
     if result.get("session_id") != state["session_id"]:
         raise ContractError("iteration result session_id differs from state")
     expected = state["iteration"] + 1
-    if result.get("iteration_id") != expected:
+    if type(result.get("iteration_id")) is not int or result["iteration_id"] != expected:
         raise ContractError(f"iteration_id must be {expected}")
     status = result.get("status")
     if status not in {"completed", "hard_stop", "failed"}:
@@ -168,34 +276,68 @@ def validate_iteration_result(result: dict[str, Any], state: dict[str, Any]) -> 
         "next_discriminating_question",
     ):
         _require_string(result, key)
-    for key in ("experiment", "execution_result", "observed_response", "side_interpretation"):
+    for key in (
+        "experiment", "execution_result", "observed_response", "side_interpretation",
+        "risk_assessment",
+    ):
         if not isinstance(result.get(key), dict):
             raise ContractError(f"{key} must be an object")
-    _require_list(result, "confounders")
     experiment = result["experiment"]
+    _require_exact_keys(experiment, _EXPERIMENT_KEYS, "experiment")
     if experiment.get("kind") not in {"batch", "artifact_diagnostic", "none"}:
         raise ContractError("experiment.kind is invalid")
-    candidate_ids = experiment.get("candidate_ids", [])
-    if not isinstance(candidate_ids, list) or any(not isinstance(item, str) for item in candidate_ids):
-        raise ContractError("experiment.candidate_ids must be an array of strings")
-    count = experiment.get("candidate_count", 0)
-    if not isinstance(count, int) or count < 0 or count != len(candidate_ids):
+    candidate_ids = _require_string_array(experiment, "candidate_ids", "experiment")
+    if len(candidate_ids) != len(set(candidate_ids)):
+        raise ContractError("experiment.candidate_ids must be unique")
+    count = experiment["candidate_count"]
+    if type(count) is not int or count < 0 or count != len(candidate_ids):
         raise ContractError("experiment.candidate_count must match candidate_ids")
+    _require_object_array(experiment, "axes", "experiment")
+    for key in ("window_policy", "strategy_context", "execution_accounting_assumptions"):
+        _require_nullable_object(experiment, key, "experiment")
+    experiment_id = experiment["experiment_id"]
+    if experiment_id is not None and (
+        not isinstance(experiment_id, str) or not experiment_id.strip()
+    ):
+        raise ContractError("experiment.experiment_id must be a non-empty string or null")
     execution = result["execution_result"]
+    _require_exact_keys(execution, _EXECUTION_RESULT_KEYS, "execution_result")
     for key in ("completed_candidates", "failed_candidates"):
-        if not isinstance(execution.get(key), int) or execution[key] < 0:
+        if type(execution.get(key)) is not int or execution[key] < 0:
             raise ContractError(f"execution_result.{key} must be non-negative")
-    run_ids = execution.get("run_ids")
-    if not isinstance(run_ids, list) or any(not isinstance(item, str) for item in run_ids):
-        raise ContractError("execution_result.run_ids must be an array of strings")
+    run_ids = _require_string_array(execution, "run_ids", "execution_result")
+    if len(run_ids) != len(set(run_ids)):
+        raise ContractError("execution_result.run_ids must be unique")
+    for key in ("batch_artifact_path", "market_data_hash", "analysis_path"):
+        _require_nullable_string(execution, key, "execution_result")
+    observed = result["observed_response"]
+    _require_exact_keys(observed, _OBSERVED_RESPONSE_KEYS, "observed_response")
+    _require_string(observed, "topology")
+    _require_string_array(observed, "structural_dimensions", "observed_response")
+    for key in ("tested_ranges", "promising_regions", "rejected_regions"):
+        _require_object_array(observed, key, "observed_response")
+    side = result["side_interpretation"]
+    _require_exact_keys(side, _SIDE_INTERPRETATION_KEYS, "side_interpretation")
+    for key in _SIDE_INTERPRETATION_KEYS:
+        _require_string(side, key)
+    risk = result["risk_assessment"]
+    _require_exact_keys(risk, _RISK_ASSESSMENT_KEYS, "risk_assessment")
+    _require_nullable_string(risk, "thinning_risk", "risk_assessment")
+    _require_nullable_string(
+        risk, "temporal_regime_concentration_concern", "risk_assessment"
+    )
+    _require_string_array(risk, "other_confounders", "risk_assessment")
     hard_reason = result.get("hard_stop_reason")
     if status == "hard_stop" and (not isinstance(hard_reason, str) or not hard_reason.strip()):
         raise ContractError("hard_stop result requires hard_stop_reason")
     if status != "hard_stop" and hard_reason is not None:
         raise ContractError("hard_stop_reason is only valid for hard_stop")
     proposed = result.get("proposed_next_experiment")
-    if proposed is not None and not isinstance(proposed, dict):
-        raise ContractError("proposed_next_experiment must be an object or null")
+    if proposed is not None:
+        if not isinstance(proposed, dict):
+            raise ContractError("proposed_next_experiment must be an object or null")
+        for key in ("kind", "reason"):
+            _require_string(proposed, key)
     if experiment["kind"] == "batch":
         if not isinstance(experiment.get("experiment_id"), str) or not experiment["experiment_id"]:
             raise ContractError("batch experiment requires experiment_id")
@@ -204,17 +346,91 @@ def validate_iteration_result(result: dict[str, Any], state: dict[str, Any]) -> 
         artifact_path = execution.get("batch_artifact_path")
         if not isinstance(artifact_path, str) or not artifact_path:
             raise ContractError("batch execution requires batch_artifact_path")
-        artifact = Path(artifact_path)
-        required = ("request.json", "summary.json", "manifest.json")
-        if not artifact.is_dir() or any(not (artifact / name).is_file() for name in required):
-            raise ContractError("batch artifact path is not a canonical persisted batch bundle")
-        if len(run_ids) != execution["completed_candidates"]:
-            raise ContractError("run_ids must match completed_candidates")
-        if not isinstance(execution.get("market_data_hash"), str):
-            raise ContractError("batch execution requires market_data_hash")
+        _verify_batch_artifact(result)
+    elif execution["completed_candidates"] + execution["failed_candidates"] != count:
+        raise ContractError("execution candidate counts must match experiment candidate_count")
     candidate_budget = state["budgets"].get("max_candidates_per_iteration")
     if candidate_budget is not None and count > candidate_budget:
         raise ContractError("candidate count exceeds session budget")
+
+
+def _verify_batch_artifact(result: dict[str, Any]) -> None:
+    experiment = result["experiment"]
+    execution = result["execution_result"]
+    artifact = Path(execution["batch_artifact_path"])
+    required = ("request.json", "summary.json", "manifest.json")
+    if not artifact.is_dir() or any(not (artifact / name).is_file() for name in required):
+        raise ContractError("batch artifact path is not a canonical persisted batch bundle")
+    try:
+        request = BatchExperimentRequest.model_validate_json(
+            (artifact / "request.json").read_bytes()
+        )
+        summary_bytes = (artifact / "summary.json").read_bytes()
+        summary = BatchExperimentResult.model_validate_json(summary_bytes)
+        manifest = load_json(artifact / "manifest.json")
+    except (OSError, ValidationError) as exc:
+        raise ContractError(f"canonical batch artifact is invalid: {exc}") from exc
+    manifest_keys = {
+        "contract_version", "experiment_id", "summary_sha256", "candidate_count",
+        "completed_count", "failed_count",
+    }
+    _require_exact_keys(manifest, manifest_keys, "batch manifest")
+    if manifest["contract_version"] != "research_batch_artifacts.v1":
+        raise ContractError("batch manifest contract_version is invalid")
+    if not isinstance(manifest["experiment_id"], str):
+        raise ContractError("batch manifest experiment_id is invalid")
+    if not isinstance(manifest["summary_sha256"], str) or not re.fullmatch(
+        r"[0-9a-f]{64}", manifest["summary_sha256"]
+    ):
+        raise ContractError("batch manifest summary_sha256 is invalid")
+    for key in ("candidate_count", "completed_count", "failed_count"):
+        if type(manifest[key]) is not int or manifest[key] < 0:
+            raise ContractError(f"batch manifest {key} is invalid")
+    experiment_id = experiment["experiment_id"]
+    identities = {experiment_id, request.experiment_id, summary.experiment_id,
+                  manifest["experiment_id"]}
+    if len(identities) != 1:
+        raise ContractError("batch experiment_id differs across iteration and artifacts")
+    actual_summary_hash = hashlib.sha256(summary_bytes).hexdigest()
+    if manifest["summary_sha256"] != actual_summary_hash:
+        raise ContractError("batch summary sha256 differs from manifest")
+    expected_counts = (
+        experiment["candidate_count"],
+        execution["completed_candidates"],
+        execution["failed_candidates"],
+    )
+    summary_counts = (summary.candidate_count, summary.completed_count, summary.failed_count)
+    manifest_counts = (
+        manifest["candidate_count"], manifest["completed_count"], manifest["failed_count"]
+    )
+    if expected_counts != summary_counts or summary_counts != manifest_counts:
+        raise ContractError("batch candidate counts differ across iteration and artifacts")
+    request_ids = [candidate.candidate_id for candidate in request.candidates]
+    summary_ids = [candidate.candidate_id for candidate in summary.candidates]
+    if experiment["candidate_ids"] != request_ids or request_ids != summary_ids:
+        raise ContractError("batch candidate IDs differ across iteration and artifacts")
+    canonical_run_ids = [
+        candidate.run_id for candidate in summary.candidates if candidate.status == "completed"
+    ]
+    if any(run_id is None for run_id in canonical_run_ids):
+        raise ContractError("completed canonical batch candidate has no run_id")
+    if execution["run_ids"] != canonical_run_ids:
+        raise ContractError("iteration run_ids differ from canonical batch summary")
+    canonical_hashes = {
+        candidate.market_data_hash
+        for candidate in summary.candidates
+        if candidate.status == "completed"
+    }
+    if None in canonical_hashes:
+        raise ContractError("completed canonical batch candidate has no market_data_hash")
+    if len(canonical_hashes) > 1:
+        raise ContractError("canonical batch candidates have different market_data_hash values")
+    claimed_hash = execution["market_data_hash"]
+    if canonical_hashes:
+        if claimed_hash != next(iter(canonical_hashes)):
+            raise ContractError("iteration market_data_hash differs from canonical batch summary")
+    elif claimed_hash is not None:
+        raise ContractError("iteration cannot claim market_data_hash with no completed candidates")
 
 
 def atomic_write_json(path: Path, value: dict[str, Any]) -> None:
@@ -383,6 +599,8 @@ def _journal_event(state: dict[str, Any], result: dict[str, Any]) -> dict[str, A
         "run_ids": execution.get("run_ids", []),
         "market_data_hash": execution.get("market_data_hash"),
         "outcome_classification": result["observed_response"].get("topology"),
+        "side_interpretation": result["side_interpretation"],
+        "risk_assessment": result["risk_assessment"],
         "conclusion": result["conclusion"],
         "next_question": result["next_discriminating_question"],
     }
@@ -391,6 +609,7 @@ def _journal_event(state: dict[str, Any], result: dict[str, Any]) -> dict[str, A
 def _advance_state(state: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
     observed = result["observed_response"]
     side = result["side_interpretation"]
+    risk = result["risk_assessment"]
     proposed = result.get("proposed_next_experiment")
     status = result["status"]
     if status == "hard_stop":
@@ -424,11 +643,15 @@ def _advance_state(state: dict[str, Any], result: dict[str, Any]) -> dict[str, A
         unresolved_questions=[
             *state["unresolved_questions"], result["next_discriminating_question"]
         ],
-        side_asymmetry=side.get("aggregate"),
-        thinning_risk="; ".join(result["confounders"]) or None,
-        temporal_regime_concentration_concern=observed.get(
+        aggregate_interpretation=side["aggregate"],
+        long_interpretation=side["long"],
+        short_interpretation=side["short"],
+        side_asymmetry=side["asymmetry"],
+        thinning_risk=risk["thinning_risk"],
+        temporal_regime_concentration_concern=risk[
             "temporal_regime_concentration_concern"
-        ),
+        ],
+        other_confounders=risk["other_confounders"],
         next_discriminating_question=result["next_discriminating_question"],
         next_experiment=proposed,
         last_iteration_result={
@@ -436,7 +659,11 @@ def _advance_state(state: dict[str, Any], result: dict[str, Any]) -> dict[str, A
             "status": result["status"],
             "conclusion": result["conclusion"],
         },
-        stop_reason=(result.get("hard_stop_reason") if next_status == "hard_stopped" else None),
+        stop_reason=(
+            result.get("hard_stop_reason") or "worker reported failed iteration"
+            if next_status == "hard_stopped"
+            else None
+        ),
     )
     validate_state(updated)
     validate_state_transition(state, updated)

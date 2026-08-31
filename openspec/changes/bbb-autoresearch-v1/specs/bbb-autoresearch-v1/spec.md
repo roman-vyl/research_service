@@ -51,8 +51,11 @@ append-only. Agent chat history SHALL NOT be authoritative. Both contracts SHALL
 ### Requirement: Knowledge rather than leaderboard
 
 State SHALL preserve hypotheses, competing explanations, dimensions/ranges, response shapes,
-regions, side asymmetry, thinning/concentration concerns, validation, unresolved boundaries, and
-next questions. Infrastructure SHALL NOT select a candidate using PF, PnL, or another scalar.
+regions, aggregate/long/short interpretations, explicit side asymmetry, explicit thinning risk,
+temporal/regime concentration concern, other confounders, validation, unresolved boundaries, and
+next questions. The worker SHALL report these semantic fields explicitly and the supervisor SHALL
+persist them without deriving one from another. Infrastructure SHALL NOT select a candidate using
+PF, PnL, or another scalar.
 
 #### Scenario: Higher PF observed
 
@@ -76,13 +79,20 @@ phase order SHALL hard-stop.
 Experiments SHALL use current canonical candidate contracts, live config validation,
 `RunBatchExperiment`, canonical per-run persistence, and `PersistBatchExperiment`. AutoResearch
 SHALL NOT implement simulation, accounting, metric derivation, direct MDS/Strategy Engine research
-execution, or a second summary format.
+execution, or a second summary format. Before accepting a batch result, the supervisor SHALL verify
+the canonical request/summary/manifest identity, summary hash, candidate identities and counts,
+completed run IDs, and shared completed-candidate market-data hash against the worker result.
 
 #### Scenario: Valid batch experiment
 
 - **WHEN** a worker runs a justified batch
 - **THEN** every successful candidate is a canonical persisted run and the journal references the
   existing batch artifact and run IDs.
+
+#### Scenario: Canonical batch reference mismatch
+
+- **WHEN** a worker result disagrees with its canonical request, summary, or manifest
+- **THEN** the supervisor rejects the result without recomputing trading metrics.
 
 ### Requirement: Reproducible compact journal
 

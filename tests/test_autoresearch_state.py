@@ -19,6 +19,7 @@ from autoresearch_supervisor import (  # noqa: E402
     validate_session_id,
     validate_state,
     validate_state_transition,
+    validate_iteration_result,
 )
 
 
@@ -107,3 +108,95 @@ def test_existing_session_is_not_overwritten(tmp_path: Path) -> None:
     initialize_session("session-1", template, repo)
     with pytest.raises(FileExistsError):
         initialize_session("session-1", template, repo)
+
+
+def _valid_iteration() -> dict[str, object]:
+    return {
+        "contract_version": "bbb_autoresearch_iteration.v1",
+        "session_id": "session-1",
+        "iteration_id": 1,
+        "status": "completed",
+        "phase": "baseline",
+        "hypothesis": "hypothesis",
+        "market_property_proxy": "proxy",
+        "experiment": {
+            "kind": "artifact_diagnostic",
+            "experiment_id": None,
+            "axes": [],
+            "candidate_ids": [],
+            "candidate_count": 0,
+            "window_policy": None,
+            "strategy_context": None,
+            "execution_accounting_assumptions": None,
+        },
+        "execution_result": {
+            "batch_artifact_path": None,
+            "run_ids": [],
+            "market_data_hash": None,
+            "completed_candidates": 0,
+            "failed_candidates": 0,
+            "analysis_path": None,
+        },
+        "observed_response": {
+            "topology": "insufficient_evidence",
+            "structural_dimensions": [],
+            "tested_ranges": [],
+            "promising_regions": [],
+            "rejected_regions": [],
+        },
+        "side_interpretation": {
+            "aggregate": "aggregate",
+            "long": "long",
+            "short": "short",
+            "asymmetry": "asymmetry",
+        },
+        "risk_assessment": {
+            "thinning_risk": None,
+            "temporal_regime_concentration_concern": None,
+            "other_confounders": [],
+        },
+        "conclusion": "conclusion",
+        "next_discriminating_question": "question",
+        "proposed_next_experiment": None,
+        "hard_stop_reason": None,
+    }
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda value: value.update(unexpected=True),
+        lambda value: value["experiment"].update(unexpected=True),
+        lambda value: value["experiment"].update(candidate_count=1),
+        lambda value: value["experiment"].update(candidate_ids=["same", "same"], candidate_count=2),
+        lambda value: value["observed_response"].update(unexpected=True),
+        lambda value: value["observed_response"].update(topology=1),
+        lambda value: value["side_interpretation"].pop("asymmetry"),
+        lambda value: value["risk_assessment"].update(other_confounders="not-an-array"),
+        lambda value: value.update(status="hard_stop", hard_stop_reason=None),
+        lambda value: value.update(status="completed", hard_stop_reason="not allowed"),
+    ],
+)
+def test_schema_invalid_iteration_documents_are_rejected(
+    tmp_path: Path, mutate
+) -> None:
+    repo = _repo(tmp_path)
+    root = initialize_session("session-1", _template(repo / "template.json"), repo)
+    state = load_json(root / "state.json")
+    result = _valid_iteration()
+    mutate(result)
+    with pytest.raises(ContractError):
+        validate_iteration_result(result, state)
+
+
+def test_state_rejects_schema_extra_and_nested_type_mismatch(tmp_path: Path) -> None:
+    repo = _repo(tmp_path)
+    root = initialize_session("session-1", _template(repo / "template.json"), repo)
+    state = load_json(root / "state.json")
+    with pytest.raises(ContractError, match="extra"):
+        validate_state({**state, "unexpected": True})
+    bad_budgets = dict(state["budgets"], unexpected=True)
+    with pytest.raises(ContractError, match="budgets"):
+        validate_state({**state, "budgets": bad_budgets})
+    with pytest.raises(ContractError, match="iteration_id"):
+        validate_state({**state, "findings": [{"conclusion": "x", "iteration_id": None}]})

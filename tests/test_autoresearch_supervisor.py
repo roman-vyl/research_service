@@ -5,16 +5,31 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
+from research_service.adapters.artifacts.filesystem import FilesystemArtifactStore
+from research_service.application.experiments import (
+    BatchCandidateRequest,
+    BatchCandidateResult,
+    BatchExperimentRequest,
+    BatchExperimentResult,
+    PersistBatchExperiment,
+)
+from research_service.domain.contracts import ExplicitRange
+from research_service.domain.strategy_instance import DeployableStrategyInstance
+
 sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
 
 from autoresearch_init import initialize_session  # noqa: E402
 from autoresearch_supervisor import (  # noqa: E402
+    ContractError,
     _advance_state,
     _journal_event,
     append_journal,
     atomic_write_json,
     load_json,
     run_supervisor,
+    validate_iteration_result,
 )
 
 
@@ -55,13 +70,18 @@ result = {
     "market_data_hash": None, "completed_candidates": 0, "failed_candidates": 0,
     "analysis_path": None},
   "observed_response": {"topology": "insufficient_evidence", "structural_dimensions": [],
-    "tested_ranges": [], "promising_regions": [], "rejected_regions": [],
-    "temporal_regime_concentration_concern": None},
-  "side_interpretation": {"aggregate": "none", "long": "none", "short": "none"},
-  "confounders": ["none"], "conclusion": "one iteration complete",
+    "tested_ranges": [], "promising_regions": [], "rejected_regions": []},
+  "side_interpretation": {"aggregate": "aggregate", "long": "long", "short": "short",
+    "asymmetry": "long differs from short"},
+  "risk_assessment": {"thinning_risk": "explicit thinning risk",
+    "temporal_regime_concentration_concern": "explicit concentration concern",
+    "other_confounders": ["other confounder"]},
+  "conclusion": "one iteration complete",
   "next_discriminating_question": "what next?",
   "proposed_next_experiment": proposed, "hard_stop_reason": hard_reason
 }
+if mode == "schema_invalid":
+    result["unexpected"] = True
 result_path.write_text(json.dumps(result))
 '''
 
@@ -112,6 +132,15 @@ def test_fresh_invocation_continues_then_completes(tmp_path: Path) -> None:
     assert code == 0
     assert state["status"] == "completed"
     assert state["iteration"] == 2
+    assert state["aggregate_interpretation"] == "aggregate"
+    assert state["long_interpretation"] == "long"
+    assert state["short_interpretation"] == "short"
+    assert state["side_asymmetry"] == "long differs from short"
+    assert state["thinning_risk"] == "explicit thinning risk"
+    assert state["temporal_regime_concentration_concern"] == (
+        "explicit concentration concern"
+    )
+    assert state["other_confounders"] == ["other confounder"]
     assert (root / "iterations/0001/stdout.log").is_file()
     assert (root / "iterations/0002/stdout.log").is_file()
     assert len((root / "journal.jsonl").read_text().splitlines()) == 2
@@ -158,7 +187,11 @@ def test_forbidden_mutation_hard_stops_and_preserves_evidence(tmp_path: Path) ->
 
 
 def test_malformed_result_and_crash_retry_are_bounded(tmp_path: Path) -> None:
-    for name, mode in (("malformed", "malformed"), ("crash", "crash")):
+    for name, mode in (
+        ("malformed", "malformed"),
+        ("schema_invalid", "schema_invalid"),
+        ("crash", "crash"),
+    ):
         repo, root = _repo(tmp_path / name)
         assert run_supervisor(
             session_id="s1",
@@ -186,3 +219,194 @@ def test_cancellation_and_budget_launch_no_worker(tmp_path: Path) -> None:
     assert run_supervisor(session_id="s1", agent_command="missing", repo_root=repo) == 2
     assert load_json(root / "state.json")["stop_reason"] == "iteration budget exhausted"
     assert not any((root / "iterations").iterdir())
+
+
+def _canonical_batch_artifact(
+    tmp_path: Path, hashes: tuple[str, ...] = ("market-hash",)
+) -> Path:
+    request = BatchExperimentRequest(
+        experiment_id="exp-1",
+        strategy_id="ema_pullback",
+        range=ExplicitRange(from_ms=0, to_ms=300_000),
+        candidates=tuple(
+            BatchCandidateRequest(
+                candidate_id=f"c{index}",
+                strategy=DeployableStrategyInstance(
+                    enabled=True,
+                    strategy_id="ema_pullback",
+                    ticker="BTCUSDT.P",
+                    base_timeframe="5m",
+                    raw_spec={"anchor": {"period": 200}},
+                ),
+                managed_policy_enabled=False,
+            )
+            for index in range(1, len(hashes) + 1)
+        ),
+    )
+    candidates = tuple(
+        BatchCandidateResult(
+            candidate_id=f"c{index}",
+            run_id=f"run_{index}",
+            instance_id=f"ema_pullback:{index}",
+            status="completed",
+            artifact_path=f"/artifacts/run_{index}",
+            realised_trade_count=0,
+            open_position_count=0,
+            final_equity="10000",
+            gross_pnl="0",
+            fees_paid="0",
+            net_pnl="0",
+            market_data_hash=market_hash,
+            return_pct="0",
+            max_drawdown="0",
+            long={"trades": 0, "net_pnl": "0", "return_pct": "0"},
+            short={"trades": 0, "net_pnl": "0", "return_pct": "0"},
+        )
+        for index, market_hash in enumerate(hashes, start=1)
+    )
+    result = BatchExperimentResult(
+        experiment_id="exp-1",
+        status="completed",
+        candidate_count=len(candidates),
+        completed_count=len(candidates),
+        failed_count=0,
+        candidates=candidates,
+    )
+    persisted = PersistBatchExperiment(FilesystemArtifactStore(tmp_path / "artifacts")).execute(
+        request, result
+    )
+    return Path(persisted.artifact_path)
+
+
+def _batch_iteration(artifact: Path) -> dict[str, object]:
+    result = _valid_worker_result_for_test()
+    result["experiment"] = {
+        "kind": "batch",
+        "experiment_id": "exp-1",
+        "axes": [],
+        "candidate_ids": ["c1"],
+        "candidate_count": 1,
+        "window_policy": {"range_policy": "explicit_range"},
+        "strategy_context": {"strategy_id": "ema_pullback"},
+        "execution_accounting_assumptions": {},
+    }
+    result["execution_result"] = {
+        "batch_artifact_path": str(artifact),
+        "run_ids": ["run_1"],
+        "market_data_hash": "market-hash",
+        "completed_candidates": 1,
+        "failed_candidates": 0,
+        "analysis_path": None,
+    }
+    return result
+
+
+def _valid_worker_result_for_test() -> dict[str, object]:
+    return {
+        "contract_version": "bbb_autoresearch_iteration.v1",
+        "session_id": "s1",
+        "iteration_id": 1,
+        "status": "completed",
+        "phase": "baseline",
+        "hypothesis": "hypothesis",
+        "market_property_proxy": "proxy",
+        "experiment": {},
+        "execution_result": {},
+        "observed_response": {
+            "topology": "flat",
+            "structural_dimensions": [],
+            "tested_ranges": [],
+            "promising_regions": [],
+            "rejected_regions": [],
+        },
+        "side_interpretation": {
+            "aggregate": "aggregate",
+            "long": "long",
+            "short": "short",
+            "asymmetry": "asymmetry",
+        },
+        "risk_assessment": {
+            "thinning_risk": None,
+            "temporal_regime_concentration_concern": None,
+            "other_confounders": [],
+        },
+        "conclusion": "conclusion",
+        "next_discriminating_question": "question",
+        "proposed_next_experiment": None,
+        "hard_stop_reason": None,
+    }
+
+
+def _session_state(tmp_path: Path) -> dict[str, object]:
+    repo, root = _repo(tmp_path)
+    assert repo == tmp_path
+    return load_json(root / "state.json")
+
+
+def test_wrong_experiment_batch_artifact_is_rejected(tmp_path: Path) -> None:
+    artifact = _canonical_batch_artifact(tmp_path)
+    iteration = _batch_iteration(artifact)
+    iteration["experiment"]["experiment_id"] = "wrong-exp"
+    with pytest.raises(ContractError, match="experiment_id"):
+        validate_iteration_result(iteration, _session_state(tmp_path / "repo"))
+
+
+def test_tampered_batch_summary_is_rejected_by_hash(tmp_path: Path) -> None:
+    artifact = _canonical_batch_artifact(tmp_path)
+    summary = artifact / "summary.json"
+    summary.write_bytes(summary.read_bytes() + b"\n")
+    with pytest.raises(ContractError, match="sha256"):
+        validate_iteration_result(
+            _batch_iteration(artifact), _session_state(tmp_path / "repo")
+        )
+
+
+def test_fake_batch_run_ids_are_rejected(tmp_path: Path) -> None:
+    artifact = _canonical_batch_artifact(tmp_path)
+    iteration = _batch_iteration(artifact)
+    iteration["execution_result"]["run_ids"] = ["fake-run"]
+    with pytest.raises(ContractError, match="run_ids"):
+        validate_iteration_result(iteration, _session_state(tmp_path / "repo"))
+
+
+def test_mismatched_batch_candidate_ids_are_rejected(tmp_path: Path) -> None:
+    artifact = _canonical_batch_artifact(tmp_path)
+    request_path = artifact / "request.json"
+    request = json.loads(request_path.read_text())
+    request["candidates"][0]["candidate_id"] = "other-candidate"
+    request_path.write_text(json.dumps(request))
+    with pytest.raises(ContractError, match="candidate IDs"):
+        validate_iteration_result(
+            _batch_iteration(artifact), _session_state(tmp_path / "repo")
+        )
+
+
+def test_mismatched_batch_candidate_counts_are_rejected(tmp_path: Path) -> None:
+    artifact = _canonical_batch_artifact(tmp_path)
+    iteration = _batch_iteration(artifact)
+    iteration["execution_result"].update(completed_candidates=0, failed_candidates=1)
+    with pytest.raises(ContractError, match="counts"):
+        validate_iteration_result(iteration, _session_state(tmp_path / "repo"))
+
+
+def test_mismatched_batch_market_data_hash_is_rejected(tmp_path: Path) -> None:
+    artifact = _canonical_batch_artifact(tmp_path)
+    iteration = _batch_iteration(artifact)
+    iteration["execution_result"]["market_data_hash"] = "wrong-hash"
+    with pytest.raises(ContractError, match="market_data_hash"):
+        validate_iteration_result(iteration, _session_state(tmp_path / "repo"))
+
+
+def test_different_canonical_candidate_market_hashes_are_rejected(
+    tmp_path: Path,
+) -> None:
+    artifact = _canonical_batch_artifact(tmp_path, ("market-hash-a", "market-hash-b"))
+    iteration = _batch_iteration(artifact)
+    iteration["experiment"].update(candidate_ids=["c1", "c2"], candidate_count=2)
+    iteration["execution_result"].update(
+        run_ids=["run_1", "run_2"],
+        market_data_hash="market-hash-a",
+        completed_candidates=2,
+    )
+    with pytest.raises(ContractError, match="different market_data_hash"):
+        validate_iteration_result(iteration, _session_state(tmp_path / "repo"))

@@ -73,5 +73,8 @@ research findings. Do not disguise them as scientific conclusions.
 The output path is supplied by the iteration prompt. It MUST contain one
 `bbb_autoresearch_iteration.v1` object. Record exact experiment and candidate identities, window
 policy, strategy context, axes, execution/accounting assumptions, batch artifact path, run IDs,
-market-data hash, topology classification, side interpretation, confounders, conclusion, next
-question, and proposed next experiment. Never include secrets or environment dumps.
+market-data hash, topology classification, aggregate/long/short interpretation, explicit
+long-vs-short asymmetry, thinning risk, temporal/regime concentration concern, other confounders,
+conclusion, next question, and proposed next experiment. Report these semantic fields explicitly;
+the supervisor persists them mechanically and does not infer one from another. Never include
+secrets or environment dumps.

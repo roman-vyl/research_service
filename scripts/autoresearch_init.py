@@ -50,11 +50,15 @@ def initialize_session(session_id: str, template_path: Path, repo_root: Path = R
         "observed_response_shapes": template.get("observed_response_shapes", []),
         "promising_regions": template.get("promising_regions", []),
         "rejected_regions": template.get("rejected_regions", []),
+        "aggregate_interpretation": template.get("aggregate_interpretation"),
+        "long_interpretation": template.get("long_interpretation"),
+        "short_interpretation": template.get("short_interpretation"),
         "side_asymmetry": template.get("side_asymmetry"),
         "thinning_risk": template.get("thinning_risk"),
         "temporal_regime_concentration_concern": template.get(
             "temporal_regime_concentration_concern"
         ),
+        "other_confounders": template.get("other_confounders", []),
         "unresolved_questions": template.get("unresolved_questions", []),
         "validation_status": template.get("validation_status"),
         "next_discriminating_question": template.get("next_discriminating_question"),

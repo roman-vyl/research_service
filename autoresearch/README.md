@@ -122,11 +122,17 @@ approval.
     "topology": "broad_ridge", "structural_dimensions": ["catalog_parameter"],
     "tested_ranges": [{"axis": "catalog_parameter", "range": "see request artifact"}],
     "promising_regions": [{"description": "broad interior region"}],
-    "rejected_regions": [{"description": "unstable boundary"}],
-    "temporal_regime_concentration_concern": "Requires a validation diagnostic."
+    "rejected_regions": [{"description": "unstable boundary"}]
   },
-  "side_interpretation": {"aggregate": "mixed", "long": "stable", "short": "uncertain"},
-  "confounders": ["trade-count thinning"],
+  "side_interpretation": {
+    "aggregate": "mixed", "long": "stable", "short": "uncertain",
+    "asymmetry": "The aggregate improvement is predominantly long-side."
+  },
+  "risk_assessment": {
+    "thinning_risk": "Trade count declines materially in the interior region.",
+    "temporal_regime_concentration_concern": "Requires a validation diagnostic.",
+    "other_confounders": ["possible broad trend-regime selection"]
+  },
   "conclusion": "The response is regional, not an isolated scalar winner.",
   "next_discriminating_question": "Does the shape persist without concentration?",
   "proposed_next_experiment": {"kind": "validation", "reason": "distinguish topology from thinning"},

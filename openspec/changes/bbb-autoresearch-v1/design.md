@@ -43,10 +43,10 @@ training, evaluator changes, and code or skill self-modification.
 6. **Crash idempotency.** State iteration advances only after valid result → clean guard → journal
    append → atomic state write. Attempt metadata is durable in the iteration directory. A restart
    reuses the uncommitted iteration number, retains logs, and continues only within the remaining
-   retry budget. A crash after journal append but before state replace can leave one duplicate-risk
-   boundary; v1 journal rows carry `(session_id, iteration_id)` so recovery tooling can identify it,
-   and the supervisor never treats the state as advanced. Future journal transactional indexing is
-   deliberately out of v1 scope.
+   retry budget. If a crash occurs after journal append but before state replace, restart detects the
+   journal's `(session_id, iteration_id)`, validates the retained `iteration_result.json`, and
+   atomically advances state without launching another worker or appending a duplicate journal row.
+   A journal row with a missing retained result fails closed as inconsistent recovery state.
 7. **Flexible semantic phases.** State stores a string phase plus completed phases; EMA causal order
    is enforced by the worker's mandatory skill read and hard-stop policy, not a brittle generic enum.
 8. **Operator-owned permissions and budgets.** The command is supplied by CLI/environment, parsed by
