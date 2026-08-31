@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bbb_autoresearch_state.v1",
+  "title": "BBB AutoResearch session state v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version", "session_id", "research_program", "skill_path", "strategy_context",
+    "status", "baseline_git_sha", "created_at", "updated_at", "iteration", "phase",
+    "completed_phases", "current_hypothesis", "competing_explanations", "findings",
+    "structural_dimensions_known", "tested_ranges", "observed_response_shapes",
+    "promising_regions", "rejected_regions", "side_asymmetry", "thinning_risk",
+    "temporal_regime_concentration_concern", "unresolved_questions", "validation_status",
+    "next_discriminating_question", "next_experiment", "last_iteration_result", "budgets",
+    "stop_reason"
+  ],
+  "properties": {
+    "contract_version": {"const": "bbb_autoresearch_state.v1"},
+    "session_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "research_program": {"type": "string", "minLength": 1},
+    "skill_path": {"type": "string", "minLength": 1},
+    "strategy_context": {"$ref": "#/$defs/semanticObject"},
+    "status": {"enum": ["initialized", "running", "hard_stopped", "completed", "cancelled"]},
+    "baseline_git_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "created_at": {"type": "string", "format": "date-time"},
+    "updated_at": {"type": "string", "format": "date-time"},
+    "iteration": {"type": "integer", "minimum": 0},
+    "phase": {"type": "string", "minLength": 1},
+    "completed_phases": {"type": "array", "items": {"type": "string"}},
+    "current_hypothesis": {"type": ["string", "null"]},
+    "competing_explanations": {"type": "array", "items": {"type": "string"}},
+    "findings": {"type": "array", "items": {"$ref": "#/$defs/finding"}},
+    "structural_dimensions_known": {"type": "array", "items": {"type": "string"}},
+    "tested_ranges": {"type": "array", "items": {"$ref": "#/$defs/semanticObject"}},
+    "observed_response_shapes": {"type": "array", "items": {"$ref": "#/$defs/semanticObject"}},
+    "promising_regions": {"type": "array", "items": {"$ref": "#/$defs/semanticObject"}},
+    "rejected_regions": {"type": "array", "items": {"$ref": "#/$defs/semanticObject"}},
+    "side_asymmetry": {"type": ["string", "null"]},
+    "thinning_risk": {"type": ["string", "null"]},
+    "temporal_regime_concentration_concern": {"type": ["string", "null"]},
+    "unresolved_questions": {"type": "array", "items": {"type": "string"}},
+    "validation_status": {"type": ["string", "null"]},
+    "next_discriminating_question": {"type": ["string", "null"]},
+    "next_experiment": {"oneOf": [{"$ref": "#/$defs/semanticObject"}, {"type": "null"}]},
+    "last_iteration_result": {"oneOf": [{"$ref": "#/$defs/semanticObject"}, {"type": "null"}]},
+    "budgets": {"$ref": "#/$defs/budgets"},
+    "stop_reason": {"type": ["string", "null"]}
+  },
+  "$defs": {
+    "semanticObject": {"type": "object", "additionalProperties": true},
+    "finding": {
+      "type": "object",
+      "required": ["conclusion"],
+      "properties": {"iteration_id": {"type": "integer", "minimum": 0}, "conclusion": {"type": "string"}},
+      "additionalProperties": true
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["max_iterations", "max_wall_clock_seconds", "max_consecutive_agent_failures", "max_candidates_per_iteration"],
+      "properties": {
+        "max_iterations": {"type": ["integer", "null"], "minimum": 1},
+        "max_wall_clock_seconds": {"type": ["integer", "null"], "minimum": 1},
+        "max_consecutive_agent_failures": {"type": "integer", "minimum": 1},
+        "max_candidates_per_iteration": {"type": ["integer", "null"], "minimum": 1}
+      }
+    }
+  }
+}

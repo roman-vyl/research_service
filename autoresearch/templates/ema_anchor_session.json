@@ -1,0 +1,24 @@
+{
+  "research_program": "ema-anchor-edge-research",
+  "skill_path": ".claude/skills/ema-anchor-edge-research/SKILL.md",
+  "strategy_context": {"strategy_id": "ema_pullback"},
+  "phase": "baseline",
+  "completed_phases": [],
+  "current_hypothesis": null,
+  "competing_explanations": [],
+  "findings": [],
+  "structural_dimensions_known": [],
+  "tested_ranges": [],
+  "observed_response_shapes": [],
+  "promising_regions": [],
+  "rejected_regions": [],
+  "unresolved_questions": [],
+  "next_discriminating_question": null,
+  "next_experiment": null,
+  "budgets": {
+    "max_iterations": null,
+    "max_wall_clock_seconds": null,
+    "max_consecutive_agent_failures": 3,
+    "max_candidates_per_iteration": null
+  }
+}
