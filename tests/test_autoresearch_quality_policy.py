@@ -130,7 +130,8 @@ def _roles(stage: str) -> dict[str, object]:
             "descriptive": ["gross_pnl", "fees_paid"],
             "primary": [
                 "baseline_uplift", "response_topology", "neighborhood_stability",
-                "realised_trade_count", "win_rate", "thinning",
+                "realised_trade_count", "win_rate", "long.win_rate", "short.win_rate",
+                "thinning",
             ],
             "secondary": ["net_pnl", "return_pct", "profit_factor", "max_drawdown"],
             "promotion_gates": ["neighborhood_supported", "side_classification_permitted"],
@@ -341,8 +342,45 @@ def test_phase_a_economics_are_descriptive_and_cannot_be_primary() -> None:
     _enforce(_policy("descriptive_baseline"), baseline, _facts(net="-10", profit_factor="0.90"))
     baseline["stage"]["metric_roles"]["descriptive"].remove("profit_factor")
     baseline["stage"]["metric_roles"]["primary"] = ["profit_factor"]
-    with pytest.raises(ValueError, match="baseline economics"):
+    with pytest.raises(ValueError, match="control sample adequacy"):
         _enforce(_policy("descriptive_baseline"), baseline, _facts())
+
+
+def test_semantically_incomplete_stage_metric_roles_fail_closed() -> None:
+    baseline = _assessment("descriptive_baseline", decision="continue_discovery")
+    baseline["stage"]["metric_roles"]["primary"] = ["win_rate"]
+    with pytest.raises(ValueError, match="control sample adequacy"):
+        _enforce(_policy("descriptive_baseline"), baseline, _facts())
+
+    entry = _assessment("structural_entry", decision="continue_discovery")
+    entry["stage"]["metric_roles"]["primary"] = ["response_topology"]
+    with pytest.raises(ValueError, match="conditional entry-quality"):
+        _enforce(_policy("structural_entry"), entry, _facts())
+
+    no_topology = _assessment("structural_entry", decision="continue_discovery")
+    no_topology["stage"]["metric_roles"]["primary"] = [
+        "baseline_uplift", "realised_trade_count"
+    ]
+    with pytest.raises(ValueError, match="response topology"):
+        _enforce(_policy("structural_entry"), no_topology, _facts())
+
+    no_sample = _assessment("structural_entry", decision="continue_discovery")
+    no_sample["stage"]["metric_roles"]["primary"] = [
+        "baseline_uplift", "response_topology"
+    ]
+    with pytest.raises(ValueError, match="sample or thinning"):
+        _enforce(_policy("structural_entry"), no_sample, _facts())
+
+    interaction = _assessment("structural_interaction", decision="continue_discovery")
+    interaction["stage"]["metric_roles"]["primary"].remove("neighborhood_stability")
+    with pytest.raises(ValueError, match="neighborhood evidence"):
+        _enforce(_policy("structural_interaction"), interaction, _facts())
+
+    no_side = _assessment("structural_interaction", decision="continue_discovery")
+    no_side["stage"]["metric_roles"]["primary"].remove("long.win_rate")
+    no_side["stage"]["metric_roles"]["primary"].remove("short.win_rate")
+    with pytest.raises(ValueError, match="side-behavior evidence"):
+        _enforce(_policy("structural_interaction"), no_side, _facts())
 
 
 def test_configured_minimum_trade_count_is_mechanical_and_null_invents_no_gate() -> None:
@@ -459,6 +497,13 @@ def test_positive_exit_geometry_with_consistent_canonical_facts_can_promote() ->
     assert assessment["economic_viability"]["status"] == "viable"
 
 
+def test_non_numeric_required_economic_fact_fails_as_validation_error() -> None:
+    facts = _facts()
+    facts["c1"]["fees_paid"] = "not-a-decimal"
+    with pytest.raises(ValueError, match="fees_paid is non-numeric"):
+        _enforce(_policy("exit_geometry"), _assessment("exit_geometry"), facts)
+
+
 def test_inconsistent_pf_and_required_validation_fail_closed() -> None:
     inconsistent = _assessment("exit_geometry")
     with pytest.raises(ValueError, match="canonical metrics"):
@@ -532,7 +577,9 @@ def _repo(tmp_path: Path, policy: ResearchQualityPolicy | None) -> tuple[Path, P
     return tmp_path, initialize_session("s1", template_path, tmp_path)
 
 
-def _artifact(tmp_path: Path, *, net: str = "100") -> Path:
+def _artifact(
+    tmp_path: Path, *, net: str = "100", null_economic_field: str | None = None
+) -> Path:
     request = BatchExperimentRequest(
         experiment_id="exp-1",
         strategy_id="ema_pullback",
@@ -553,8 +600,17 @@ def _artifact(tmp_path: Path, *, net: str = "100") -> Path:
         ),
     )
     facts = _facts(net=net)
-    candidates = tuple(
-        BatchCandidateResult(
+
+    def candidate_result(candidate_id: str, value: dict[str, object]) -> BatchCandidateResult:
+        economic = {
+            "gross_pnl": value["gross_pnl"],
+            "fees_paid": value["fees_paid"],
+            "net_pnl": value["net_pnl"],
+            "return_pct": value["return_pct"],
+        }
+        if candidate_id == "c1" and null_economic_field is not None:
+            economic[null_economic_field] = None
+        return BatchCandidateResult(
             candidate_id=candidate_id,
             run_id=f"run-{candidate_id}",
             instance_id=f"instance-{candidate_id}",
@@ -563,18 +619,20 @@ def _artifact(tmp_path: Path, *, net: str = "100") -> Path:
             realised_trade_count=value["realised_trade_count"],
             open_position_count=0,
             final_equity=value["final_equity"],
-            gross_pnl=value["gross_pnl"],
-            fees_paid=value["fees_paid"],
-            net_pnl=value["net_pnl"],
+            gross_pnl=economic["gross_pnl"],
+            fees_paid=economic["fees_paid"],
+            net_pnl=economic["net_pnl"],
             market_data_hash="market-hash",
-            return_pct=value["return_pct"],
+            return_pct=economic["return_pct"],
             win_rate=value["win_rate"],
             profit_factor=value["profit_factor"],
             max_drawdown=value["max_drawdown"],
             long=value["long"],
             short=value["short"],
         )
-        for candidate_id, value in facts.items()
+
+    candidates = tuple(
+        candidate_result(candidate_id, value) for candidate_id, value in facts.items()
     )
     result = BatchExperimentResult(
         experiment_id="exp-1",
@@ -646,6 +704,22 @@ def test_v2_supervisor_validates_and_durably_projects_full_assessment(tmp_path: 
     assert event["research_quality_assessment"] == result["research_quality_assessment"]
     assert updated["latest_quality_assessment"] == result["research_quality_assessment"]
     assert updated["promotion_history"][0]["decision"] == "eligible_for_next_stage"
+
+
+@pytest.mark.parametrize("field", ["gross_pnl", "fees_paid", "net_pnl"])
+def test_missing_optional_canonical_economic_fact_rejects_promotion_cleanly(
+    tmp_path: Path, field: str
+) -> None:
+    policy = _policy("exit_geometry")
+    _, root = _repo(tmp_path / "repo", policy)
+    state = load_json(root / "state.json")
+    artifact = _artifact(tmp_path, null_economic_field=field)
+    result = _iteration(artifact, _assessment("exit_geometry"))
+
+    with pytest.raises(
+        ContractError, match=rf"required canonical economic fact {field} is absent"
+    ):
+        validate_iteration_result(result, state, artifacts_root=tmp_path / "artifacts")
 
 
 def test_v1_session_rejects_v2_iteration_and_v2_rejects_v1(tmp_path: Path) -> None:

@@ -111,7 +111,15 @@ NumericString = Annotated[str, Field(pattern=r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?
 DESCRIPTIVE_ECONOMICS = {
     "gross_pnl", "fees_paid", "net_pnl", "return_pct", "profit_factor", "max_drawdown"
 }
-STRUCTURAL_PRIMARY = {
+BASELINE_PRIMARY_ALLOWED = {
+    "realised_trade_count", "open_position_count", "long.trades", "short.trades",
+}
+CONDITIONAL_ENTRY_EVIDENCE = {
+    "baseline_uplift", "win_rate", "long.win_rate", "short.win_rate",
+}
+SAMPLE_THINNING_EVIDENCE = {"realised_trade_count", "thinning"}
+SIDE_BEHAVIOR_EVIDENCE = {"long.win_rate", "short.win_rate"}
+STRUCTURAL_PRIMARY_ALLOWED = {
     "baseline_uplift", "response_topology", "neighborhood_stability",
     "realised_trade_count", "win_rate", "long.win_rate", "short.win_rate", "thinning",
     "temporal_concentration", "regime_concentration",
@@ -124,6 +132,10 @@ EXIT_PRIMARY = {
 ROBUSTNESS_PRIMARY = {
     "validation_evidence", "neighborhood_stability", "realised_trade_count", "thinning",
     "temporal_concentration", "regime_concentration",
+}
+ROBUSTNESS_PRIMARY_ALLOWED = ROBUSTNESS_PRIMARY | {
+    "response_topology", "win_rate", "long.trades", "long.win_rate", "short.trades",
+    "short.win_rate",
 }
 
 
@@ -479,24 +491,37 @@ def validate_metric_roles(assessment: ResearchQualityAssessment) -> None:
     primary = set(roles.primary)
     secondary = set(roles.secondary)
     if stage == "descriptive_baseline":
-        if primary & DESCRIPTIVE_ECONOMICS or roles.promotion_gates:
-            raise ValueError("baseline economics cannot be primary or promotion gates")
+        if not primary or not primary <= BASELINE_PRIMARY_ALLOWED:
+            raise ValueError("baseline primary evidence must measure control sample adequacy")
+        if "realised_trade_count" not in primary:
+            raise ValueError("baseline primary evidence requires realised_trade_count")
+        if roles.promotion_gates:
+            raise ValueError("baseline cannot define promotion gates")
     elif stage in {"structural_entry", "structural_interaction", "entry_region_selection"}:
-        if not primary or not primary <= STRUCTURAL_PRIMARY:
-            raise ValueError("structural stages require structural primary metric roles")
-        if primary & DESCRIPTIVE_ECONOMICS:
-            raise ValueError("structural-stage economics cannot be primary")
-        if not DESCRIPTIVE_ECONOMICS.intersection(secondary):
-            raise ValueError("structural stages must treat economics as secondary evidence")
+        if not primary <= STRUCTURAL_PRIMARY_ALLOWED:
+            raise ValueError("structural stage contains an invalid primary metric role")
+        if not secondary or not secondary <= DESCRIPTIVE_ECONOMICS:
+            raise ValueError("structural stages must keep economics in secondary evidence")
+        if not primary & CONDITIONAL_ENTRY_EVIDENCE:
+            raise ValueError("structural stage requires conditional entry-quality evidence")
+        if "response_topology" not in primary:
+            raise ValueError("structural stage requires response topology evidence")
+        if not primary & SAMPLE_THINNING_EVIDENCE:
+            raise ValueError("structural stage requires sample or thinning evidence")
+        if stage in {"structural_interaction", "entry_region_selection"}:
+            if "neighborhood_stability" not in primary:
+                raise ValueError(f"{stage} requires neighborhood evidence")
+            if not primary & SIDE_BEHAVIOR_EVIDENCE:
+                raise ValueError(f"{stage} requires side-behavior evidence")
         if "after_cost_positive" in roles.promotion_gates:
             raise ValueError("after-cost positivity cannot gate structural discovery")
     elif stage == "exit_geometry":
-        if not EXIT_PRIMARY <= primary:
+        if primary != EXIT_PRIMARY:
             raise ValueError("exit_geometry is missing required economic primary evidence")
         if "after_cost_positive" not in roles.promotion_gates:
             raise ValueError("exit_geometry must expose the after-cost promotion gate")
     else:
-        if not ROBUSTNESS_PRIMARY <= primary:
+        if not ROBUSTNESS_PRIMARY <= primary or not primary <= ROBUSTNESS_PRIMARY_ALLOWED:
             raise ValueError("robustness_validation is missing required primary evidence")
         if "after_cost_positive" not in roles.promotion_gates:
             raise ValueError("robustness promotion must expose the after-cost gate")
@@ -527,17 +552,30 @@ def _metric(candidate: dict[str, Any], path: str) -> Any:
     return value
 
 
+def _required_canonical_decimal(candidate: dict[str, Any], field: str) -> Decimal:
+    raw = candidate.get(field)
+    if raw is None:
+        raise ValueError(f"required canonical economic fact {field} is absent")
+    try:
+        value = Decimal(str(raw))
+    except (ArithmeticError, TypeError, ValueError) as exc:
+        raise ValueError(f"required canonical economic fact {field} is non-numeric") from exc
+    if not value.is_finite():
+        raise ValueError(f"required canonical economic fact {field} is non-numeric")
+    return value
+
+
 def _positive_and_consistent(candidate: dict[str, Any]) -> tuple[bool, bool]:
-    gross = Decimal(str(candidate["gross_pnl"]))
-    fees = Decimal(str(candidate["fees_paid"]))
-    net = Decimal(str(candidate["net_pnl"]))
-    return_pct = Decimal(str(candidate["return_pct"]))
+    gross = _required_canonical_decimal(candidate, "gross_pnl")
+    fees = _required_canonical_decimal(candidate, "fees_paid")
+    net = _required_canonical_decimal(candidate, "net_pnl")
+    return_pct = _required_canonical_decimal(candidate, "return_pct")
     profit_factor_raw = candidate.get("profit_factor")
     consistent = gross - fees == net and ((net > 0) == (return_pct > 0))
     if net == 0:
         consistent = consistent and return_pct == 0
     if profit_factor_raw is not None:
-        profit_factor = Decimal(str(profit_factor_raw))
+        profit_factor = _required_canonical_decimal(candidate, "profit_factor")
         consistent = consistent and (
             (net > 0 and profit_factor > 1)
             or (net == 0 and profit_factor == 1)
@@ -545,7 +583,7 @@ def _positive_and_consistent(candidate: dict[str, Any]) -> tuple[bool, bool]:
         )
     positive = net > 0 and return_pct > 0
     if profit_factor_raw is not None:
-        positive = positive and Decimal(str(profit_factor_raw)) > 1
+        positive = positive and profit_factor > 1
     elif candidate.get("realised_trade_count", 0) == 0:
         positive = False
     return positive, consistent
