@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -343,12 +344,67 @@ def _session_state(tmp_path: Path) -> dict[str, object]:
     return load_json(root / "state.json")
 
 
-def test_wrong_experiment_batch_artifact_is_rejected(tmp_path: Path) -> None:
+def _validate_test_batch(iteration: dict[str, object], tmp_path: Path) -> None:
+    validate_iteration_result(
+        iteration,
+        _session_state(tmp_path / "repo"),
+        artifacts_root=tmp_path / "artifacts",
+    )
+
+
+def test_valid_canonical_batch_artifact_is_accepted(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    artifact = _canonical_batch_artifact(tmp_path)
+    monkeypatch.setenv("RESEARCH_ARTIFACTS_ROOT", str(tmp_path / "artifacts"))
+    validate_iteration_result(
+        _batch_iteration(artifact), _session_state(tmp_path / "repo")
+    )
+
+
+def test_valid_looking_session_bundle_is_rejected(tmp_path: Path) -> None:
+    artifact = _canonical_batch_artifact(tmp_path)
+    fake = tmp_path / "var/autoresearch/s1/iterations/0001/fake-batch"
+    shutil.copytree(artifact, fake)
+    with pytest.raises(ContractError, match="canonical path"):
+        _validate_test_batch(_batch_iteration(fake), tmp_path)
+
+
+def test_valid_looking_bundle_outside_artifacts_root_is_rejected(
+    tmp_path: Path,
+) -> None:
+    artifact = _canonical_batch_artifact(tmp_path)
+    outside = tmp_path / "outside/exp-1"
+    shutil.copytree(artifact, outside)
+    with pytest.raises(ContractError, match="canonical path"):
+        _validate_test_batch(_batch_iteration(outside), tmp_path)
+
+
+def test_traversal_and_symlink_escape_are_rejected(tmp_path: Path) -> None:
+    traversal_root = tmp_path / "traversal"
+    artifact = _canonical_batch_artifact(traversal_root)
+    traversal = artifact.parent / ".." / "batches" / artifact.name
+    with pytest.raises(ContractError, match="traversal"):
+        _validate_test_batch(_batch_iteration(traversal), traversal_root)
+
+    symlink_root = tmp_path / "symlink"
+    artifact = _canonical_batch_artifact(symlink_root)
+    outside = symlink_root / "outside/exp-1"
+    shutil.copytree(artifact, outside)
+    shutil.rmtree(artifact)
+    artifact.symlink_to(outside, target_is_directory=True)
+    with pytest.raises(ContractError, match="escapes"):
+        _validate_test_batch(_batch_iteration(artifact), symlink_root)
+
+
+def test_canonical_experiment_path_for_wrong_experiment_is_rejected(
+    tmp_path: Path,
+) -> None:
     artifact = _canonical_batch_artifact(tmp_path)
     iteration = _batch_iteration(artifact)
     iteration["experiment"]["experiment_id"] = "wrong-exp"
-    with pytest.raises(ContractError, match="experiment_id"):
-        validate_iteration_result(iteration, _session_state(tmp_path / "repo"))
+    with pytest.raises(ContractError, match="canonical path"):
+        _validate_test_batch(iteration, tmp_path)
 
 
 def test_tampered_batch_summary_is_rejected_by_hash(tmp_path: Path) -> None:
@@ -356,9 +412,7 @@ def test_tampered_batch_summary_is_rejected_by_hash(tmp_path: Path) -> None:
     summary = artifact / "summary.json"
     summary.write_bytes(summary.read_bytes() + b"\n")
     with pytest.raises(ContractError, match="sha256"):
-        validate_iteration_result(
-            _batch_iteration(artifact), _session_state(tmp_path / "repo")
-        )
+        _validate_test_batch(_batch_iteration(artifact), tmp_path)
 
 
 def test_fake_batch_run_ids_are_rejected(tmp_path: Path) -> None:
@@ -366,7 +420,7 @@ def test_fake_batch_run_ids_are_rejected(tmp_path: Path) -> None:
     iteration = _batch_iteration(artifact)
     iteration["execution_result"]["run_ids"] = ["fake-run"]
     with pytest.raises(ContractError, match="run_ids"):
-        validate_iteration_result(iteration, _session_state(tmp_path / "repo"))
+        _validate_test_batch(iteration, tmp_path)
 
 
 def test_mismatched_batch_candidate_ids_are_rejected(tmp_path: Path) -> None:
@@ -376,9 +430,7 @@ def test_mismatched_batch_candidate_ids_are_rejected(tmp_path: Path) -> None:
     request["candidates"][0]["candidate_id"] = "other-candidate"
     request_path.write_text(json.dumps(request))
     with pytest.raises(ContractError, match="candidate IDs"):
-        validate_iteration_result(
-            _batch_iteration(artifact), _session_state(tmp_path / "repo")
-        )
+        _validate_test_batch(_batch_iteration(artifact), tmp_path)
 
 
 def test_mismatched_batch_candidate_counts_are_rejected(tmp_path: Path) -> None:
@@ -386,7 +438,7 @@ def test_mismatched_batch_candidate_counts_are_rejected(tmp_path: Path) -> None:
     iteration = _batch_iteration(artifact)
     iteration["execution_result"].update(completed_candidates=0, failed_candidates=1)
     with pytest.raises(ContractError, match="counts"):
-        validate_iteration_result(iteration, _session_state(tmp_path / "repo"))
+        _validate_test_batch(iteration, tmp_path)
 
 
 def test_mismatched_batch_market_data_hash_is_rejected(tmp_path: Path) -> None:
@@ -394,7 +446,7 @@ def test_mismatched_batch_market_data_hash_is_rejected(tmp_path: Path) -> None:
     iteration = _batch_iteration(artifact)
     iteration["execution_result"]["market_data_hash"] = "wrong-hash"
     with pytest.raises(ContractError, match="market_data_hash"):
-        validate_iteration_result(iteration, _session_state(tmp_path / "repo"))
+        _validate_test_batch(iteration, tmp_path)
 
 
 def test_different_canonical_candidate_market_hashes_are_rejected(
@@ -409,4 +461,4 @@ def test_different_canonical_candidate_market_hashes_are_rejected(
         completed_candidates=2,
     )
     with pytest.raises(ContractError, match="different market_data_hash"):
-        validate_iteration_result(iteration, _session_state(tmp_path / "repo"))
+        _validate_test_batch(iteration, tmp_path)

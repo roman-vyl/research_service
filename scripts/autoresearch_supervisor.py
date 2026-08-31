@@ -23,6 +23,7 @@ from research_service.application.experiments import (
     BatchExperimentRequest,
     BatchExperimentResult,
 )
+from research_service.runtime.settings import Settings
 
 STATE_VERSION = "bbb_autoresearch_state.v1"
 ITERATION_VERSION = "bbb_autoresearch_iteration.v1"
@@ -256,7 +257,12 @@ def validate_state_transition(previous: dict[str, Any], current: dict[str, Any])
         raise ContractError("terminal session state cannot transition")
 
 
-def validate_iteration_result(result: dict[str, Any], state: dict[str, Any]) -> None:
+def validate_iteration_result(
+    result: dict[str, Any],
+    state: dict[str, Any],
+    *,
+    artifacts_root: Path | None = None,
+) -> None:
     if result.get("contract_version") != ITERATION_VERSION:
         raise ContractError(f"contract_version must be {ITERATION_VERSION}")
     _require_exact_keys(result, _ITERATION_KEYS, "iteration result")
@@ -346,7 +352,7 @@ def validate_iteration_result(result: dict[str, Any], state: dict[str, Any]) -> 
         artifact_path = execution.get("batch_artifact_path")
         if not isinstance(artifact_path, str) or not artifact_path:
             raise ContractError("batch execution requires batch_artifact_path")
-        _verify_batch_artifact(result)
+        _verify_batch_artifact(result, artifacts_root=artifacts_root)
     elif execution["completed_candidates"] + execution["failed_candidates"] != count:
         raise ContractError("execution candidate counts must match experiment candidate_count")
     candidate_budget = state["budgets"].get("max_candidates_per_iteration")
@@ -354,20 +360,44 @@ def validate_iteration_result(result: dict[str, Any], state: dict[str, Any]) -> 
         raise ContractError("candidate count exceeds session budget")
 
 
-def _verify_batch_artifact(result: dict[str, Any]) -> None:
+def _verify_batch_artifact(
+    result: dict[str, Any], *, artifacts_root: Path | None = None
+) -> None:
     experiment = result["experiment"]
     execution = result["execution_result"]
     artifact = Path(execution["batch_artifact_path"])
+    configured_root = artifacts_root if artifacts_root is not None else Settings().artifacts_root
+    if ".." in artifact.parts:
+        raise ContractError("batch artifact path must not contain traversal components")
+    experiment_id = experiment["experiment_id"]
+    try:
+        raw_expected = configured_root.absolute() / "batches" / experiment_id
+        if artifact.absolute() != raw_expected:
+            raise ContractError(
+                "batch artifact path is not the canonical path for this experiment"
+            )
+        resolved_root = configured_root.resolve(strict=True)
+        resolved_artifact = artifact.resolve(strict=True)
+    except (OSError, RuntimeError) as exc:
+        raise ContractError(f"batch artifact path cannot be resolved safely: {exc}") from exc
+    resolved_expected = resolved_root / "batches" / experiment_id
+    if (
+        not resolved_artifact.is_relative_to(resolved_root)
+        or resolved_artifact != resolved_expected
+    ):
+        raise ContractError("batch artifact path escapes the canonical artifact namespace")
     required = ("request.json", "summary.json", "manifest.json")
-    if not artifact.is_dir() or any(not (artifact / name).is_file() for name in required):
+    if not resolved_artifact.is_dir() or any(
+        not (resolved_artifact / name).is_file() for name in required
+    ):
         raise ContractError("batch artifact path is not a canonical persisted batch bundle")
     try:
         request = BatchExperimentRequest.model_validate_json(
-            (artifact / "request.json").read_bytes()
+            (resolved_artifact / "request.json").read_bytes()
         )
-        summary_bytes = (artifact / "summary.json").read_bytes()
+        summary_bytes = (resolved_artifact / "summary.json").read_bytes()
         summary = BatchExperimentResult.model_validate_json(summary_bytes)
-        manifest = load_json(artifact / "manifest.json")
+        manifest = load_json(resolved_artifact / "manifest.json")
     except (OSError, ValidationError) as exc:
         raise ContractError(f"canonical batch artifact is invalid: {exc}") from exc
     manifest_keys = {
@@ -386,7 +416,6 @@ def _verify_batch_artifact(result: dict[str, Any]) -> None:
     for key in ("candidate_count", "completed_count", "failed_count"):
         if type(manifest[key]) is not int or manifest[key] < 0:
             raise ContractError(f"batch manifest {key} is invalid")
-    experiment_id = experiment["experiment_id"]
     identities = {experiment_id, request.experiment_id, summary.experiment_id,
                   manifest["experiment_id"]}
     if len(identities) != 1:

@@ -81,7 +81,9 @@ Experiments SHALL use current canonical candidate contracts, live config validat
 SHALL NOT implement simulation, accounting, metric derivation, direct MDS/Strategy Engine research
 execution, or a second summary format. Before accepting a batch result, the supervisor SHALL verify
 the canonical request/summary/manifest identity, summary hash, candidate identities and counts,
-completed run IDs, and shared completed-candidate market-data hash against the worker result.
+completed run IDs, and shared completed-candidate market-data hash against the worker result. Before
+reading that bundle, it SHALL resolve the reported path and require the exact canonical
+`<Settings().artifacts_root>/batches/<experiment_id>` location without traversal or symlink escape.
 
 #### Scenario: Valid batch experiment
 
@@ -93,6 +95,12 @@ completed run IDs, and shared completed-candidate market-data hash against the w
 
 - **WHEN** a worker result disagrees with its canonical request, summary, or manifest
 - **THEN** the supervisor rejects the result without recomputing trading metrics.
+
+#### Scenario: Valid-looking bundle outside canonical storage
+
+- **WHEN** a worker reports a structurally valid bundle below its session directory or another
+  non-canonical path
+- **THEN** the supervisor rejects it before reading bundle contents.
 
 ### Requirement: Reproducible compact journal
 

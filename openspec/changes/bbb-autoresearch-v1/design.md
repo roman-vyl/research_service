@@ -32,7 +32,10 @@ training, evaluator changes, and code or skill self-modification.
    batch adapter uses `create_app()`'s existing composition, current `ValidateStrategyConfig`,
    `RunBatchExperiment`, and `PersistBatchExperiment`. It contains no trading logic.
 2. **Worker decides; supervisor enforces.** The supervisor never selects a hypothesis or compares a
-   scalar metric. It validates process, contracts, budgets, paths, and transitions only.
+   scalar metric. It validates process, contracts, budgets, paths, and transitions only. A reported
+   batch bundle is read only after its resolved path exactly matches
+   `<Settings().artifacts_root>/batches/<experiment_id>`; structurally valid worker-authored copies
+   and traversal or symlink escapes fail closed.
 3. **One process per attempt.** Every normal iteration and retry starts a new command. The worker
    reads program, skill, state, and journal and writes exactly one result before exiting.
 4. **State is compact; journal is append-only.** Atomic temp-write/fsync/replace publishes state.
