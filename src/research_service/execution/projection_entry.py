@@ -16,6 +16,7 @@ fill engine.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from decimal import Decimal
 
 from research_service.domain.contracts import (
@@ -34,7 +35,9 @@ from research_service.domain.execution import (
     InitialProtectionAttribution,
     PositionState,
 )
-from research_service.execution.entry import execute_entry
+from research_service.execution.entry import execute_entry, resolve_entry_fill_price
+
+EntryQuantityProvider = Callable[[EntryDecision, Decimal], Decimal]
 
 
 def entry_opportunity_at(
@@ -141,6 +144,7 @@ def try_open_projection_position(
     instance_id: str,
     bar_index: int,
     current_position: PositionState | None,
+    entry_quantity_provider: EntryQuantityProvider,
 ) -> PositionState | None:
     """Open at most one ready, initially protected, locked-profile
     position for an instance -- the projection-driven counterpart to
@@ -164,7 +168,9 @@ def try_open_projection_position(
         time_ms=candle.open_time_ms,
         reference_price=candle.close,
     )
-    fill = execute_entry(decision, policy)
+    fill_price = resolve_entry_fill_price(decision, policy)
+    quantity = entry_quantity_provider(decision, fill_price)
+    fill = execute_entry(decision, policy, quantity=quantity)
     protection = resolve_initial_protection_from_opportunity(opportunity, fill)
     return PositionState(
         position_id=f"position:{instance_id}:{side}:{bar_index}",

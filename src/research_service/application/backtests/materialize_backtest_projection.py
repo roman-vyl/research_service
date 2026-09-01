@@ -10,8 +10,13 @@ from __future__ import annotations
 import uuid
 from dataclasses import dataclass
 
-from research_service.accounting.contracts import TradeAccountingResult
-from research_service.accounting.service import account_execution_loop
+from decimal import Decimal
+
+from research_service.accounting.contracts import TradeAccountingResult, TradeRecord
+from research_service.accounting.service import (
+    account_closed_execution,
+    build_trade_accounting_result,
+)
 from research_service.application.backtests.contracts import SingleInstanceBacktestRequest
 from research_service.domain.contracts import (
     HistoricalExecutionProjectionDTO,
@@ -21,7 +26,12 @@ from research_service.domain.contracts import (
     MarketFrame,
     validate_projection_alignment,
 )
-from research_service.domain.execution import ExecutionLoopResult, PositionState
+from research_service.domain.execution import (
+    EntryDecision,
+    ExecutionLoopResult,
+    PositionExecution,
+    PositionState,
+)
 from research_service.execution.managed_policy_events import (
     ManagedPolicyEvent,
     capture_managed_policy_events,
@@ -30,6 +40,7 @@ from research_service.execution.projection_loop import (
     ManagedReplayProvider,
     run_projection_execution_loop,
 )
+from research_service.execution.sizing import calculate_full_equity_quantity
 from research_service.ports.strategy_engine import StrategyEnginePort
 
 
@@ -79,14 +90,42 @@ class MaterializeBacktestProjectionOutcome:
             if request.managed_policy_enabled
             else None
         )
+        current_equity = request.accounting.initial_equity
+        trade_records: list[TradeRecord] = []
+
+        def size_entry(_decision: EntryDecision, actual_fill_price: Decimal) -> Decimal:
+            return calculate_full_equity_quantity(
+                current_equity,
+                actual_fill_price,
+                request.accounting.entry_fee_rate,
+            )
+
+        def account_close(position_execution: PositionExecution) -> None:
+            nonlocal current_equity
+            record = account_closed_execution(
+                position_execution,
+                market_frame,
+                request.accounting,
+                equity_before=current_equity,
+                ordinal=len(trade_records) + 1,
+            )
+            trade_records.append(record)
+            current_equity = record.equity_after
+
         execution = run_projection_execution_loop(
             instance_id,
             index,
             market_frame,
             request.execution,
             managed_replay_provider=managed_provider,
+            entry_quantity_provider=size_entry,
+            closed_position_consumer=account_close,
         )
-        accounting = account_execution_loop(execution, market_frame, request.accounting)
+        accounting = build_trade_accounting_result(
+            execution,
+            request.accounting,
+            tuple(trade_records),
+        )
 
         return SingleInstanceRunOutcome(
             run_id=_generate_run_id(),

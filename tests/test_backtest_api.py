@@ -57,7 +57,7 @@ def payload() -> dict[str, object]:
     request = BacktestRunRequest(
         strategy=deployable_instance(),
         range=ExplicitRange(from_ms=0, to_ms=900_000),
-        execution=ExecutionPolicy(quantity=Decimal("2")),
+        execution=ExecutionPolicy(),
         accounting=AccountingPolicy(
             initial_equity=Decimal("1000"),
             entry_fee_rate=Decimal("0.001"),
@@ -85,14 +85,23 @@ def test_post_backtest_runs_persists_and_returns_summary(tmp_path: Path) -> None
         "instance_id": INSTANCE_ID,
         "realised_trade_count": 1,
         "open_position_count": 0,
-        "final_equity": "1009.59000",
-        "net_pnl": "9.59000",
+        "final_equity": "1047.902097902097902097902098",
+        "net_pnl": "47.90209790209790209790209790",
         "artifact_path": str(tmp_path / run_id),
         "manifest_contract_version": "research_run_artifacts.v1",
         "market_data_hash": "market-hash",
     }
     assert (tmp_path / run_id / "manifest.json").is_file()
     assert (tmp_path / run_id / "result.json").is_file()
+
+
+def test_fixed_quantity_is_rejected_by_canonical_request(tmp_path: Path) -> None:
+    body = payload()
+    body["execution"] = {"quantity": "1"}
+
+    response = build_client(tmp_path).post("/api/research/backtests", json=body)
+
+    assert response.status_code == 422
 
 
 def test_two_identical_requests_create_two_distinct_runs(tmp_path: Path) -> None:

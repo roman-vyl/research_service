@@ -15,6 +15,7 @@ from research_service.adapters.http.strategy_engine_client import HttpStrategyEn
 from research_service.application.backtests import (
     MaterializeBacktestProjectionOutcome,
     PersistSingleInstanceRun,
+    build_backtest_request,
 )
 from research_service.application.experiments import (
     BatchCandidateRequest,
@@ -63,7 +64,7 @@ def candidate(marker: str, **overrides: object) -> BatchCandidateRequest:
     payload: dict[str, object] = {
         "candidate_id": marker,
         "strategy": deployable_instance(marker),
-        "execution": ExecutionPolicy(quantity=Decimal("2")),
+        "execution": ExecutionPolicy(),
         "accounting": AccountingPolicy(
             initial_equity=Decimal("1000"),
             entry_fee_rate=Decimal("0.001"),
@@ -115,6 +116,40 @@ def test_batch_runs_all_candidates_and_shares_one_evaluation(tmp_path: Path) -> 
     assert all(item.run_id for item in result.candidates)
     assert len({item.run_id for item in result.candidates}) == 3
     assert len({item.instance_id for item in result.candidates}) == 3
+
+
+def test_single_and_batch_use_identical_canonical_sizing_path(tmp_path: Path) -> None:
+    selected = candidate("same")
+    projection = strategy_projection()
+    strategy = FakeStrategyEngine(projection)
+    frame = market_frame()
+    direct_request = build_backtest_request(
+        selected.strategy,
+        range=ExplicitRange(from_ms=0, to_ms=900_000),
+        execution=selected.execution,
+        accounting=selected.accounting,
+        managed_policy_enabled=False,
+    )
+    instance_id = derive_strategy_instance_id(
+        strategy_id=selected.strategy.strategy_id,
+        ticker=selected.strategy.ticker,
+        base_timeframe=selected.strategy.base_timeframe,
+        raw_spec=selected.strategy.raw_spec,
+    )
+    direct = MaterializeBacktestProjectionOutcome(strategy).execute(
+        direct_request, instance_id, projection, frame
+    )
+
+    batch, _ = build_use_case(strategy, FakeMarketData(frame), tmp_path)
+    result = batch.execute(make_request(selected))
+    run_id = result.candidates[0].run_id
+    assert run_id is not None
+    persisted_trades = json.loads((tmp_path / run_id / "trades.json").read_text())
+    persisted_metrics = json.loads((tmp_path / run_id / "metrics.json").read_text())
+
+    assert persisted_trades == [trade.model_dump(mode="json") for trade in direct.accounting.trades]
+    assert persisted_metrics["final_equity"] == str(direct.accounting.final_equity)
+    assert persisted_metrics["net_pnl"] == str(direct.accounting.net_pnl)
 
 
 # --- Shared acquisition: the main acceptance test ---------------------------

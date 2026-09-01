@@ -18,13 +18,12 @@ class ExecutionPolicy(BaseModel):
     Entry fills support explicit adverse slippage. Initial stop/take levels
     are always anchored to the signal-bar close -- the original BBB v1
     engine's VectorBT/managed-loop anchor, not a caller-selectable profile;
-    there is no other supported anchor. Fees are intentionally deferred to
-    accounting.
+    there is no other supported anchor. Canonical quantity is derived by the
+    Research application lifecycle, not supplied as an execution assumption.
     """
 
-    model_config = ConfigDict(frozen=True)
+    model_config = ConfigDict(frozen=True, extra="forbid")
 
-    quantity: Decimal = Field(default=Decimal("1"), gt=0)
     entry_slippage_rate: Decimal = Field(default=Decimal("0"), ge=0, lt=1)
     entry_price_source: Literal["signal_bar_close"] = "signal_bar_close"
     protection_anchor: Literal["signal_bar_close"] = "signal_bar_close"

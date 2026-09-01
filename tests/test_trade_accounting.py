@@ -63,7 +63,8 @@ def test_long_trade_fees_pnl_equity_and_path() -> None:
     execution = run_unified_execution_loop(
         evaluation(),
         frame(),
-        ExecutionPolicy(quantity=Decimal("2")),
+        ExecutionPolicy(),
+        quantity=Decimal("2"),
     )
     result = account_execution_loop(
         execution,
@@ -105,7 +106,8 @@ def test_short_trade_uses_inverse_price_direction() -> None:
     execution = run_unified_execution_loop(
         evaluation(side="short"),
         custom,
-        ExecutionPolicy(quantity=Decimal("3")),
+        ExecutionPolicy(),
+        quantity=Decimal("3"),
     )
     result = account_execution_loop(
         execution, custom, AccountingPolicy(initial_equity=Decimal("500"))

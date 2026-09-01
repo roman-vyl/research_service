@@ -30,7 +30,7 @@ def account_execution_loop(
     for position_execution in execution.positions:
         if position_execution.status == "open":
             continue
-        record = _account_closed_execution(
+        record = account_closed_execution(
             position_execution,
             market,
             policy,
@@ -40,23 +40,34 @@ def account_execution_loop(
         records.append(record)
         equity = record.equity_after
 
+    return build_trade_accounting_result(execution, policy, tuple(records))
+
+
+def build_trade_accounting_result(
+    execution: ExecutionLoopResult,
+    policy: AccountingPolicy,
+    records: tuple[TradeRecord, ...],
+) -> TradeAccountingResult:
+    """Aggregate records already produced by the sequential lifecycle."""
+
+    final_equity = records[-1].equity_after if records else policy.initial_equity
     gross = sum((item.gross_pnl for item in records), Decimal("0"))
     fees = sum((item.fees_paid for item in records), Decimal("0"))
     net = sum((item.net_pnl for item in records), Decimal("0"))
     return TradeAccountingResult(
         instance_id=execution.instance_id,
         initial_equity=policy.initial_equity,
-        final_equity=equity,
+        final_equity=final_equity,
         realised_trade_count=len(records),
         open_position_count=1 if execution.final_open_position is not None else 0,
         gross_pnl=gross,
         fees_paid=fees,
         net_pnl=net,
-        trades=tuple(records),
+        trades=records,
     )
 
 
-def _account_closed_execution(
+def account_closed_execution(
     execution: PositionExecution,
     market: MarketFrame,
     policy: AccountingPolicy,
@@ -64,6 +75,10 @@ def _account_closed_execution(
     equity_before: Decimal,
     ordinal: int,
 ) -> TradeRecord:
+    """Account one close immediately against the coordinator's equity."""
+
+    if not equity_before.is_finite() or equity_before <= 0:
+        raise InvalidRequest("equity before trade must be finite and positive")
     exit_fill = execution.exit_fill
     if exit_fill is None:
         raise InvalidRequest("closed position execution has no exit fill")
@@ -85,6 +100,10 @@ def _account_closed_execution(
     net = gross - fees
     path = _calculate_path(execution, market)
     hold_bars = exit_fill.bar_index - entry.bar_index + 1
+
+    equity_after = equity_before + net
+    if not equity_after.is_finite() or equity_after <= 0:
+        raise InvalidRequest("closed trade produces non-positive or non-finite equity")
 
     return TradeRecord(
         trade_id=f"trade:{execution.position.position_id}:{ordinal}",
@@ -108,7 +127,7 @@ def _account_closed_execution(
         gross_return_pct=gross / entry_notional,
         net_return_pct=net / entry_notional,
         equity_before=equity_before,
-        equity_after=equity_before + net,
+        equity_after=equity_after,
         hold_bars=hold_bars,
         hold_ms=exit_fill.time_ms - entry.time_ms,
         exit_candidate_type=exit_fill.candidate_type,
