@@ -22,25 +22,32 @@ from research_service.domain.strategy_instance import DeployableStrategyInstance
 sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
 
 from autoresearch_init import initialize_session  # noqa: E402
+import autoresearch_supervisor as supervisor_module  # noqa: E402
 from autoresearch_supervisor import (  # noqa: E402
     ContractError,
     _advance_state,
+    _command_args,
+    _freeze_plan,
     _journal_event,
+    _sha256,
     append_journal,
     atomic_write_json,
     load_json,
     run_supervisor,
+    validate_execution_receipt,
     validate_iteration_result,
 )
 
 
-FAKE_AGENT = r'''#!/usr/bin/env python3
+FAKE_AGENT = r"""#!/usr/bin/env python3
 import json
+import os
 import pathlib
 import sys
 
 result_path = pathlib.Path(sys.argv[1])
-mode = sys.argv[2]
+stage = sys.argv[2]
+mode = sys.argv[3]
 iteration_id = int(result_path.parent.name)
 if mode == "crash":
     raise SystemExit(7)
@@ -49,6 +56,49 @@ if mode == "malformed":
     raise SystemExit(0)
 if mode == "mutate":
     pathlib.Path("tracked.txt").write_text("changed\n")
+if mode == "uv_lock":
+    (result_path.parent / "uv.lock").write_text("lock")
+if mode == "shim":
+    (result_path.parent / "sitecustomize.py").write_text("# shim")
+if mode == "market_db":
+    (result_path.parent / "market.sqlite3").write_bytes(b"db")
+if mode == "mutate_state":
+    (result_path.parent.parents[1] / "state.json").write_text("{}")
+if mode == "env_probe" and stage == "interpretation":
+    analysis = result_path.parent / "interpretation_analysis"
+    analysis.mkdir(exist_ok=True)
+    (analysis / "env.json").write_text(json.dumps({
+      "marker": os.getenv("AUTORESEARCH_TEST_MARKER"), "virtual_env": os.getenv("VIRTUAL_ENV"),
+      "path": os.getenv("PATH"), "research_keys": sorted(k for k in os.environ if k.upper().startswith("RESEARCH_"))
+    }))
+
+if stage == "planning":
+    action = "hard_stop" if mode == "hard_stop" else ("terminal" if mode == "terminal" else ("batch" if mode == "batch" else "artifact_diagnostic"))
+    request = None
+    if action == "batch":
+        request = {"experiment_id": "exp-1", "strategy_id": "ema_pullback",
+          "range_policy": "explicit_range", "range": {"from_ms": 0, "to_ms": 300000},
+          "description": None, "candidates": [{"candidate_id": "c1",
+          "strategy": {"enabled": True, "strategy_id": "ema_pullback", "ticker": "BTCUSDT.P",
+          "base_timeframe": "5m", "raw_spec": {"anchor": {"period": 200}}},
+          "managed_policy_enabled": False, "execution": {"entry_price_source": "signal_bar_close", "entry_slippage_rate": "0", "protection_anchor": "signal_bar_close"},
+          "accounting": {"initial_equity": "10000", "entry_fee_rate": "0", "exit_fee_rate": "0"}, "metadata": {}}]}
+    plan = {
+      "contract_version": "bbb_autoresearch_execution_plan.v1", "session_id": "s1",
+      "iteration_id": iteration_id, "phase": "baseline", "hypothesis": "test hypothesis",
+      "question": "what next?", "market_property_proxy": "test proxy",
+      "competing_explanation": "alternative", "action": action, "canonical_request": request,
+      "explanatory_metadata": {},
+      "hard_stop_reason": "contract ambiguity" if action == "hard_stop" else None
+    }
+    if mode == "env_probe":
+        plan["explanatory_metadata"] = {
+          "marker": os.getenv("AUTORESEARCH_TEST_MARKER"), "virtual_env": os.getenv("VIRTUAL_ENV"),
+          "path": os.getenv("PATH"), "research_keys": sorted(k for k in os.environ if k.upper().startswith("RESEARCH_"))
+        }
+    if mode == "schema_invalid": plan["unexpected"] = True
+    result_path.write_text(json.dumps(plan))
+    raise SystemExit(0)
 
 proposed = None
 status = "completed"
@@ -58,6 +108,8 @@ if mode == "continue_then_complete" and iteration_id == 1:
 if mode == "hard_stop":
     status = "hard_stop"
     hard_reason = "contract ambiguity"
+if mode == "batch":
+    receipt = json.loads((result_path.parent / "execution_receipt.json").read_text())
 result = {
   "contract_version": "bbb_autoresearch_iteration.v1",
   "session_id": "s1", "iteration_id": iteration_id, "status": status,
@@ -81,17 +133,25 @@ result = {
   "next_discriminating_question": "what next?",
   "proposed_next_experiment": proposed, "hard_stop_reason": hard_reason
 }
+if mode in {"terminal", "hard_stop"}:
+    result["experiment"]["kind"] = "none"
+if mode == "batch":
+    result["experiment"].update(kind="batch", experiment_id="exp-1", candidate_ids=["c1"], candidate_count=1,
+      window_policy={"range_policy": "explicit_range"}, execution_accounting_assumptions={})
+    result["execution_result"].update(batch_artifact_path=receipt["batch_artifact_path"], run_ids=["run_1"],
+      market_data_hash="market-hash", completed_candidates=1)
 if mode == "schema_invalid":
     result["unexpected"] = True
 result_path.write_text(json.dumps(result))
-'''
+"""
 
 
 def _repo(tmp_path: Path) -> tuple[Path, Path]:
     (tmp_path / "autoresearch/prompts").mkdir(parents=True)
     source_root = Path(__file__).parents[1]
-    prompt = (source_root / "autoresearch/prompts/iteration.md").read_text()
-    (tmp_path / "autoresearch/prompts/iteration.md").write_text(prompt)
+    for name in ("iteration.md", "planning.md", "interpretation.md"):
+        prompt = (source_root / "autoresearch/prompts" / name).read_text()
+        (tmp_path / "autoresearch/prompts" / name).write_text(prompt)
     bootstrap = (source_root / "autoresearch/prompts/bootstrap.md").read_text()
     (tmp_path / "autoresearch/prompts/bootstrap.md").write_text(bootstrap)
     (tmp_path / "autoresearch/program.md").write_text("program")
@@ -121,7 +181,7 @@ def _repo(tmp_path: Path) -> tuple[Path, Path]:
 
 
 def _command(repo: Path, mode: str) -> str:
-    return f"{sys.executable} {repo / 'fake_agent.py'} {{result_file}} {mode}"
+    return f"{sys.executable} {repo / 'fake_agent.py'} {{result_file}} {{stage}} {mode}"
 
 
 def test_fresh_invocation_continues_then_completes(tmp_path: Path) -> None:
@@ -138,12 +198,11 @@ def test_fresh_invocation_continues_then_completes(tmp_path: Path) -> None:
     assert state["short_interpretation"] == "short"
     assert state["side_asymmetry"] == "long differs from short"
     assert state["thinning_risk"] == "explicit thinning risk"
-    assert state["temporal_regime_concentration_concern"] == (
-        "explicit concentration concern"
-    )
+    assert state["temporal_regime_concentration_concern"] == ("explicit concentration concern")
     assert state["other_confounders"] == ["other confounder"]
-    assert (root / "iterations/0001/stdout.log").is_file()
-    assert (root / "iterations/0002/stdout.log").is_file()
+    assert (root / "iterations/0001/planning.stdout.log").is_file()
+    assert (root / "iterations/0001/interpretation.stdout.log").is_file()
+    assert (root / "iterations/0002/planning.stdout.log").is_file()
     assert len((root / "journal.jsonl").read_text().splitlines()) == 2
 
 
@@ -153,7 +212,13 @@ def test_restart_resumes_at_next_iteration(tmp_path: Path) -> None:
     seed_path = root / "seed/0001/iteration_result.json"
     seed_path.parent.mkdir(parents=True)
     subprocess.run(
-        [sys.executable, str(repo / "fake_agent.py"), str(seed_path), "continue_then_complete"],
+        [
+            sys.executable,
+            str(repo / "fake_agent.py"),
+            str(seed_path),
+            "interpretation",
+            "continue_then_complete",
+        ],
         cwd=repo,
         check=True,
     )
@@ -161,9 +226,12 @@ def test_restart_resumes_at_next_iteration(tmp_path: Path) -> None:
     append_journal(root / "journal.jsonl", _journal_event(state, first_result))
     atomic_write_json(root / "state.json", _advance_state(state, first_result))
 
-    assert run_supervisor(
-        session_id="s1", agent_command=_command(repo, "continue_then_complete"), repo_root=repo
-    ) == 0
+    assert (
+        run_supervisor(
+            session_id="s1", agent_command=_command(repo, "continue_then_complete"), repo_root=repo
+        )
+        == 0
+    )
     assert load_json(root / "state.json")["iteration"] == 2
     assert not (root / "iterations/0001").exists()
     assert (root / "iterations/0002").exists()
@@ -171,20 +239,330 @@ def test_restart_resumes_at_next_iteration(tmp_path: Path) -> None:
 
 def test_hard_stop_result_launches_no_next_worker(tmp_path: Path) -> None:
     repo, root = _repo(tmp_path)
-    assert run_supervisor(
-        session_id="s1", agent_command=_command(repo, "hard_stop"), repo_root=repo
-    ) == 2
+    assert (
+        run_supervisor(session_id="s1", agent_command=_command(repo, "hard_stop"), repo_root=repo)
+        == 2
+    )
     assert load_json(root / "state.json")["status"] == "hard_stopped"
     assert not (root / "iterations/0002").exists()
 
 
+@pytest.mark.parametrize("mode", ["continue_then_complete", "terminal", "hard_stop"])
+def test_non_batch_actions_use_fresh_interpreter_without_executor_or_receipt(
+    tmp_path: Path, mode: str
+) -> None:
+    repo, root = _repo(tmp_path)
+    code = run_supervisor(
+        session_id="s1", agent_command=_command(repo, mode), repo_root=repo, max_iterations=1
+    )
+    assert code in {0, 2}
+    iteration = root / "iterations/0001"
+    metadata = load_json(iteration / "supervisor_metadata.json")
+    assert len(metadata["planning_attempts"]) == 1
+    assert len(metadata["interpretation_attempts"]) == 1
+    assert not (iteration / "execution_receipt.json").exists()
+    assert not (iteration / "execution_output.json").exists()
+    assert not (iteration / "executor.stdout.log").exists()
+    assert len((root / "journal.jsonl").read_text().splitlines()) == 1
+
+
+def test_worker_env_preserves_cli_runtime_and_removes_research_namespace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, root = _repo(tmp_path)
+    monkeypatch.setenv("AUTORESEARCH_TEST_MARKER", "visible")
+    monkeypatch.setenv("VIRTUAL_ENV", "/provider/venv")
+    monkeypatch.setenv("RESEARCH_STRATEGY_ENGINE_URL", "http://secret-engine")
+    monkeypatch.setenv("RESEARCH_MARKET_DATA_URL", "http://secret-mds")
+    monkeypatch.setenv("RESEARCH_ARTIFACTS_ROOT", "/secret/artifacts")
+    monkeypatch.setenv("RESEARCH_CONFIGS_ROOT", "/secret/configs")
+    monkeypatch.setenv("RESEARCH_FUTURE_EXECUTION_SETTING", "secret")
+    assert (
+        run_supervisor(
+            session_id="s1",
+            agent_command=_command(repo, "env_probe"),
+            repo_root=repo,
+            max_iterations=1,
+        )
+        == 0
+    )
+    planning = load_json(root / "iterations/0001/execution_plan.json")["explanatory_metadata"]
+    interpretation = load_json(root / "iterations/0001/interpretation_analysis/env.json")
+    for observed in (planning, interpretation):
+        assert observed["marker"] == "visible"
+        assert observed["virtual_env"] == "/provider/venv"
+        assert observed["path"]
+        assert observed["research_keys"] == []
+
+
+def test_supervisor_owned_batch_flow_creates_and_binds_receipt(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, root = _repo(tmp_path / "repo")
+    artifacts_root = tmp_path / "artifacts"
+    artifact = _canonical_batch_artifact(tmp_path)
+    # Helper persists at <tmp>/artifacts/batches/exp-1.
+    assert artifact == artifacts_root / "batches/exp-1"
+    monkeypatch.setenv("RESEARCH_ARTIFACTS_ROOT", str(artifacts_root))
+    monkeypatch.setenv("RESEARCH_CONFIGS_ROOT", str(tmp_path / "configs"))
+    monkeypatch.setenv("RESEARCH_STRATEGY_ENGINE_URL", "http://canonical-engine")
+    monkeypatch.setenv("RESEARCH_MARKET_DATA_URL", "http://canonical-mds")
+    monkeypatch.setenv("RESEARCH_UNKNOWN_EXECUTION_OVERRIDE", "must-not-pass")
+    original_run = supervisor_module.subprocess.run
+    observed_executor_env: dict[str, str] = {}
+
+    def fake_run(args, *positional, **kwargs):
+        if isinstance(args, list) and any(
+            str(item).endswith("scripts/autoresearch_execute_batch.py") for item in args
+        ):
+            observed_executor_env.update(kwargs["env"])
+            output_path = Path(args[args.index("--output") + 1])
+            output_path.write_text(
+                json.dumps(
+                    {
+                        "contract_version": "bbb_autoresearch_batch_execution.v1",
+                        "request_contract_version": "research_batch_experiment.v1",
+                        "result": json.loads((artifact / "summary.json").read_text()),
+                        "persisted_batch": {"artifact_path": str(artifact)},
+                    }
+                )
+            )
+            return subprocess.CompletedProcess(args, 0)
+        return original_run(args, *positional, **kwargs)
+
+    monkeypatch.setattr(supervisor_module.subprocess, "run", fake_run)
+    initial_state = load_json(root / "state.json")
+    assert (
+        run_supervisor(
+            session_id="s1", agent_command=_command(repo, "batch"), repo_root=repo, max_iterations=1
+        )
+        == 0
+    )
+    iteration = root / "iterations/0001"
+    receipt = load_json(iteration / "execution_receipt.json")
+    assert receipt["experiment_id"] == "exp-1"
+    assert receipt["candidate_ids"] == ["c1"]
+    assert receipt["batch_artifact_path"] == str(artifact)
+    assert observed_executor_env["RESEARCH_STRATEGY_ENGINE_URL"] == "http://canonical-engine"
+    assert observed_executor_env["RESEARCH_MARKET_DATA_URL"] == "http://canonical-mds"
+    assert observed_executor_env["RESEARCH_ARTIFACTS_ROOT"] == str(artifacts_root)
+    assert observed_executor_env["RESEARCH_CONFIGS_ROOT"] == str(tmp_path / "configs")
+    assert "RESEARCH_UNKNOWN_EXECUTION_OVERRIDE" not in observed_executor_env
+    assert load_json(iteration / "iteration_control.json")["stage"] == "committed"
+    assert len((root / "journal.jsonl").read_text().splitlines()) == 1
+    plan = load_json(iteration / "execution_plan.json")
+    bad_receipt = dict(receipt)
+    bad_receipt["adapter_output_sha256"] = "0" * 64
+    with pytest.raises(ContractError, match="adapter_output_sha256"):
+        validate_execution_receipt(
+            bad_receipt,
+            plan,
+            initial_state,
+            iteration / "canonical_request.json",
+            iteration / "execution_output.json",
+        )
+
+
+def test_resume_frozen_non_batch_plan_skips_planning_and_executor(tmp_path: Path) -> None:
+    repo, root = _repo(tmp_path)
+    state = load_json(root / "state.json")
+    iteration = root / "iterations/0001"
+    iteration.mkdir(parents=True)
+    plan = {
+        "contract_version": "bbb_autoresearch_execution_plan.v1",
+        "session_id": "s1",
+        "iteration_id": 1,
+        "phase": "baseline",
+        "hypothesis": "test hypothesis",
+        "question": "what next?",
+        "market_property_proxy": "test proxy",
+        "competing_explanation": "alternative",
+        "action": "terminal",
+        "canonical_request": None,
+        "explanatory_metadata": {},
+        "hard_stop_reason": None,
+    }
+    _freeze_plan(
+        iteration / "execution_plan.json", iteration / "iteration_control.json", plan, state
+    )
+    assert (
+        run_supervisor(session_id="s1", agent_command=_command(repo, "terminal"), repo_root=repo)
+        == 0
+    )
+    metadata = load_json(iteration / "supervisor_metadata.json")
+    assert metadata["planning_attempts"] == []
+    assert len(metadata["interpretation_attempts"]) == 1
+    assert not (iteration / "execution_receipt.json").exists()
+    assert not (iteration / "executor.stdout.log").exists()
+
+
+def test_pre_brokered_session_is_not_silently_migrated(tmp_path: Path) -> None:
+    repo, root = _repo(tmp_path)
+    bootstrap = load_json(root / "bootstrap.json")
+    bootstrap.pop("execution_protocol")
+    atomic_write_json(root / "bootstrap.json", bootstrap)
+    assert (
+        run_supervisor(session_id="s1", agent_command=_command(repo, "terminal"), repo_root=repo)
+        == 2
+    )
+    assert "predates supervisor-brokered execution" in load_json(root / "state.json")["stop_reason"]
+    assert not any((root / "iterations").iterdir())
+
+
+def test_recover_prepared_non_batch_interpretation_commits_without_worker(tmp_path: Path) -> None:
+    repo, root = _repo(tmp_path)
+    state = load_json(root / "state.json")
+    iteration = root / "iterations/0001"
+    iteration.mkdir(parents=True)
+    plan = {
+        "contract_version": "bbb_autoresearch_execution_plan.v1",
+        "session_id": "s1",
+        "iteration_id": 1,
+        "phase": "baseline",
+        "hypothesis": "test hypothesis",
+        "question": "what next?",
+        "market_property_proxy": "test proxy",
+        "competing_explanation": "alternative",
+        "action": "terminal",
+        "canonical_request": None,
+        "explanatory_metadata": {},
+        "hard_stop_reason": None,
+    }
+    control = _freeze_plan(
+        iteration / "execution_plan.json", iteration / "iteration_control.json", plan, state
+    )
+    subprocess.run(
+        [
+            sys.executable,
+            str(repo / "fake_agent.py"),
+            str(iteration / "iteration_result.json"),
+            "interpretation",
+            "terminal",
+        ],
+        cwd=repo,
+        check=True,
+    )
+    control.update(
+        stage="interpretation_prepared",
+        interpretation_sha256=_sha256(iteration / "iteration_result.json"),
+    )
+    atomic_write_json(iteration / "iteration_control.json", control)
+    assert run_supervisor(session_id="s1", agent_command="definitely-missing", repo_root=repo) == 0
+    assert len((root / "journal.jsonl").read_text().splitlines()) == 1
+    assert load_json(root / "state.json")["iteration"] == 1
+    assert not (iteration / "supervisor_metadata.json").exists()
+
+
+def test_recover_completed_batch_output_does_not_rerun_executor(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, root = _repo(tmp_path / "repo")
+    state = load_json(root / "state.json")
+    artifact = _canonical_batch_artifact(tmp_path)
+    monkeypatch.setenv("RESEARCH_ARTIFACTS_ROOT", str(tmp_path / "artifacts"))
+    iteration = root / "iterations/0001"
+    iteration.mkdir(parents=True)
+    subprocess.run(
+        [
+            sys.executable,
+            str(repo / "fake_agent.py"),
+            str(iteration / "execution_plan.json"),
+            "planning",
+            "batch",
+        ],
+        cwd=repo,
+        check=True,
+    )
+    plan = load_json(iteration / "execution_plan.json")
+    control = _freeze_plan(
+        iteration / "execution_plan.json", iteration / "iteration_control.json", plan, state
+    )
+    control["execution_intent"] = {
+        "started_at": "2026-01-01T00:00:00+00:00",
+        "request_sha256": control["request_sha256"],
+    }
+    atomic_write_json(iteration / "iteration_control.json", control)
+    atomic_write_json(
+        iteration / "execution_output.json",
+        {
+            "contract_version": "bbb_autoresearch_batch_execution.v1",
+            "request_contract_version": "research_batch_experiment.v1",
+            "result": json.loads((artifact / "summary.json").read_text()),
+            "persisted_batch": {"artifact_path": str(artifact)},
+        },
+    )
+    original_run = supervisor_module.subprocess.run
+    executor_calls = 0
+
+    def forbid_executor(args, *positional, **kwargs):
+        nonlocal executor_calls
+        if isinstance(args, list) and any(
+            str(item).endswith("scripts/autoresearch_execute_batch.py") for item in args
+        ):
+            executor_calls += 1
+            raise AssertionError("executor must not rerun")
+        return original_run(args, *positional, **kwargs)
+
+    monkeypatch.setattr(supervisor_module.subprocess, "run", forbid_executor)
+    assert (
+        run_supervisor(session_id="s1", agent_command=_command(repo, "batch"), repo_root=repo) == 0
+    )
+    assert executor_calls == 0
+    assert (iteration / "execution_receipt.json").is_file()
+    assert len((root / "journal.jsonl").read_text().splitlines()) == 1
+
+
+@pytest.mark.parametrize("provider", ["codex exec -", "claude -p"])
+def test_provider_commands_share_generic_stage_contract(provider: str) -> None:
+    args = _command_args(
+        provider + " {stage} {result_file}",
+        {"stage": "planning", "result_file": "/tmp/result.json"},
+    )
+    assert args[-2:] == ["planning", "/tmp/result.json"]
+
+
 def test_forbidden_mutation_hard_stops_and_preserves_evidence(tmp_path: Path) -> None:
     repo, root = _repo(tmp_path)
-    assert run_supervisor(
-        session_id="s1", agent_command=_command(repo, "mutate"), repo_root=repo
-    ) == 2
+    assert (
+        run_supervisor(session_id="s1", agent_command=_command(repo, "mutate"), repo_root=repo) == 2
+    )
     assert (repo / "tracked.txt").read_text() == "changed\n"
     assert "tracked.txt" in load_json(root / "state.json")["stop_reason"]
+
+
+@pytest.mark.parametrize(
+    "mode,filename",
+    [("uv_lock", "uv.lock"), ("shim", "sitecustomize.py"), ("market_db", "market.sqlite3")],
+)
+def test_stage_output_boundary_rejects_dependency_shim_and_raw_db(
+    tmp_path: Path, mode: str, filename: str
+) -> None:
+    repo, root = _repo(tmp_path)
+    assert (
+        run_supervisor(
+            session_id="s1",
+            agent_command=_command(repo, mode),
+            repo_root=repo,
+            max_agent_failures=1,
+        )
+        == 2
+    )
+    assert (root / "iterations/0001" / filename).exists()
+    assert "output boundary violation" in load_json(root / "state.json")["stop_reason"]
+
+
+def test_worker_cannot_modify_durable_session_state(tmp_path: Path) -> None:
+    repo, root = _repo(tmp_path)
+    assert (
+        run_supervisor(
+            session_id="s1",
+            agent_command=_command(repo, "mutate_state"),
+            repo_root=repo,
+            max_agent_failures=1,
+        )
+        == 2
+    )
+    assert "state.json" in load_json(root / "state.json")["stop_reason"]
 
 
 def test_malformed_result_and_crash_retry_are_bounded(tmp_path: Path) -> None:
@@ -194,14 +572,17 @@ def test_malformed_result_and_crash_retry_are_bounded(tmp_path: Path) -> None:
         ("crash", "crash"),
     ):
         repo, root = _repo(tmp_path / name)
-        assert run_supervisor(
-            session_id="s1",
-            agent_command=_command(repo, mode),
-            repo_root=repo,
-            max_agent_failures=2,
-        ) == 2
+        assert (
+            run_supervisor(
+                session_id="s1",
+                agent_command=_command(repo, mode),
+                repo_root=repo,
+                max_agent_failures=2,
+            )
+            == 2
+        )
         metadata = load_json(root / "iterations/0001/supervisor_metadata.json")
-        assert len(metadata["attempts"]) == 2
+        assert len(metadata["planning_attempts"]) + len(metadata["interpretation_attempts"]) == 2
         assert load_json(root / "state.json")["status"] == "hard_stopped"
 
 
@@ -222,9 +603,7 @@ def test_cancellation_and_budget_launch_no_worker(tmp_path: Path) -> None:
     assert not any((root / "iterations").iterdir())
 
 
-def _canonical_batch_artifact(
-    tmp_path: Path, hashes: tuple[str, ...] = ("market-hash",)
-) -> Path:
+def _canonical_batch_artifact(tmp_path: Path, hashes: tuple[str, ...] = ("market-hash",)) -> Path:
     request = BatchExperimentRequest(
         experiment_id="exp-1",
         strategy_id="ema_pullback",
@@ -357,9 +736,7 @@ def test_valid_canonical_batch_artifact_is_accepted(
 ) -> None:
     artifact = _canonical_batch_artifact(tmp_path)
     monkeypatch.setenv("RESEARCH_ARTIFACTS_ROOT", str(tmp_path / "artifacts"))
-    validate_iteration_result(
-        _batch_iteration(artifact), _session_state(tmp_path / "repo")
-    )
+    validate_iteration_result(_batch_iteration(artifact), _session_state(tmp_path / "repo"))
 
 
 def test_valid_looking_session_bundle_is_rejected(tmp_path: Path) -> None:

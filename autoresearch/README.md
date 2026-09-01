@@ -2,9 +2,10 @@
 
 BBB AutoResearch is a local autonomous research-control plane over the existing Research Service.
 It is not a strategy optimizer, evaluator, backtester, accounting engine, production promotion
-mechanism, or live-trading system. A fresh worker chooses one information-gaining research step;
-the mechanical supervisor validates its structured result, guards repository immutability, persists
-knowledge, and launches the next fresh worker.
+mechanism, or live-trading system. A fresh planning worker chooses one information-gaining research
+step; the supervisor alone runs any canonical batch; a fresh interpretation worker evaluates the
+evidence; and the mechanical supervisor validates and persists knowledge. The two worker processes
+are one logical autonomous researcher, not separate scientific roles.
 
 The evaluator remains Strategy Engine + Research Service historical execution/accounting + Market
 Data Service. Batch execution uses the current `RunBatchExperiment` path and its canonical per-run
@@ -12,6 +13,46 @@ artifacts, followed by the existing `PersistBatchExperiment` summary. AutoResear
 those artifacts; it does not copy dense trades or calculate competing metrics.
 
 ## Quick start
+
+### Select the supervisor runtime profile first
+
+Before starting AutoResearch, the operator or agent **must determine where the supervisor process
+itself runs** and use exactly one documented launch profile. Do not infer the profile from where the
+services run, and do not rely on Research Settings defaults outside the runtime context for which
+they are valid. AutoResearch has no separate Engine/MDS addressing scheme: both profiles populate
+the existing Research `Settings` contract, and the supervisor passes its resolved settings only to
+the canonical executor.
+
+| Profile | Supervisor runtime | Strategy Engine | Market Data Service | Artifact/config roots |
+| --- | --- | --- | --- | --- |
+| HOST | macOS or Linux host | `http://127.0.0.1:8090` | `http://127.0.0.1:8080` | Required absolute host paths supplied by the operator |
+| DOCKER | container attached to the BBB Docker network | `http://strategy-engine:8080` | `http://market-data-service:8080` | Explicit container paths; defaults are `/data/runs` and `/data/configs` |
+
+For a host-run supervisor, export writable absolute host roots and use the host wrapper:
+
+```bash
+export RESEARCH_ARTIFACTS_ROOT=/Users/operator/bbb_data/autoresearch
+export RESEARCH_CONFIGS_ROOT=/Users/operator/bbb_data/autoresearch/configs
+export BBB_AUTORESEARCH_AGENT_COMMAND='codex exec -C . -s workspace-write -'
+scripts/autoresearch_run_host.sh \
+  --session ema-anchor-demo \
+  --max-iterations 100
+```
+
+For a supervisor running inside the BBB Docker network, use the Docker wrapper. Override the roots
+only when that container uses different mounted paths:
+
+```bash
+export BBB_AUTORESEARCH_AGENT_COMMAND='codex exec -C . -s workspace-write -'
+scripts/autoresearch_run_docker.sh \
+  --session ema-anchor-demo \
+  --max-iterations 100
+```
+
+Both wrappers set only Research runtime configuration and forward every CLI argument unchanged to
+`scripts/autoresearch_supervisor.py`. They use `python` from `PATH`, so activate the intended
+environment before invoking them. Provider credentials, the agent command, and other ordinary
+runtime variables remain operator-owned.
 
 Initialize and inspect a session:
 
@@ -27,17 +68,23 @@ syntax is deliberately operator-supplied and is split with `shlex`; the supervis
 `shell=True`. One reasonable local example, with permissions chosen explicitly by the operator, is:
 
 ```bash
-BBB_AUTORESEARCH_AGENT_COMMAND='codex exec -C . -s workspace-write -a never -' \
-python scripts/autoresearch_supervisor.py \
+BBB_AUTORESEARCH_AGENT_COMMAND='codex exec -C . -s workspace-write -' \
+scripts/autoresearch_run_host.sh \
   --session ema-anchor-demo \
   --max-iterations 100
 ```
 
-The command may use `{prompt_file}`, `{result_file}`, `{session_dir}`, `{iteration_dir}`, and
-`{iteration_id}` placeholders. Without placeholders, the rendered prompt is still delivered on
-stdin. Do not add `--dangerously-bypass-approvals-and-sandbox` to tracked examples. The worker needs
-process access required for research, while the independent git guard verifies it made no tracked
-write.
+The command may use `{stage}`, `{prompt_file}`, `{result_file}`, `{session_dir}`, `{iteration_dir}`,
+and `{iteration_id}` placeholders. Without placeholders, each rendered stage prompt is delivered on
+stdin. Provider permissions are defense in depth: correctness comes from supervisor-owned execution,
+immutable request/receipt binding, stage output allowlists, and repository guards.
+
+Planning and interpretation processes inherit the ordinary CLI/runtime environment, including
+provider configuration, credentials, `PATH`, and `VIRTUAL_ENV`, but the supervisor removes the
+entire case-insensitive `RESEARCH_*` namespace. The canonical executor receives a separate explicit
+environment: the supervisor resolves one current `Settings` object and serializes all of its fields
+back into authoritative `RESEARCH_*` values. Unknown inherited `RESEARCH_*` variables are not
+forwarded to either environment contract.
 
 Re-run the same supervisor command to resume. It reads committed state and starts the next iteration,
 not the previous one. Request graceful cancellation with:
@@ -60,10 +107,20 @@ var/autoresearch/<session_id>/
   journal.jsonl
   cancel.requested.json          # only when requested
   iterations/0001/
-    prompt.txt
-    stdout.log
-    stderr.log
+    planning_prompt.txt
+    planning.stdout.log
+    planning.stderr.log
+    execution_plan.json
+    canonical_request.json       # batch only; supervisor-frozen
+    execution_output.json        # batch only; supervisor-owned
+    execution_receipt.json       # batch only; supervisor-owned
+    executor.stdout.log          # batch only
+    executor.stderr.log          # batch only
+    interpretation_prompt.txt
+    interpretation.stdout.log
+    interpretation.stderr.log
     iteration_result.json
+    iteration_control.json
     supervisor_metadata.json
 ```
 
@@ -72,6 +129,11 @@ trade truth remains under the configured canonical Research artifact root; batch
 IDs are references in the iteration result/journal. Each retry is another fresh process and retains
 separate retry logs. If a process dies before state commit, the same iteration number is resumed and
 its durable attempt metadata bounds retries.
+
+New sessions are marked with `bbb_autoresearch_supervisor_execution.v1`; sessions initialized before
+the brokered protocol fail closed and must not be silently migrated. A frozen non-batch plan resumes
+at interpretation without an executor or receipt. A completed valid batch receipt resumes at
+interpretation without recompute. An ambiguous executor launch fails closed.
 
 The bundled EMA session template is quality-aware and initializes
 `bbb_autoresearch_state.v2`. Its immutable nested policy is

@@ -72,9 +72,7 @@ def initialize_session(session_id: str, template_path: Path, repo_root: Path = R
         "last_iteration_result": None,
         "budgets": {
             "max_iterations": template.get("budgets", {}).get("max_iterations"),
-            "max_wall_clock_seconds": template.get("budgets", {}).get(
-                "max_wall_clock_seconds"
-            ),
+            "max_wall_clock_seconds": template.get("budgets", {}).get("max_wall_clock_seconds"),
             "max_consecutive_agent_failures": template.get("budgets", {}).get(
                 "max_consecutive_agent_failures", 3
             ),
@@ -103,6 +101,7 @@ def initialize_session(session_id: str, template_path: Path, repo_root: Path = R
         root / "bootstrap.json",
         {
             "contract_version": "bbb_autoresearch_bootstrap.v1",
+            "execution_protocol": "bbb_autoresearch_supervisor_execution.v1",
             "session_id": session_id,
             "baseline_git_sha": state["baseline_git_sha"],
             "template_path": str(template_path.resolve()),

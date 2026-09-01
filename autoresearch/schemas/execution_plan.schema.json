@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bbb_autoresearch_execution_plan.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "session_id", "iteration_id", "phase", "hypothesis", "question", "market_property_proxy", "competing_explanation", "action", "canonical_request", "explanatory_metadata", "hard_stop_reason"],
+  "properties": {
+    "contract_version": {"const": "bbb_autoresearch_execution_plan.v1"},
+    "session_id": {"type": "string", "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"},
+    "iteration_id": {"type": "integer", "minimum": 1},
+    "phase": {"type": "string", "minLength": 1},
+    "hypothesis": {"type": "string", "minLength": 1},
+    "question": {"type": "string", "minLength": 1},
+    "market_property_proxy": {"type": "string", "minLength": 1},
+    "competing_explanation": {"type": "string", "minLength": 1},
+    "action": {"enum": ["batch", "artifact_diagnostic", "terminal", "hard_stop"]},
+    "canonical_request": {"type": ["object", "null"]},
+    "explanatory_metadata": {"type": "object"},
+    "hard_stop_reason": {"type": ["string", "null"], "minLength": 1}
+  },
+  "allOf": [
+    {"if": {"properties": {"action": {"const": "batch"}}}, "then": {"properties": {"canonical_request": {"type": "object"}, "hard_stop_reason": {"type": "null"}}}, "else": {"properties": {"canonical_request": {"type": "null"}}}},
+    {"if": {"properties": {"action": {"const": "hard_stop"}}}, "then": {"properties": {"hard_stop_reason": {"type": "string", "minLength": 1}}}, "else": {"properties": {"hard_stop_reason": {"type": "null"}}}}
+  ]
+}
