@@ -1,0 +1,196 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bbb_autoresearch_journal.v2",
+  "title": "BBB AutoResearch journal event v2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "session_id",
+    "iteration_id",
+    "timestamp",
+    "baseline_git_sha",
+    "research_phase",
+    "hypothesis",
+    "competing_explanation",
+    "experiment_id",
+    "candidate_ids",
+    "window_policy",
+    "strategy_context",
+    "parameter_axes",
+    "execution_accounting_assumptions",
+    "batch_artifact_path",
+    "run_ids",
+    "market_data_hash",
+    "outcome_classification",
+    "side_interpretation",
+    "risk_assessment",
+    "conclusion",
+    "next_question",
+    "research_quality_assessment"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "bbb_autoresearch_journal.v2"
+    },
+    "session_id": {
+      "type": "string",
+      "minLength": 1
+    },
+    "iteration_id": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "timestamp": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "baseline_git_sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "research_phase": {
+      "type": "string",
+      "minLength": 1
+    },
+    "hypothesis": {
+      "type": "string",
+      "minLength": 1
+    },
+    "competing_explanation": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "experiment_id": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "candidate_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "window_policy": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "strategy_context": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "parameter_axes": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "execution_accounting_assumptions": {
+      "type": [
+        "object",
+        "null"
+      ]
+    },
+    "batch_artifact_path": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "run_ids": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      },
+      "uniqueItems": true
+    },
+    "market_data_hash": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "outcome_classification": {
+      "type": "string"
+    },
+    "side_interpretation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "aggregate",
+        "long",
+        "short",
+        "asymmetry"
+      ],
+      "properties": {
+        "aggregate": {
+          "type": "string",
+          "minLength": 1
+        },
+        "long": {
+          "type": "string",
+          "minLength": 1
+        },
+        "short": {
+          "type": "string",
+          "minLength": 1
+        },
+        "asymmetry": {
+          "type": "string",
+          "minLength": 1
+        }
+      }
+    },
+    "risk_assessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "thinning_risk",
+        "temporal_regime_concentration_concern",
+        "other_confounders"
+      ],
+      "properties": {
+        "thinning_risk": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "temporal_regime_concentration_concern": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "minLength": 1
+        },
+        "other_confounders": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "conclusion": {
+      "type": "string",
+      "minLength": 1
+    },
+    "next_question": {
+      "type": "string",
+      "minLength": 1
+    },
+    "research_quality_assessment": {
+      "$ref": "research_quality_assessment.schema.json"
+    }
+  }
+}

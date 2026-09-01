@@ -31,6 +31,12 @@ research-service
 
 The browser talks only to Research Service. It never needs Strategy Engine or Market Data Service URLs.
 
+## Autonomous research infrastructure
+
+BBB AutoResearch v1 provides a restartable, fresh-agent research-control loop over the existing
+canonical batch evaluator. It is explicitly not a strategy optimizer. See
+[`autoresearch/README.md`](autoresearch/README.md) for lifecycle, safety, and CLI usage.
+
 ## Migrated BFF capability
 
 `GET /api/market/candles-window` is backed by Market Data Service. It preserves the BBB Workbench DTO, converts legacy `BTCUSDT` to canonical `BTCUSDT.P`, and returns only complete ready ranges.
