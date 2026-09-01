@@ -139,6 +139,72 @@ def test_single_mismatching_instance_strategy_id_rejected(tmp_path: Path):
     assert strategy.calls == []
 
 
+def _ema_instance_with_exit(*, instance_id: str | None) -> dict:
+    rule: dict = {
+        "component_id": "atr_stop_setup",
+        "exit_kind": "stop",
+        "distance": {"timeframe": "base", "period": 14, "multiplier": 1.5},
+    }
+    if instance_id is not None:
+        rule["instance_id"] = instance_id
+    return {
+        "enabled": True,
+        "strategy_id": "ema_pullback",
+        "ticker": "BTCUSDT.P",
+        "base_timeframe": "5m",
+        "raw_spec": {
+            "anchor_stack": {
+                "fast": {"source": "close", "timeframe": "base", "period": 2},
+                "anchor": {"source": "close", "timeframe": "base", "period": 3},
+                "slow": {"source": "close", "timeframe": "base", "period": 5},
+            },
+            "components": {"blockers": []},
+            "setups": [],
+            "contexts": {},
+            "trade_management": {
+                "exit_policy": {
+                    "always_on": {"exits": [rule]},
+                    "profiles": {
+                        "aligned": {"exits": []},
+                        "countertrend": {"exits": []},
+                        "neutral": {"exits": []},
+                    },
+                },
+                "exit_management": {},
+            },
+        },
+    }
+
+
+def test_atr_exit_without_instance_id_does_not_report_ok(tmp_path: Path):
+    # Engine's authoritative semantic-validation contract rejects an exit
+    # rule missing a rule instance_id; Research must reflect that, not
+    # report success. See strategy_engine authoring-config validation.
+    strategy = Strategy(
+        StrategyAuthoringValidationResult(
+            False,
+            (StrategyValidationError("instances[0]", "exits[0].instance_id must be a non-empty string"),),
+        )
+    )
+    payload = draft()
+    payload["instances"] = [_ema_instance_with_exit(instance_id=None)]
+
+    r = client(tmp_path, strategy).post("/api/research/config/validate", json=payload)
+
+    assert r.json()["ok"] is False
+    assert strategy.calls[0][0] == "ema_pullback"
+
+
+def test_atr_exit_with_instance_id_reports_ok(tmp_path: Path):
+    strategy = Strategy(StrategyAuthoringValidationResult(True, ()))
+    payload = draft()
+    payload["instances"] = [_ema_instance_with_exit(instance_id="atr_stop_1")]
+
+    r = client(tmp_path, strategy).post("/api/research/config/validate", json=payload)
+
+    assert r.json() == {"ok": True, "errors": []}
+
+
 def test_mismatch_among_multiple_instances_identifies_offending_index(tmp_path: Path):
     strategy = Strategy(StrategyAuthoringValidationResult(True, ()))
     payload = draft()
