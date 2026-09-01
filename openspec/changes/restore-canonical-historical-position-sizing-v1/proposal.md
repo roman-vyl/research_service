@@ -9,9 +9,9 @@ Research already owns fills, fees, PnL, and equity. Quantity therefore belongs i
 ## What changes
 
 - `AccountingPolicy.initial_equity` seeds one realised-equity chain per candidate run.
-- Before each entry, Research resolves the actual side-aware slipped fill price and sizes a positive quantity from current available equity divided by that fill price.
+- Before each entry, Research resolves the actual side-aware slipped fill price and sizes a positive quantity so entry notional plus proportional entry fee fit current available equity.
 - Closing PnL and entry/exit fees update equity before any later position is sized.
-- Long and short use the same positive full-equity notional formula; side affects adverse entry slippage and PnL sign, not the quantity formula.
+- Under the existing proportional-fee/no-fixed-fee assumptions, long and short use the vectorbt-grounded `equity / (actual_entry_fill_price * (1 + entry_fee_rate))` quantity formula; their execution cash flows and PnL signs remain side-specific.
 - The canonical historical request no longer exposes fixed `ExecutionPolicy.quantity` as selectable sizing semantics.
 - Single-instance and batch candidates use the same materialization/lifecycle path; AutoResearch inherits it through the existing batch boundary.
 - Invalid or non-positive financial state fails closed.

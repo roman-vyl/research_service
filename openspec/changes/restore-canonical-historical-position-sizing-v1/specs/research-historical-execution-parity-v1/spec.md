@@ -6,8 +6,15 @@ Before production cutover, old-BBB/vectorbt-grounded historical parity evidence 
 
 #### Scenario: First-entry sizing baseline
 
-- **WHEN** the parity fixture starts with equity `10000` and actual first entry fill price `50000` without slippage
+- **WHEN** the parity fixture starts with equity `10000`, actual first entry fill price `50000`, and zero entry fee
 - **THEN** both the independent reference and canonical Research path record quantity `0.2`.
+
+#### Scenario: Non-zero-fee parity on both sides
+
+- **WHEN** independent long and short fixtures use non-zero proportional entry and exit fees
+- **THEN** both the old-BBB/vectorbt-grounded reference and canonical Research path size entry quantity from `equity / (actual_entry_fill_price * (1 + entry_fee_rate))`
+- **AND** entry notional, entry fee, exit fee, gross/net PnL, and next equity match for each side
+- **AND** exit fee is derived only from the actual exit fill and does not alter entry quantity.
 
 #### Scenario: Prior trade changes later quantity
 

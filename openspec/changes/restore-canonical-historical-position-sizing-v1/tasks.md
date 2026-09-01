@@ -9,7 +9,7 @@
 
 ## 2. Acyclic lifecycle seam
 
-- [ ] Introduce a pure Research-owned full-current-equity sizing service accepting current equity and actual entry fill price.
+- [ ] Introduce a pure Research-owned full-current-equity sizing service accepting current equity, actual entry fill price, and proportional entry fee rate.
 - [ ] Split entry-price resolution from final `EntryFill` construction so quantity is calculated after side-aware slippage and before the fill is recorded.
 - [ ] Refactor the canonical projection materializer into a sequential lifecycle coordinator that owns current realised equity and ordered trade records.
 - [ ] Expose/reuse a closed-position accounting kernel so the coordinator can account each close immediately without execution importing accounting.
@@ -18,9 +18,9 @@
 
 ## 3. Financial semantics
 
-- [ ] Implement `quantity = current_available_equity / actual_entry_fill_price` with Decimal arithmetic.
-- [ ] Apply the same positive-quantity formula to long and short, with existing adverse slippage direction and side-aware PnL formulas.
-- [ ] Keep entry and exit fees based on actual fill notionals and apply both through realised net PnL at close.
+- [ ] Under the existing proportional-fee/no-fixed-fee assumptions, implement `quantity = current_available_equity / (actual_entry_fill_price * (1 + entry_fee_rate))` with Decimal arithmetic.
+- [ ] Apply the vectorbt-grounded positive-quantity formula to long and short, with existing adverse slippage direction and side-aware execution/PnL behavior.
+- [ ] Calculate entry fee from entry notional for sizing and carry it into realised net PnL; calculate exit fee only from the actual exit fill at close.
 - [ ] Advance current equity after each close before sizing any later entry.
 - [ ] Preserve open-at-range-end behavior without a synthetic close or fabricated equity update.
 
@@ -33,12 +33,12 @@
 
 ## 5. Shared-path proof
 
-- [ ] Add the first-entry example proving `10000 / 50000 = 0.2` without slippage.
-- [ ] Add long/short tests proving slippage changes actual fill price before quantity calculation.
+- [ ] Add the first-entry example proving `10000 / 50000 = 0.2` at zero entry fee.
+- [ ] Add long/short tests proving slippage changes actual fill price before quantity calculation and non-zero entry fees reduce quantity using the all-in denominator.
 - [ ] Add multi-trade tests proving fees/PnL update the equity and quantity of the next position.
 - [ ] Add single-versus-batch equivalence tests for execution quantities, notionals, fees, PnL, trades, and final equity.
 - [ ] Add an AutoResearch boundary test proving it delegates sizing to canonical `RunBatchExperiment` results.
-- [ ] Extend old-BBB/vectorbt-grounded parity fixtures and comparison surfaces to the canonical sizing/equity chain.
+- [ ] Extend old-BBB/vectorbt-grounded parity fixtures and comparison surfaces to the canonical sizing/equity chain, including non-zero proportional fees on both long and short.
 
 ## 6. Acceptance
 
