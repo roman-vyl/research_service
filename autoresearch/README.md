@@ -39,6 +39,13 @@ and `{iteration_id}` placeholders. Without placeholders, each rendered stage pro
 stdin. Provider permissions are defense in depth: correctness comes from supervisor-owned execution,
 immutable request/receipt binding, stage output allowlists, and repository guards.
 
+Planning and interpretation processes inherit the ordinary CLI/runtime environment, including
+provider configuration, credentials, `PATH`, and `VIRTUAL_ENV`, but the supervisor removes the
+entire case-insensitive `RESEARCH_*` namespace. The canonical executor receives a separate explicit
+environment: the supervisor resolves one current `Settings` object and serializes all of its fields
+back into authoritative `RESEARCH_*` values. Unknown inherited `RESEARCH_*` variables are not
+forwarded to either environment contract.
+
 Re-run the same supervisor command to resume. It reads committed state and starts the next iteration,
 not the previous one. Request graceful cancellation with:
 
