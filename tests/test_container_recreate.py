@@ -54,7 +54,7 @@ def test_persisted_run_survives_container_recreate(tmp_path: Path) -> None:
         json={
             "strategy": {"enabled": True, **strategy_identity().model_dump(mode="json")},
             "range": ExplicitRange(from_ms=0, to_ms=900_000).model_dump(mode="json"),
-            "execution": ExecutionPolicy(quantity=Decimal("1")).model_dump(mode="json"),
+            "execution": ExecutionPolicy().model_dump(mode="json"),
             "accounting": AccountingPolicy(
                 initial_equity=Decimal("100"),
                 entry_fee_rate=Decimal("0"),

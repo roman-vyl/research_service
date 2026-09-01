@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 from research_service.adapters.http.market_data_client import HttpMarketDataClient
@@ -110,7 +111,11 @@ def main(argv: list[str] | None = None) -> int:
     print(f"index built: entry lookups + signal lookups ready (id={id(index)})")
 
     result = run_projection_execution_loop(
-        projection.strategy_id, index, market_frame, ExecutionPolicy()
+        projection.strategy_id,
+        index,
+        market_frame,
+        ExecutionPolicy(),
+        entry_quantity_provider=lambda _decision, _price: Decimal("1"),
     )
     print(
         f"run_projection_execution_loop: OK -- "

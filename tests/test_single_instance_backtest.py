@@ -8,6 +8,7 @@ import pytest
 
 from research_service.accounting import AccountingPolicy
 from research_service.application.backtests import (
+    MaterializeBacktestProjectionOutcome,
     RunSingleInstanceBacktest,
     SingleInstanceBacktestRequest,
 )
@@ -341,7 +342,7 @@ def test_single_instance_backtest_composes_all_layers() -> None:
         SingleInstanceBacktestRequest(
             strategy=strategy_identity(),
             range=ExplicitRange(from_ms=0, to_ms=900_000),
-            execution=ExecutionPolicy(quantity=Decimal("2")),
+            execution=ExecutionPolicy(),
             accounting=AccountingPolicy(
                 initial_equity=Decimal("1000"),
                 entry_fee_rate=Decimal("0.001"),
@@ -362,8 +363,12 @@ def test_single_instance_backtest_composes_all_layers() -> None:
     assert outcome.execution.positions[0].exit_fill is not None
     assert outcome.execution.positions[0].exit_fill.candidate_type == "take_profit"
     assert outcome.accounting.realised_trade_count == 1
-    assert outcome.accounting.trades[0].net_pnl == Decimal("9.59000")
-    assert outcome.accounting.final_equity == Decimal("1009.59000")
+    assert outcome.accounting.trades[0].net_pnl == Decimal(
+        "47.90209790209790209790209790"
+    )
+    assert outcome.accounting.final_equity == Decimal(
+        "1047.902097902097902097902098"
+    )
     assert strategy.managed_requests == []
 
 
@@ -463,3 +468,64 @@ def test_full_available_resolved_market_reaches_every_downstream_stage() -> None
     assert market.requests == [resolved_market]
     assert len(strategy.managed_requests) == 1
     assert strategy.managed_requests[0].market == resolved_market
+
+
+def test_sequential_closes_compound_the_next_entry_quantity() -> None:
+    market = MarketFrame(
+        market=MarketRange(ticker="BTCUSDT.P", timeframe="5m", from_ms=0, to_ms=1_500_000),
+        candles=(
+            Candle(open_time_ms=0, open="100", high="100", low="100", close="100", volume="1"),
+            Candle(open_time_ms=300_000, open="100", high="106", low="100", close="105", volume="1"),
+            Candle(open_time_ms=600_000, open="200", high="200", low="200", close="200", volume="1"),
+            Candle(open_time_ms=900_000, open="200", high="211", low="200", close="210", volume="1"),
+            Candle(open_time_ms=1_200_000, open="210", high="210", low="210", close="210", volume="1"),
+        ),
+        market_data_hash="sequential-hash",
+    )
+    leg = InitialProtectionLegDTO(
+        ratio=0.05,
+        attribution=ExitAttributionDTO(
+            rule_id="tp", component_id="c", exit_kind="take_profit"
+        ),
+    )
+    projection = HistoricalExecutionProjectionDTO(
+        contract_version="strategy_evaluation_execution.v2",
+        strategy_id="ema_pullback",
+        config_hash="config-hash",
+        market=market.market,
+        market_data_hash="sequential-hash",
+        bar_count=5,
+        entry_opportunities=tuple(
+            ExecutableEntryOpportunityDTO(
+                bar_index=bar_index,
+                side="long",
+                locked_exit_profile="aligned",
+                initial_stop=None,
+                initial_take=leg,
+            )
+            for bar_index in (0, 2)
+        ),
+        signal_exit_events=SignalExitProjectionDTO(
+            long=_EMPTY_PROFILE_EVENTS, short=_EMPTY_PROFILE_EVENTS
+        ),
+        warnings=(),
+    )
+    request = SingleInstanceBacktestRequest(
+        strategy=strategy_identity(),
+        range=ExplicitRange(from_ms=0, to_ms=1_500_000),
+        accounting=AccountingPolicy(
+            initial_equity=Decimal("1000"),
+            entry_fee_rate=Decimal("0.001"),
+            exit_fee_rate=Decimal("0.001"),
+        ),
+        managed_policy_enabled=False,
+    )
+
+    outcome = MaterializeBacktestProjectionOutcome(FakeStrategyEngine(projection)).execute(
+        request, INSTANCE_ID, projection, market
+    )
+
+    first, second = outcome.accounting.trades
+    assert second.equity_before == first.equity_after
+    assert second.quantity == first.equity_after / (Decimal("200") * Decimal("1.001"))
+    assert outcome.execution.positions[1].position.entry_fill.quantity == second.quantity

@@ -102,14 +102,12 @@ def entry_decision_at(
 def execute_entry(
     decision: EntryDecision,
     policy: ExecutionPolicy,
+    *,
+    quantity: Decimal = Decimal("1"),
 ) -> EntryFill:
     """Execute a signal-bar-close entry with side-aware adverse slippage."""
 
-    one = Decimal("1")
-    if decision.side == "long":
-        fill_price = decision.reference_price * (one + policy.entry_slippage_rate)
-    else:
-        fill_price = decision.reference_price * (one - policy.entry_slippage_rate)
+    fill_price = resolve_entry_fill_price(decision, policy)
 
     return EntryFill(
         fill_id=f"entry:{decision.instance_id}:{decision.side}:{decision.bar_index}",
@@ -119,9 +117,18 @@ def execute_entry(
         time_ms=decision.time_ms,
         reference_price=decision.reference_price,
         fill_price=fill_price,
-        quantity=policy.quantity,
+        quantity=quantity,
         slippage_rate=policy.entry_slippage_rate,
     )
+
+
+def resolve_entry_fill_price(decision: EntryDecision, policy: ExecutionPolicy) -> Decimal:
+    """Resolve side-aware adverse entry slippage before position sizing."""
+
+    one = Decimal("1")
+    if decision.side == "long":
+        return decision.reference_price * (one + policy.entry_slippage_rate)
+    return decision.reference_price * (one - policy.entry_slippage_rate)
 
 
 def try_open_position(
@@ -132,6 +139,7 @@ def try_open_position(
     bar_index: int,
     current_position: PositionState | None,
     entries: tuple[Sequence[bool], Sequence[bool]] | None = None,
+    quantity: Decimal = Decimal("1"),
 ) -> PositionState | None:
     """Open at most one ready, initially protected position for an instance.
 
@@ -148,7 +156,7 @@ def try_open_position(
     decision = entry_decision_at(evaluation, market_frame, bar_index=bar_index, entries=entries)
     if decision is None:
         return None
-    fill = execute_entry(decision, policy)
+    fill = execute_entry(decision, policy, quantity=quantity)
     protection = resolve_initial_protection(evaluation, fill)
     return PositionState(
         position_id=f"position:{evaluation.instance_id}:{decision.side}:{bar_index}",

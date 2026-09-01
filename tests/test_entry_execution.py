@@ -12,6 +12,7 @@ from research_service.domain.contracts import (
 )
 from research_service.domain.execution import ExecutionPolicy
 from research_service.execution.entry import entry_decision_at, execute_entry, try_open_position
+from research_service.execution.sizing import calculate_full_equity_quantity
 
 
 def _market() -> MarketFrame:
@@ -180,3 +181,40 @@ def test_entry_slippage_is_adverse_and_side_aware(side: str, expected: Decimal) 
     )
 
     assert fill.fill_price == expected
+
+
+@pytest.mark.parametrize("side", ("long", "short"))
+def test_full_equity_sizing_includes_entry_fee_for_both_sides(side: str) -> None:
+    reference = Decimal("50000")
+    decision = entry_decision_at(
+        _evaluation(
+            long=(side == "long", False, False),
+            short=(side == "short", False, False),
+        ),
+        _market().model_copy(
+            update={
+                "candles": (
+                    _market().candles[0].model_copy(update={"close": reference}),
+                    *_market().candles[1:],
+                )
+            }
+        ),
+        bar_index=0,
+    )
+    assert decision is not None
+    policy = ExecutionPolicy(entry_slippage_rate=Decimal("0.01"))
+    fill = execute_entry(decision, policy)
+    quantity = calculate_full_equity_quantity(
+        Decimal("10000"), fill.fill_price, Decimal("0.001")
+    )
+
+    notional = fill.fill_price * quantity
+    assert abs(
+        notional + notional * Decimal("0.001") - Decimal("10000")
+    ) < Decimal("1e-23")
+
+
+def test_zero_fee_baseline_is_point_two() -> None:
+    assert calculate_full_equity_quantity(
+        Decimal("10000"), Decimal("50000"), Decimal("0")
+    ) == Decimal("0.2")

@@ -39,11 +39,20 @@ from research_service.domain.contracts import (
     SignalExitProjectionDTO,
 )
 from research_service.domain.execution import ExecutionPolicy
-from research_service.execution.projection_loop import run_projection_execution_loop
+from research_service.execution.projection_loop import (
+    run_projection_execution_loop as _run_projection_execution_loop,
+)
 from research_service.execution.unified_exits import _CANDIDATE_PRIORITY
 
 _MARKET_RANGE = MarketRange(ticker="BTCUSDT.P", timeframe="5m", from_ms=0, to_ms=300_000 * 15)
 _POLICY = ExecutionPolicy()
+
+
+def run_projection_execution_loop(*args: object, **kwargs: object):
+    """I4 isolates execution with an explicit fixed test quantity."""
+
+    kwargs.setdefault("entry_quantity_provider", lambda _decision, _price: Decimal("1"))
+    return _run_projection_execution_loop(*args, **kwargs)  # type: ignore[arg-type]
 
 
 def _candle(i: int, o: str, h: str, lo: str, c: str) -> Candle:

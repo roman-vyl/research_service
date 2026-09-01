@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
+from decimal import Decimal
 
 from research_service.domain.contracts import (
     ManagedReplayResult,
@@ -39,6 +40,7 @@ def run_unified_execution_loop(
     policy: ExecutionPolicy,
     *,
     managed_replay_provider: ManagedReplayProvider | None = None,
+    quantity: Decimal = Decimal("1"),
 ) -> ExecutionLoopResult:
     """Execute one strategy instance across an aligned market range.
 
@@ -110,6 +112,7 @@ def run_unified_execution_loop(
                 bar_index=bar_index,
                 current_position=current_position,
                 entries=entries,
+                quantity=quantity,
             )
             if opened is not None and opened is not current_position:
                 current_position = opened

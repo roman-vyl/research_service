@@ -40,7 +40,10 @@ from research_service.execution.managed_policy import (
     build_managed_policy_timeline,
     collect_managed_exit_candidates,
 )
-from research_service.execution.projection_entry import try_open_projection_position
+from research_service.execution.projection_entry import (
+    EntryQuantityProvider,
+    try_open_projection_position,
+)
 from research_service.execution.projection_static_exits import (
     collect_projection_static_exit_candidates,
 )
@@ -50,6 +53,7 @@ from research_service.execution.unified_exits import (
 )
 
 ManagedReplayProvider = Callable[[PositionState], ManagedReplayResult | None]
+ClosedPositionConsumer = Callable[[PositionExecution], None]
 
 
 def run_projection_execution_loop(
@@ -58,7 +62,9 @@ def run_projection_execution_loop(
     market_frame: MarketFrame,
     policy: ExecutionPolicy,
     *,
+    entry_quantity_provider: EntryQuantityProvider,
     managed_replay_provider: ManagedReplayProvider | None = None,
+    closed_position_consumer: ClosedPositionConsumer | None = None,
 ) -> ExecutionLoopResult:
     """Execute one strategy instance against a validated, indexed
     `HistoricalExecutionProjection` across an aligned market range.
@@ -119,14 +125,15 @@ def run_projection_execution_loop(
             )
             exit_fill = execute_unified_exit(current_position, arbitration)
             if exit_fill is not None:
-                completed.append(
-                    PositionExecution(
+                closed_execution = PositionExecution(
                         position=current_position,
                         status="closed",
                         exit_fill=exit_fill,
                         exit_arbitration=arbitration,
                     )
-                )
+                completed.append(closed_execution)
+                if closed_position_consumer is not None:
+                    closed_position_consumer(closed_execution)
                 events.append(
                     _exit_event(current_position, exit_fill=exit_fill, arbitration=arbitration)
                 )
@@ -144,6 +151,7 @@ def run_projection_execution_loop(
                 instance_id=instance_id,
                 bar_index=bar_index,
                 current_position=current_position,
+                entry_quantity_provider=entry_quantity_provider,
             )
             if opened is not None and opened is not current_position:
                 current_position = opened

@@ -59,7 +59,7 @@ def _persist(tmp_path: Path, created_at: str) -> str:
     request = SingleInstanceBacktestRequest(
         strategy=strategy_identity(),
         range=ExplicitRange(from_ms=0, to_ms=900_000),
-        execution=ExecutionPolicy(quantity=Decimal("2")),
+        execution=ExecutionPolicy(),
         accounting=AccountingPolicy(
             initial_equity=Decimal("10.00"),
             entry_fee_rate=Decimal("0.001"),
@@ -131,14 +131,14 @@ def test_run_detail_and_summary_project_versioned_artifacts(tmp_path: Path) -> N
     assert summary.status_code == 200
     assert summary.json()["contract_version"] == "research_run_compact_summary.v1"
     assert summary.json()["summary"]["realised_trade_count"] == 1
-    assert summary.json()["gross_pnl"] == "10.00"
-    assert summary.json()["fees_paid"] == "0.41000"
+    assert summary.json()["gross_pnl"] == "0.4995004995004995004995004995"
+    assert summary.json()["fees_paid"] == "0.02047952047952047952047952048"
     assert trades.status_code == 200
     assert trades.json()["contract_version"] == "research_run_trades.v1"
     assert len(trades.json()["trades"]) == 1
     assert metrics.status_code == 200
     assert metrics.json()["contract_version"] == "research_run_metrics.v1"
-    assert metrics.json()["net_pnl"] == "9.59000"
+    assert metrics.json()["net_pnl"] == "0.4790209790209790209790209790"
 
 
 def test_missing_and_corrupt_run_have_stable_errors(tmp_path: Path) -> None:
@@ -176,7 +176,7 @@ def test_summary_reports_resolved_market_not_requested_market(tmp_path: Path) ->
     request = SingleInstanceBacktestRequest(
         strategy=strategy_identity(),
         range_policy="full_available",
-        execution=ExecutionPolicy(quantity=Decimal("2")),
+        execution=ExecutionPolicy(),
         accounting=AccountingPolicy(
             initial_equity=Decimal("10.00"),
             entry_fee_rate=Decimal("0.001"),

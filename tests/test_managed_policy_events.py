@@ -117,7 +117,7 @@ def _request(*, managed_policy_enabled: bool) -> SingleInstanceBacktestRequest:
     return SingleInstanceBacktestRequest(
         strategy=strategy_identity(),
         range=ExplicitRange(from_ms=0, to_ms=900_000),
-        execution=ExecutionPolicy(quantity=Decimal("2")),
+        execution=ExecutionPolicy(),
         accounting=AccountingPolicy(
             initial_equity=Decimal("1000"),
             entry_fee_rate=Decimal("0.001"),
@@ -131,7 +131,7 @@ def _http_request(*, managed_policy_enabled: bool) -> BacktestRunRequest:
     return BacktestRunRequest(
         strategy=_deployable_instance(),
         range=ExplicitRange(from_ms=0, to_ms=900_000),
-        execution=ExecutionPolicy(quantity=Decimal("2")),
+        execution=ExecutionPolicy(),
         accounting=AccountingPolicy(
             initial_equity=Decimal("1000"),
             entry_fee_rate=Decimal("0.001"),

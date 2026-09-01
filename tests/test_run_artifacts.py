@@ -28,7 +28,7 @@ def completed_backtest():
     request = SingleInstanceBacktestRequest(
         strategy=strategy_identity(),
         range=ExplicitRange(from_ms=0, to_ms=900_000),
-        execution=ExecutionPolicy(quantity=Decimal("2")),
+        execution=ExecutionPolicy(),
         accounting=AccountingPolicy(
             initial_equity=Decimal("1000"),
             entry_fee_rate=Decimal("0.001"),
@@ -93,7 +93,7 @@ def test_persist_backtest_writes_versioned_atomic_bundle(tmp_path) -> None:
 
     metrics = json.loads((run_dir / "metrics.json").read_text(encoding="utf-8"))
     assert metrics["realised_trade_count"] == 1
-    assert metrics["net_pnl"] == "9.59000"
+    assert metrics["net_pnl"] == "47.90209790209790209790209790"
 
     # completed_backtest() uses managed_policy_enabled=False — the artifact
     # is still written, as an empty trace, not omitted.
