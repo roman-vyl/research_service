@@ -148,6 +148,12 @@ result_path.write_text(json.dumps(result))
 """
 
 
+@pytest.fixture(autouse=True)
+def _default_research_service_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Every test exercises a launch profile; supply its one sanctioned URL by default."""
+    monkeypatch.setenv("BBB_AUTORESEARCH_RESEARCH_SERVICE_URL", "http://test-research-service.invalid")
+
+
 def _repo(tmp_path: Path) -> tuple[Path, Path]:
     (tmp_path / "autoresearch/prompts").mkdir(parents=True)
     source_root = Path(__file__).parents[1]

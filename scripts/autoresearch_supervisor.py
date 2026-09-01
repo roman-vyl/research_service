@@ -246,6 +246,25 @@ def build_executor_env(settings: Settings, source: dict[str, str] | None = None)
     return environment
 
 
+_RESEARCH_SERVICE_BASE_URL_VAR = "BBB_AUTORESEARCH_RESEARCH_SERVICE_URL"
+
+
+def resolve_research_service_base_url(source: dict[str, str] | None = None) -> str:
+    """Resolve the one sanctioned Research Service API base URL for planning discovery.
+
+    The launch profile wrapper (HOST/DOCKER), not the worker, owns this value -- a
+    planning worker must never discover or guess Engine/MDS topology itself.
+    """
+
+    inherited = os.environ if source is None else source
+    value = inherited.get(_RESEARCH_SERVICE_BASE_URL_VAR)
+    if not value:
+        raise ContractError(
+            f"{_RESEARCH_SERVICE_BASE_URL_VAR} must be set by the launch profile wrapper"
+        )
+    return value
+
+
 def _sha256(path: Path) -> str:
     try:
         return hashlib.sha256(path.read_bytes()).hexdigest()
@@ -1123,7 +1142,12 @@ def _render_stage_prompt(
     return rendered
 
 
-def render_planning_prompt(state: dict[str, Any], root: Path, iteration_root: Path) -> str:
+def render_planning_prompt(
+    state: dict[str, Any],
+    root: Path,
+    iteration_root: Path,
+    research_service_base_url: str,
+) -> str:
     return _render_stage_prompt(
         "planning.md",
         state,
@@ -1133,6 +1157,7 @@ def render_planning_prompt(state: dict[str, Any], root: Path, iteration_root: Pa
             "plan_schema_path": root / "autoresearch/schemas/execution_plan.schema.json",
             "result_path": iteration_root / "execution_plan.json",
             "analysis_dir": iteration_root / "planning_analysis",
+            "research_service_base_url": research_service_base_url,
         },
     )
 
@@ -1163,9 +1188,11 @@ def render_interpretation_prompt(
     return _render_stage_prompt("interpretation.md", state, root, iteration_root, values)
 
 
-def render_prompt(state: dict[str, Any], root: Path, iteration_root: Path) -> str:
+def render_prompt(
+    state: dict[str, Any], root: Path, iteration_root: Path, research_service_base_url: str
+) -> str:
     """Compatibility alias for callers that inspect the first-stage prompt."""
-    return render_planning_prompt(state, root, iteration_root)
+    return render_planning_prompt(state, root, iteration_root, research_service_base_url)
 
 
 def _command_args(template: str, values: dict[str, str]) -> list[str]:
@@ -1546,6 +1573,7 @@ def run_supervisor(
     research_settings = Settings()
     worker_env = build_worker_env()
     executor_env = build_executor_env(research_settings)
+    research_service_base_url = resolve_research_service_base_url()
     while True:
         state = load_json(state_path)
         validate_state(state)
@@ -1616,7 +1644,9 @@ def run_supervisor(
 
         if control["stage"] == "planning_pending":
             plan_path = iteration_root / "execution_plan.json"
-            prompt = render_planning_prompt(state, repo_root, iteration_root)
+            prompt = render_planning_prompt(
+                state, repo_root, iteration_root, research_service_base_url
+            )
             attempts = metadata["planning_attempts"]
             while len(attempts) < failure_limit:
                 retry = len(attempts)

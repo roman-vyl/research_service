@@ -23,16 +23,26 @@ they are valid. AutoResearch has no separate Engine/MDS addressing scheme: both 
 the existing Research `Settings` contract, and the supervisor passes its resolved settings only to
 the canonical executor.
 
-| Profile | Supervisor runtime | Strategy Engine | Market Data Service | Artifact/config roots |
-| --- | --- | --- | --- | --- |
-| HOST | macOS or Linux host | `http://127.0.0.1:8090` | `http://127.0.0.1:8080` | Required absolute host paths supplied by the operator |
-| DOCKER | container attached to the BBB Docker network | `http://strategy-engine:8080` | `http://market-data-service:8080` | Explicit container paths; defaults are `/data/runs` and `/data/configs` |
+| Profile | Supervisor runtime | Strategy Engine | Market Data Service | Research Service API | Artifact/config roots |
+| --- | --- | --- | --- | --- | --- |
+| HOST | macOS or Linux host | `http://127.0.0.1:8090` | `http://127.0.0.1:8080` | Operator-supplied; no canonical port is documented | Required absolute host paths supplied by the operator |
+| DOCKER | container attached to the BBB Docker network | `http://strategy-engine:8080` | `http://market-data-service:8080` | `http://research-service:8080` | Explicit container paths; defaults are `/data/runs` and `/data/configs` |
 
-For a host-run supervisor, export writable absolute host roots and use the host wrapper:
+A planning worker never discovers or contacts Strategy Engine/Market Data Service topology itself
+(it does not receive the `RESEARCH_*` namespace at all -- see below). It reaches canonical research
+discovery, such as the component catalog, through one sanctioned Research Service API base URL that
+the launch profile wrapper injects into the planning prompt as `{research_service_base_url}` via
+`BBB_AUTORESEARCH_RESEARCH_SERVICE_URL`. This is the Research Service's own HTTP API (`make run`),
+not a `RESEARCH_*` Settings value, so it is never forwarded to or stripped from the worker
+environment by `build_worker_env`.
+
+For a host-run supervisor, export writable absolute host roots, the Research Service API's own base
+URL on this host, and use the host wrapper:
 
 ```bash
 export RESEARCH_ARTIFACTS_ROOT=/Users/operator/bbb_data/autoresearch
 export RESEARCH_CONFIGS_ROOT=/Users/operator/bbb_data/autoresearch/configs
+export BBB_AUTORESEARCH_RESEARCH_SERVICE_URL=http://127.0.0.1:8000  # wherever this operator runs it
 export BBB_AUTORESEARCH_AGENT_COMMAND='codex exec -C . -s workspace-write -'
 scripts/autoresearch_run_host.sh \
   --session ema-anchor-demo \
