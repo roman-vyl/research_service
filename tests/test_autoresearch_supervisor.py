@@ -198,6 +198,7 @@ def test_interpretation_prompt_renders_evidence_ref_contract_allowlist(tmp_path:
         "skill_path": ".claude/skills/ema-anchor-edge-research/SKILL.md",
         "iteration": 1,
         "contract_version": "bbb_autoresearch_state.v2",
+        "active_stage_binding": {"phase": "baseline", "stage_kind": "descriptive_baseline"},
     }
 
     prompt = render_interpretation_prompt(state, Path(__file__).parents[1], tmp_path, "batch")
@@ -225,6 +226,7 @@ def test_interpretation_prompt_allowlist_uses_contract_layer(
         "skill_path": ".claude/skills/ema-anchor-edge-research/SKILL.md",
         "iteration": 1,
         "contract_version": "bbb_autoresearch_state.v2",
+        "active_stage_binding": {"phase": "baseline", "stage_kind": "descriptive_baseline"},
     }
 
     prompt = render_interpretation_prompt(state, Path(__file__).parents[1], tmp_path, "batch")
