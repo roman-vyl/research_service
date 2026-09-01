@@ -14,6 +14,46 @@ those artifacts; it does not copy dense trades or calculate competing metrics.
 
 ## Quick start
 
+### Select the supervisor runtime profile first
+
+Before starting AutoResearch, the operator or agent **must determine where the supervisor process
+itself runs** and use exactly one documented launch profile. Do not infer the profile from where the
+services run, and do not rely on Research Settings defaults outside the runtime context for which
+they are valid. AutoResearch has no separate Engine/MDS addressing scheme: both profiles populate
+the existing Research `Settings` contract, and the supervisor passes its resolved settings only to
+the canonical executor.
+
+| Profile | Supervisor runtime | Strategy Engine | Market Data Service | Artifact/config roots |
+| --- | --- | --- | --- | --- |
+| HOST | macOS or Linux host | `http://127.0.0.1:8090` | `http://127.0.0.1:8080` | Required absolute host paths supplied by the operator |
+| DOCKER | container attached to the BBB Docker network | `http://strategy-engine:8080` | `http://market-data-service:8080` | Explicit container paths; defaults are `/data/runs` and `/data/configs` |
+
+For a host-run supervisor, export writable absolute host roots and use the host wrapper:
+
+```bash
+export RESEARCH_ARTIFACTS_ROOT=/Users/operator/bbb_data/autoresearch
+export RESEARCH_CONFIGS_ROOT=/Users/operator/bbb_data/autoresearch/configs
+export BBB_AUTORESEARCH_AGENT_COMMAND='codex exec -C . -s workspace-write -'
+scripts/autoresearch_run_host.sh \
+  --session ema-anchor-demo \
+  --max-iterations 100
+```
+
+For a supervisor running inside the BBB Docker network, use the Docker wrapper. Override the roots
+only when that container uses different mounted paths:
+
+```bash
+export BBB_AUTORESEARCH_AGENT_COMMAND='codex exec -C . -s workspace-write -'
+scripts/autoresearch_run_docker.sh \
+  --session ema-anchor-demo \
+  --max-iterations 100
+```
+
+Both wrappers set only Research runtime configuration and forward every CLI argument unchanged to
+`scripts/autoresearch_supervisor.py`. They use `python` from `PATH`, so activate the intended
+environment before invoking them. Provider credentials, the agent command, and other ordinary
+runtime variables remain operator-owned.
+
 Initialize and inspect a session:
 
 ```bash
@@ -29,7 +69,7 @@ syntax is deliberately operator-supplied and is split with `shlex`; the supervis
 
 ```bash
 BBB_AUTORESEARCH_AGENT_COMMAND='codex exec -C . -s workspace-write -' \
-python scripts/autoresearch_supervisor.py \
+scripts/autoresearch_run_host.sh \
   --session ema-anchor-demo \
   --max-iterations 100
 ```
