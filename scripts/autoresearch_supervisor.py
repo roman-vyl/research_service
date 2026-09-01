@@ -217,10 +217,32 @@ _CONTROL_KEYS = {
 }
 _NON_BATCH_ACTIONS = frozenset({"artifact_diagnostic", "terminal", "hard_stop"})
 _FORBIDDEN_WORKER_NAMES = frozenset({"uv.lock", "sitecustomize.py", "market.sqlite3"})
+_RESEARCH_ENV_PREFIX = "RESEARCH_"
 
 
 class ContractError(ValueError):
     """A persisted AutoResearch document does not satisfy its v1 contract."""
+
+
+def build_worker_env(source: dict[str, str] | None = None) -> dict[str, str]:
+    """Preserve the CLI runtime while withholding the Research execution namespace."""
+
+    inherited = os.environ if source is None else source
+    return {
+        key: value
+        for key, value in inherited.items()
+        if not key.upper().startswith(_RESEARCH_ENV_PREFIX)
+    }
+
+
+def build_executor_env(settings: Settings, source: dict[str, str] | None = None) -> dict[str, str]:
+    """Build the canonical executor environment from one resolved Settings instance."""
+
+    environment = build_worker_env(source)
+    for field, value in settings.model_dump(mode="json").items():
+        key = f"{_RESEARCH_ENV_PREFIX}{field.upper()}"
+        environment[key] = value if isinstance(value, str) else json.dumps(value)
+    return environment
 
 
 def _sha256(path: Path) -> str:
@@ -389,11 +411,19 @@ class AgentRun:
 class AgentRunner:
     """Provider-neutral fresh-process runner with a stage-scoped output boundary."""
 
-    def __init__(self, command: str, repo_root: Path, session_root: Path, timeout: int | None):
+    def __init__(
+        self,
+        command: str,
+        repo_root: Path,
+        session_root: Path,
+        timeout: int | None,
+        worker_env: dict[str, str],
+    ):
         self.command = command
         self.repo_root = repo_root
         self.session_root = session_root
         self.timeout = timeout
+        self.worker_env = dict(worker_env)
 
     def run(
         self,
@@ -433,6 +463,7 @@ class AgentRunner:
                     stderr=stderr,
                     timeout=self.timeout,
                     check=False,
+                    env=self.worker_env,
                 )
                 exit_code = completed.returncode
             except subprocess.TimeoutExpired:
@@ -1399,6 +1430,7 @@ def _execute_canonical_batch(
     plan: dict[str, Any],
     control: dict[str, Any],
     timeout: int | None,
+    executor_env: dict[str, str],
 ) -> dict[str, Any]:
     request_path = iteration_root / "canonical_request.json"
     output_path = iteration_root / "execution_output.json"
@@ -1425,6 +1457,7 @@ def _execute_canonical_batch(
                 stderr=stderr,
                 timeout=timeout,
                 check=False,
+                env=executor_env,
             )
         except subprocess.TimeoutExpired as exc:
             raise ContractError(
@@ -1506,6 +1539,9 @@ def run_supervisor(
             "session predates supervisor-brokered execution; initialize a new session",
         )
         return 2
+    research_settings = Settings()
+    worker_env = build_worker_env()
+    executor_env = build_executor_env(research_settings)
     while True:
         state = load_json(state_path)
         validate_state(state)
@@ -1564,7 +1600,7 @@ def run_supervisor(
             if max_agent_failures is not None
             else state["budgets"]["max_consecutive_agent_failures"]
         )
-        runner = AgentRunner(agent_command, repo_root, root, agent_timeout_seconds)
+        runner = AgentRunner(agent_command, repo_root, root, agent_timeout_seconds, worker_env)
         values = {
             "session_dir": str(root),
             "iteration_dir": str(iteration_root),
@@ -1669,7 +1705,13 @@ def run_supervisor(
             else:
                 try:
                     control = _execute_canonical_batch(
-                        repo_root, iteration_root, state, plan, control, agent_timeout_seconds
+                        repo_root,
+                        iteration_root,
+                        state,
+                        plan,
+                        control,
+                        agent_timeout_seconds,
+                        executor_env,
                     )
                 except ContractError as exc:
                     _write_hard_stop(state_path, state, str(exc))

@@ -41,6 +41,7 @@ from autoresearch_supervisor import (  # noqa: E402
 
 FAKE_AGENT = r"""#!/usr/bin/env python3
 import json
+import os
 import pathlib
 import sys
 
@@ -63,6 +64,13 @@ if mode == "market_db":
     (result_path.parent / "market.sqlite3").write_bytes(b"db")
 if mode == "mutate_state":
     (result_path.parent.parents[1] / "state.json").write_text("{}")
+if mode == "env_probe" and stage == "interpretation":
+    analysis = result_path.parent / "interpretation_analysis"
+    analysis.mkdir(exist_ok=True)
+    (analysis / "env.json").write_text(json.dumps({
+      "marker": os.getenv("AUTORESEARCH_TEST_MARKER"), "virtual_env": os.getenv("VIRTUAL_ENV"),
+      "path": os.getenv("PATH"), "research_keys": sorted(k for k in os.environ if k.upper().startswith("RESEARCH_"))
+    }))
 
 if stage == "planning":
     action = "hard_stop" if mode == "hard_stop" else ("terminal" if mode == "terminal" else ("batch" if mode == "batch" else "artifact_diagnostic"))
@@ -83,6 +91,11 @@ if stage == "planning":
       "explanatory_metadata": {},
       "hard_stop_reason": "contract ambiguity" if action == "hard_stop" else None
     }
+    if mode == "env_probe":
+        plan["explanatory_metadata"] = {
+          "marker": os.getenv("AUTORESEARCH_TEST_MARKER"), "virtual_env": os.getenv("VIRTUAL_ENV"),
+          "path": os.getenv("PATH"), "research_keys": sorted(k for k in os.environ if k.upper().startswith("RESEARCH_"))
+        }
     if mode == "schema_invalid": plan["unexpected"] = True
     result_path.write_text(json.dumps(plan))
     raise SystemExit(0)
@@ -253,6 +266,35 @@ def test_non_batch_actions_use_fresh_interpreter_without_executor_or_receipt(
     assert len((root / "journal.jsonl").read_text().splitlines()) == 1
 
 
+def test_worker_env_preserves_cli_runtime_and_removes_research_namespace(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, root = _repo(tmp_path)
+    monkeypatch.setenv("AUTORESEARCH_TEST_MARKER", "visible")
+    monkeypatch.setenv("VIRTUAL_ENV", "/provider/venv")
+    monkeypatch.setenv("RESEARCH_STRATEGY_ENGINE_URL", "http://secret-engine")
+    monkeypatch.setenv("RESEARCH_MARKET_DATA_URL", "http://secret-mds")
+    monkeypatch.setenv("RESEARCH_ARTIFACTS_ROOT", "/secret/artifacts")
+    monkeypatch.setenv("RESEARCH_CONFIGS_ROOT", "/secret/configs")
+    monkeypatch.setenv("RESEARCH_FUTURE_EXECUTION_SETTING", "secret")
+    assert (
+        run_supervisor(
+            session_id="s1",
+            agent_command=_command(repo, "env_probe"),
+            repo_root=repo,
+            max_iterations=1,
+        )
+        == 0
+    )
+    planning = load_json(root / "iterations/0001/execution_plan.json")["explanatory_metadata"]
+    interpretation = load_json(root / "iterations/0001/interpretation_analysis/env.json")
+    for observed in (planning, interpretation):
+        assert observed["marker"] == "visible"
+        assert observed["virtual_env"] == "/provider/venv"
+        assert observed["path"]
+        assert observed["research_keys"] == []
+
+
 def test_supervisor_owned_batch_flow_creates_and_binds_receipt(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -262,12 +304,18 @@ def test_supervisor_owned_batch_flow_creates_and_binds_receipt(
     # Helper persists at <tmp>/artifacts/batches/exp-1.
     assert artifact == artifacts_root / "batches/exp-1"
     monkeypatch.setenv("RESEARCH_ARTIFACTS_ROOT", str(artifacts_root))
+    monkeypatch.setenv("RESEARCH_CONFIGS_ROOT", str(tmp_path / "configs"))
+    monkeypatch.setenv("RESEARCH_STRATEGY_ENGINE_URL", "http://canonical-engine")
+    monkeypatch.setenv("RESEARCH_MARKET_DATA_URL", "http://canonical-mds")
+    monkeypatch.setenv("RESEARCH_UNKNOWN_EXECUTION_OVERRIDE", "must-not-pass")
     original_run = supervisor_module.subprocess.run
+    observed_executor_env: dict[str, str] = {}
 
     def fake_run(args, *positional, **kwargs):
         if isinstance(args, list) and any(
             str(item).endswith("scripts/autoresearch_execute_batch.py") for item in args
         ):
+            observed_executor_env.update(kwargs["env"])
             output_path = Path(args[args.index("--output") + 1])
             output_path.write_text(
                 json.dumps(
@@ -295,6 +343,11 @@ def test_supervisor_owned_batch_flow_creates_and_binds_receipt(
     assert receipt["experiment_id"] == "exp-1"
     assert receipt["candidate_ids"] == ["c1"]
     assert receipt["batch_artifact_path"] == str(artifact)
+    assert observed_executor_env["RESEARCH_STRATEGY_ENGINE_URL"] == "http://canonical-engine"
+    assert observed_executor_env["RESEARCH_MARKET_DATA_URL"] == "http://canonical-mds"
+    assert observed_executor_env["RESEARCH_ARTIFACTS_ROOT"] == str(artifacts_root)
+    assert observed_executor_env["RESEARCH_CONFIGS_ROOT"] == str(tmp_path / "configs")
+    assert "RESEARCH_UNKNOWN_EXECUTION_OVERRIDE" not in observed_executor_env
     assert load_json(iteration / "iteration_control.json")["stage"] == "committed"
     assert len((root / "journal.jsonl").read_text().splitlines()) == 1
     plan = load_json(iteration / "execution_plan.json")
