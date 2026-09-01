@@ -7,9 +7,7 @@ compose Strategy Engine, Market Data Service, execution, and accounting into
 one immutable result. Ownership (Strategy Engine vs Research Service vs
 Market Data Service) is normative in `research-service-boundaries-v1`; this
 spec states only the requirements specific to this use case.
-
 ## Requirements
-
 ### Requirement: One instance per request
 
 The service SHALL run exactly one strategy instance per request.
@@ -87,15 +85,17 @@ fails to report a `market_data_hash` or the two reported hashes differ.
 
 ### Requirement: Execution and accounting ownership
 
-Research Service SHALL own fill arbitration, position lifecycle, and
-accounting.
+Research Service SHALL own fill arbitration, current-equity position sizing, position lifecycle, and accounting. The authoritative materialization lifecycle SHALL seed equity from `AccountingPolicy.initial_equity`, resolve actual entry fill price before quantity, account each close before sizing a later entry, and produce one internally continuous execution/accounting result.
 
 #### Scenario: End-to-end ownership
 
 - **WHEN** a backtest runs to completion
-- **THEN** every fill, position-state transition, and accounting figure in
-  the result was produced by Research Service's own execution and
-  accounting layers.
+- **THEN** every fill, quantity, position-state transition, fee, PnL, equity transition, and accounting figure in the result was produced by Research Service's canonical lifecycle.
+
+#### Scenario: Sequential compounding
+
+- **WHEN** one position closes before a later entry decision
+- **THEN** the close is accounted first and the later entry is sized from the resulting current equity.
 
 ### Requirement: Managed decision timing
 

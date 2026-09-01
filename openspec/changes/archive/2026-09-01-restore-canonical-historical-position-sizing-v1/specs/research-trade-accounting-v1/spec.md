@@ -4,6 +4,11 @@
 
 `AccountingPolicy.initial_equity` SHALL seed the candidate's current available realised equity. Entry fee SHALL be calculated from actual entry fill notional, participate in the all-in entry sizing budget, and be carried into closed-trade accounting. Exit fee SHALL be calculated only from actual exit fill notional at close. Each closed trade SHALL change equity by exactly its side-aware gross PnL less entry and exit fees, and the resulting equity SHALL be the sizing equity for the next position. An open position at range end SHALL not fabricate a realised equity update.
 
+#### Scenario: Equity after a closed trade
+
+- **WHEN** a trade closes
+- **THEN** equity changes by exactly that trade's net PnL, and by nothing else.
+
 #### Scenario: Equity after a closed trade sizes the next entry
 
 - **WHEN** a trade closes and its net PnL changes current equity
