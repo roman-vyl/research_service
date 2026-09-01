@@ -24,6 +24,7 @@ sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
 
 from autoresearch_init import initialize_session  # noqa: E402
 from autoresearch_quality_contracts import (  # noqa: E402
+    EvidenceRef,
     EXIT_PRIMARY,
     ROBUSTNESS_PRIMARY,
     ResearchQualityAssessment,
@@ -166,6 +167,23 @@ def _evidence(candidate_id: str = "c1", metric: str = "net_pnl") -> dict[str, ob
         "iteration_id": None,
         "analysis_path": None,
     }
+
+
+def test_canonical_metric_evidence_rejects_analysis_path() -> None:
+    evidence = _evidence()
+    evidence["analysis_path"] = "interpretation_analysis/claim.json"
+
+    with pytest.raises(ValidationError, match="canonical_metric evidence has invalid fields"):
+        EvidenceRef.model_validate(evidence)
+
+
+def test_canonical_metric_evidence_rejects_unknown_metric_path() -> None:
+    evidence = _evidence(metric="invented.metric")
+
+    with pytest.raises(
+        ValidationError, match="canonical_metric evidence requires candidate_id and metric_path"
+    ):
+        EvidenceRef.model_validate(evidence)
 
 
 def _assessment(
