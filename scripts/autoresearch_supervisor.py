@@ -27,6 +27,7 @@ from research_service.application.experiments import (
 from research_service.runtime.settings import Settings
 
 from autoresearch_quality_contracts import (
+    CANONICAL_METRIC_PATHS,
     PromotionBlocker,
     enforce_quality_policy,
     phase_binding,
@@ -1147,6 +1148,9 @@ def render_interpretation_prompt(
         "execution_output_path": iteration_root / "execution_output.json" if batch else "NONE",
         "receipt_path": iteration_root / "execution_receipt.json" if batch else "NONE",
         "analysis_dir": iteration_root / "interpretation_analysis",
+        "canonical_metric_paths": ", ".join(
+            f"`{metric_path}`" for metric_path in sorted(CANONICAL_METRIC_PATHS)
+        ),
         "result_schema_path": root
         / "autoresearch"
         / "schemas"

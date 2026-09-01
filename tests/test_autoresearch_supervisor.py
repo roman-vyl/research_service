@@ -33,10 +33,12 @@ from autoresearch_supervisor import (  # noqa: E402
     append_journal,
     atomic_write_json,
     load_json,
+    render_interpretation_prompt,
     run_supervisor,
     validate_execution_receipt,
     validate_iteration_result,
 )
+from autoresearch_quality_contracts import CANONICAL_METRIC_PATHS  # noqa: E402
 
 
 FAKE_AGENT = r"""#!/usr/bin/env python3
@@ -182,6 +184,46 @@ def _repo(tmp_path: Path) -> tuple[Path, Path]:
 
 def _command(repo: Path, mode: str) -> str:
     return f"{sys.executable} {repo / 'fake_agent.py'} {{result_file}} {{stage}} {mode}"
+
+
+def test_interpretation_prompt_renders_evidence_ref_contract_allowlist(tmp_path: Path) -> None:
+    state = {
+        "session_id": "s1",
+        "skill_path": ".claude/skills/ema-anchor-edge-research/SKILL.md",
+        "iteration": 1,
+        "contract_version": "bbb_autoresearch_state.v2",
+    }
+
+    prompt = render_interpretation_prompt(state, Path(__file__).parents[1], tmp_path, "batch")
+
+    assert "`canonical_metric`" in prompt
+    assert "non-empty `candidate_id`" in prompt
+    assert "`iteration_id` and `analysis_path` are forbidden" in prompt
+    assert "never disguise file evidence as `canonical_metric`" in prompt
+    rendered_allowlist = prompt.split(
+        "Allowed canonical metric paths (rendered from the current contract layer):\n", 1
+    )[1].split("\n\n", 1)[0]
+    assert {item.strip("`") for item in rendered_allowlist.split(", ")} == set(
+        CANONICAL_METRIC_PATHS
+    )
+
+
+def test_interpretation_prompt_allowlist_uses_contract_layer(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(
+        supervisor_module, "CANONICAL_METRIC_PATHS", frozenset({"contract.probe"})
+    )
+    state = {
+        "session_id": "s1",
+        "skill_path": ".claude/skills/ema-anchor-edge-research/SKILL.md",
+        "iteration": 1,
+        "contract_version": "bbb_autoresearch_state.v2",
+    }
+
+    prompt = render_interpretation_prompt(state, Path(__file__).parents[1], tmp_path, "batch")
+
+    assert "`contract.probe`" in prompt
 
 
 def test_fresh_invocation_continues_then_completes(tmp_path: Path) -> None:
