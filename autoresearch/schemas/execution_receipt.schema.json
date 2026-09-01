@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bbb_autoresearch_execution_receipt.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "session_id", "iteration_id", "baseline_git_sha", "canonical_request_sha256", "experiment_id", "candidate_ids", "executor_path", "executor_baseline_git_sha", "started_at", "ended_at", "exit_status", "adapter_output_sha256", "batch_artifact_path", "request_artifact_sha256", "summary_artifact_sha256", "manifest_artifact_sha256"],
+  "properties": {
+    "contract_version": {"const": "bbb_autoresearch_execution_receipt.v1"},
+    "session_id": {"type": "string"}, "iteration_id": {"type": "integer", "minimum": 1},
+    "baseline_git_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "canonical_request_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "experiment_id": {"type": "string", "minLength": 1},
+    "candidate_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+    "executor_path": {"const": "scripts/autoresearch_execute_batch.py"},
+    "executor_baseline_git_sha": {"type": "string", "pattern": "^[0-9a-f]{40}$"},
+    "started_at": {"type": "string", "format": "date-time"}, "ended_at": {"type": "string", "format": "date-time"},
+    "exit_status": {"const": 0},
+    "adapter_output_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "batch_artifact_path": {"type": "string", "minLength": 1},
+    "request_artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "summary_artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "manifest_artifact_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}
+  }
+}
