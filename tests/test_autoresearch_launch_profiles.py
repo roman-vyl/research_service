@@ -1,19 +1,14 @@
 from __future__ import annotations
 
 import os
+import shutil
 from pathlib import Path
 import subprocess
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
-
-def _fake_python(tmp_path: Path) -> Path:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    executable = bin_dir / "python"
-    executable.write_text(
-        """#!/bin/sh
+_FAKE_PYTHON_SCRIPT = """#!/bin/sh
 printf 'engine=%s\\n' "$RESEARCH_STRATEGY_ENGINE_URL"
 printf 'mds=%s\\n' "$RESEARCH_MARKET_DATA_URL"
 printf 'research_service=%s\\n' "$BBB_AUTORESEARCH_RESEARCH_SERVICE_URL"
@@ -21,11 +16,38 @@ printf 'artifacts=%s\\n' "$RESEARCH_ARTIFACTS_ROOT"
 printf 'configs=%s\\n' "$RESEARCH_CONFIGS_ROOT"
 printf 'marker=%s\\n' "$PROVIDER_RUNTIME_MARKER"
 for argument in "$@"; do printf 'arg=%s\\n' "$argument"; done
-""",
-        encoding="utf-8",
-    )
+"""
+
+
+def _fake_python(tmp_path: Path) -> Path:
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    executable = bin_dir / "python"
+    executable.write_text(_FAKE_PYTHON_SCRIPT, encoding="utf-8")
     executable.chmod(0o755)
     return bin_dir
+
+
+def _fake_host_repo(tmp_path: Path, *, with_venv: bool = True) -> Path:
+    """Build a standalone repo_root copy so the HOST wrapper's repo-local
+    .venv/bin/python check can be exercised without touching the real repo."""
+    fake_repo = tmp_path / "fake_repo"
+    scripts_dir = fake_repo / "scripts"
+    scripts_dir.mkdir(parents=True)
+    shutil.copy2(
+        REPO_ROOT / "scripts/autoresearch_run_host.sh",
+        scripts_dir / "autoresearch_run_host.sh",
+    )
+    (scripts_dir / "autoresearch_supervisor.py").write_text("", encoding="utf-8")
+
+    if with_venv:
+        venv_bin = fake_repo / ".venv" / "bin"
+        venv_bin.mkdir(parents=True)
+        python_path = venv_bin / "python"
+        python_path.write_text(_FAKE_PYTHON_SCRIPT, encoding="utf-8")
+        python_path.chmod(0o755)
+
+    return fake_repo
 
 
 def _environment(tmp_path: Path) -> dict[str, str]:
@@ -38,6 +60,7 @@ def _environment(tmp_path: Path) -> dict[str, str]:
 
 
 def test_host_profile_sets_loopback_endpoints_and_forwards_arguments(tmp_path: Path) -> None:
+    fake_repo = _fake_host_repo(tmp_path)
     environment = _environment(tmp_path)
     environment["RESEARCH_ARTIFACTS_ROOT"] = "/host/autoresearch"
     environment["RESEARCH_CONFIGS_ROOT"] = "/host/autoresearch/configs"
@@ -45,7 +68,7 @@ def test_host_profile_sets_loopback_endpoints_and_forwards_arguments(tmp_path: P
 
     result = subprocess.run(
         [
-            str(REPO_ROOT / "scripts/autoresearch_run_host.sh"),
+            str(fake_repo / "scripts/autoresearch_run_host.sh"),
             "--session",
             "smoke",
             "--max-iterations",
@@ -64,12 +87,31 @@ def test_host_profile_sets_loopback_endpoints_and_forwards_arguments(tmp_path: P
         "artifacts=/host/autoresearch",
         "configs=/host/autoresearch/configs",
         "marker=preserved",
-        f"arg={REPO_ROOT / 'scripts/autoresearch_supervisor.py'}",
+        f"arg={fake_repo / 'scripts/autoresearch_supervisor.py'}",
         "arg=--session",
         "arg=smoke",
         "arg=--max-iterations",
         "arg=1",
     ]
+
+
+def test_host_profile_requires_repo_local_venv(tmp_path: Path) -> None:
+    fake_repo = _fake_host_repo(tmp_path, with_venv=False)
+    environment = _environment(tmp_path)
+    environment["RESEARCH_ARTIFACTS_ROOT"] = "/host/autoresearch"
+    environment["RESEARCH_CONFIGS_ROOT"] = "/host/autoresearch/configs"
+    environment["BBB_AUTORESEARCH_RESEARCH_SERVICE_URL"] = "http://127.0.0.1:8000"
+
+    result = subprocess.run(
+        [str(fake_repo / "scripts/autoresearch_run_host.sh"), "--session", "smoke"],
+        capture_output=True,
+        env=environment,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert str(fake_repo / ".venv/bin/python") in result.stderr
+    assert "repo-local virtualenv" in result.stderr
 
 
 def test_host_profile_requires_absolute_host_roots(tmp_path: Path) -> None:

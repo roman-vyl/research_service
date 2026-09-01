@@ -60,9 +60,10 @@ scripts/autoresearch_run_docker.sh \
 ```
 
 Both wrappers set only Research runtime configuration and forward every CLI argument unchanged to
-`scripts/autoresearch_supervisor.py`. They use `python` from `PATH`, so activate the intended
-environment before invoking them. Provider credentials, the agent command, and other ordinary
-runtime variables remain operator-owned.
+`scripts/autoresearch_supervisor.py`. The host wrapper runs the repo-local `.venv/bin/python`
+directly, so no prior `source .venv/bin/activate` is required; it fails fast if that virtualenv is
+missing or not executable. The Docker wrapper still uses `python` from `PATH` inside the container.
+Provider credentials, the agent command, and other ordinary runtime variables remain operator-owned.
 
 Initialize and inspect a session:
 
