@@ -81,7 +81,7 @@ if stage == "planning":
           "description": None, "candidates": [{"candidate_id": "c1",
           "strategy": {"enabled": True, "strategy_id": "ema_pullback", "ticker": "BTCUSDT.P",
           "base_timeframe": "5m", "raw_spec": {"anchor": {"period": 200}}},
-          "managed_policy_enabled": False, "execution": {"quantity": "1", "entry_price_source": "signal_bar_close", "entry_slippage_rate": "0", "protection_anchor": "signal_bar_close"},
+          "managed_policy_enabled": False, "execution": {"entry_price_source": "signal_bar_close", "entry_slippage_rate": "0", "protection_anchor": "signal_bar_close"},
           "accounting": {"initial_equity": "10000", "entry_fee_rate": "0", "exit_fee_rate": "0"}, "metadata": {}}]}
     plan = {
       "contract_version": "bbb_autoresearch_execution_plan.v1", "session_id": "s1",
