@@ -56,7 +56,8 @@ during a session.
 
 - **WHEN** an interpretation worker completes normally
 - **THEN** only its versioned iteration result and declared supplementary analysis are accepted as
-  worker outputs, and canonical request/result/receipt inputs remain byte-identical.
+  worker outputs, the frozen plan remains byte-identical, and any batch request/result/receipt
+  inputs remain byte-identical when the action is `batch`.
 
 ### Requirement: Fresh worker per logical iteration
 
@@ -80,6 +81,13 @@ validated.
 - **THEN** it receives the same planning/interpretation contracts and cannot change canonical
   execution ownership.
 
+#### Scenario: Non-batch logical iteration
+
+- **WHEN** the frozen plan selects `artifact_diagnostic`, `terminal`, or `hard_stop`
+- **THEN** the supervisor launches no canonical executor, creates no execution intent or receipt,
+  launches a fresh interpretation worker, validates the applicable existing iteration result, and
+  mechanically commits one journal row and one state transition.
+
 ### Requirement: Existing batch path only
 
 The planning worker SHALL formulate hypotheses, candidates, grids, and one immutable canonical
@@ -90,12 +98,20 @@ current live config validation, `RunBatchExperiment`, canonical per-run persiste
 derivation, direct worker-owned MDS/Strategy Engine research execution, local service substitutes,
 or a second summary format.
 
-Before accepting an interpretation, the supervisor SHALL verify a supervisor-owned execution
-receipt and the canonical request/summary/manifest identity, summary hash, candidate identities and
-counts, completed run IDs, and shared completed-candidate market-data hash. It SHALL resolve the
-reported path and require the exact canonical `<Settings().artifacts_root>/batches/<experiment_id>`
-location without traversal or symlink escape. Filesystem location and bundle integrity without a
-valid receipt SHALL be insufficient.
+Before accepting an interpretation for a `batch` action, the supervisor SHALL verify a
+supervisor-owned execution receipt and the canonical request/summary/manifest identity, summary
+hash, candidate identities and counts, completed run IDs, and shared completed-candidate
+market-data hash. It SHALL resolve the reported path and require the exact canonical
+`<Settings().artifacts_root>/batches/<experiment_id>` location without traversal or symlink escape.
+Filesystem location and bundle integrity without a valid receipt SHALL be insufficient for a
+`batch` action.
+
+For `artifact_diagnostic`, `terminal`, and `hard_stop`, the supervisor SHALL launch no canonical
+executor and SHALL neither require nor synthesize an execution receipt. It SHALL freeze the plan,
+launch a fresh interpretation worker, validate the applicable existing iteration-result contract,
+and mechanically commit journal/state. It SHALL NOT convert planning output directly into
+scientific interpretation. An `artifact_diagnostic` SHALL use only permitted existing canonical
+evidence and SHALL NOT create new experiment truth.
 
 #### Scenario: Valid batch experiment
 
@@ -122,12 +138,25 @@ valid receipt SHALL be insufficient.
 - **THEN** execution fails closed according to session policy and no worker receives authority to
   construct a fallback.
 
+#### Scenario: Existing-artifact diagnostic
+
+- **WHEN** a frozen `artifact_diagnostic` plan references permitted existing canonical evidence
+- **THEN** a fresh interpretation worker may analyze that evidence without executor invocation or
+  receipt creation, and the supervisor accepts only the applicable validated iteration result.
+
+#### Scenario: Terminal or hard-stop interpretation
+
+- **WHEN** a frozen plan selects `terminal` or `hard_stop`
+- **THEN** a fresh interpretation worker expresses the conclusion through the applicable existing
+  iteration-result contract and ordinary supervisor validation/commit semantics without a receipt.
+
 ### Requirement: Durable research continuity
 
 `state.json` SHALL remain a compact atomically published snapshot and `journal.jsonl` SHALL remain
 append-only. Agent chat history SHALL NOT be authoritative. Durable iteration control SHALL also
-record monotonic planning, frozen-request, execution-receipt, interpretation, and commit stages with
-the hashes required for idempotent recovery. All persisted contracts SHALL be versioned.
+record monotonic planning, action-appropriate frozen-plan/request, optional batch execution-receipt,
+interpretation, and commit stages with the hashes required for idempotent recovery. Non-batch
+actions SHALL have no execution-intent or receipt stage. All persisted contracts SHALL be versioned.
 
 #### Scenario: Crash after executor completion
 
@@ -139,8 +168,15 @@ the hashes required for idempotent recovery. All persisted contracts SHALL be ve
 #### Scenario: Crash after interpretation
 
 - **WHEN** a valid interpretation exists but journal append or state replace did not complete
-- **THEN** restart revalidates the frozen request, receipt, artifacts, and interpretation and
-  completes the journal/state commit idempotently without rerunning execution.
+- **THEN** restart revalidates the frozen plan and interpretation plus any batch-only request,
+  receipt, and artifacts, and completes the journal/state commit idempotently without rerunning
+  execution.
+
+#### Scenario: Crash after frozen non-batch plan
+
+- **WHEN** an `artifact_diagnostic`, `terminal`, or `hard_stop` plan is frozen before interpretation
+- **THEN** restart launches a fresh interpretation worker and creates no execution intent, receipt,
+  or executor process.
 
 #### Scenario: Crash during ambiguous executor outcome
 
@@ -169,6 +205,12 @@ than worker self-repair. Cancellation and iteration/wall-clock budgets SHALL rem
 - **THEN** only interpretation retries with the same immutable request and evidence; the canonical
   batch is not rerun.
 
+#### Scenario: Non-batch interpretation worker crash
+
+- **WHEN** interpretation fails after a non-batch plan is frozen
+- **THEN** only a fresh interpretation worker retries against that plan, with no executor invocation
+  or receipt creation.
+
 #### Scenario: Cancellation before next stage
 
 - **WHEN** cancellation is observed before planning, execution, interpretation, or the next logical
@@ -192,12 +234,14 @@ the iteration and SHALL NOT be reconciled by worker interpretation.
 
 ### Requirement: Minimal trusted execution receipt
 
-For each supervisor-owned canonical execution, the supervisor SHALL atomically persist a versioned
-receipt binding session ID, iteration number, baseline repository SHA, canonical request SHA256,
-experiment ID, ordered candidate IDs, canonical executor identity and baseline, executor exit
-status, canonical adapter-output hash, exact canonical batch path, and required canonical artifact
-hashes. The receipt SHALL be mechanically recomputable from supervisor-controlled inputs and
-canonical artifacts and SHALL NOT rank or interpret candidates.
+For each supervisor-owned canonical execution of a `batch` action, the supervisor SHALL atomically
+persist a versioned receipt binding session ID, iteration number, baseline repository SHA, canonical
+request SHA256, experiment ID, ordered candidate IDs, canonical executor identity and baseline,
+executor exit status, canonical adapter-output hash, exact canonical batch path, and required
+canonical artifact hashes. The receipt SHALL be mechanically recomputable from supervisor-
+controlled inputs and canonical artifacts and SHALL NOT rank or interpret candidates. For
+`artifact_diagnostic`, `terminal`, and `hard_stop`, no canonical execution occurs, so an execution
+receipt SHALL NOT be required or synthesized.
 
 #### Scenario: Receipt or result tampered
 
@@ -209,6 +253,12 @@ canonical artifacts and SHALL NOT rank or interpret candidates.
 
 - **WHEN** a worker supplies a receipt without the matching supervisor execution stage
 - **THEN** the document has no authority and cannot make its evidence canonical.
+
+#### Scenario: Non-batch action has no receipt
+
+- **WHEN** a frozen plan selects `artifact_diagnostic`, `terminal`, or `hard_stop`
+- **THEN** receipt absence is valid and expected, while a synthetic receipt is rejected as
+  inconsistent with the action.
 
 ### Requirement: Research freedom outside execution ownership
 

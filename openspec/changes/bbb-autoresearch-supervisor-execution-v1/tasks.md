@@ -4,6 +4,8 @@
       `bbb_autoresearch_execution_receipt.v1`, and the persisted iteration-control record.
 - [ ] Reuse canonical `BatchExperimentRequest` validation and preserve exact v1/v2 scientific
       contract compatibility without silent migration.
+- [ ] Make the receipt schema and validator conditional on `action=batch`; require no execution
+      intent or receipt for `artifact_diagnostic`, `terminal`, and `hard_stop`.
 
 ## 2. Provider-agnostic worker stages
 
@@ -11,6 +13,8 @@
       timeouts, attempts, and output allowlists.
 - [ ] Split prompts/program requirements into planning and interpretation responsibilities while
       preserving one logical researcher and all Research Quality Policy semantics.
+- [ ] Launch a fresh interpretation worker for every action, including all non-batch actions, and
+      prevent the supervisor from converting planning output directly into research semantics.
 - [ ] Prohibit direct execution, raw market-store access, local evaluator/service substitutes,
       import/client monkeypatching, package managers, and dependency/environment self-repair.
 
@@ -25,10 +29,12 @@
 
 ## 4. Receipt and acceptance validation
 
-- [ ] Persist the minimal trusted receipt atomically and recompute its request, executor, output,
-      artifact, identity, ordering, exit-status, and hash fields before acceptance.
-- [ ] Reuse all existing canonical path/provenance/integrity checks and require final interpretation
-      to agree with the frozen request, receipt, and canonical summary.
+- [ ] For `batch`, persist the minimal trusted receipt atomically and recompute its request,
+      executor, output, artifact, identity, ordering, exit-status, and hash fields before
+      acceptance; for non-batch actions assert that no receipt exists.
+- [ ] Reuse all existing canonical path/provenance/integrity checks and, for `batch`, require final
+      interpretation to agree with the frozen request, receipt, and canonical summary; for
+      non-batch actions validate agreement with the frozen plan and applicable existing evidence.
 - [ ] Detect mutation of supervisor-owned request/output/receipt files and unexpected worker output;
       hard-stop before journal/state commit.
 
@@ -40,6 +46,8 @@
       fresh worker when required.
 - [ ] Recover interpretation-before-commit and journal-before-state crashes idempotently; fail
       closed on ambiguous executor outcome.
+- [ ] Resume a frozen non-batch plan directly at fresh interpretation and recover its prepared
+      interpretation idempotently without creating execution intent, receipt, or executor process.
 
 ## 6. Focused verification
 
@@ -54,6 +62,10 @@
       are optional defense in depth.
 - [ ] Prove supplementary analysis and negative research evidence remain allowed, and supervisor
       never ranks candidates or reconstructs scientific interpretation.
+- [ ] Add focused `artifact_diagnostic`, `terminal`, and `hard_stop` flow and recovery tests proving
+      the executor is not invoked, no receipt is created, a fresh interpretation worker is used,
+      the supervisor creates no research semantics, the applicable iteration commits correctly,
+      and resume never launches the executor.
 
 ## 7. Documentation and release verification
 

@@ -17,13 +17,15 @@ MDS, accounting, or Research Quality Policy semantics.
 - Split one logical AutoResearch iteration into planning, supervisor-owned canonical execution,
   and interpretation stages. Planning and interpretation use fresh CLI processes through one
   provider-agnostic `AgentRunner` boundary.
-- Add a versioned planning contract carrying the hypothesis and immutable canonical
-  `BatchExperimentRequest`, plus a minimal supervisor-owned execution receipt binding that request
-  to the canonical result and persisted artifacts.
+- Add a versioned planning contract carrying the hypothesis and, for a compute-bearing `batch`
+  action, an immutable canonical `BatchExperimentRequest` plus a minimal supervisor-owned execution
+  receipt binding that request to the canonical result and persisted artifacts.
 - Make the supervisor the only owner of executor cwd, invocation, Research runtime environment,
   service connectivity, and canonical artifact-root configuration.
-- Require final interpretation acceptance to agree with the immutable request, trusted receipt,
-  canonical artifacts, and the existing quality-aware iteration contract.
+- Require final interpretation acceptance to agree with the frozen plan and existing quality-aware
+  iteration contract and, only for a `batch` action, with the immutable request, trusted receipt,
+  and canonical artifacts. Non-batch actions create no execution receipt and still use a fresh
+  interpretation invocation before mechanical commit.
 - Define fail-closed planning/execution/interpretation retry and crash recovery so a completed
   canonical batch is never repeated merely because interpretation or state commit crashed.
 - Strengthen the worker constitution and prompts against dependency self-repair, local evaluator

@@ -27,7 +27,8 @@ Goals:
 - keep scientific decisions and interpretation with the autonomous worker;
 - make canonical batch execution exclusively supervisor-owned;
 - retain the existing Research evaluator and canonical artifact contracts;
-- bind every accepted interpretation to one immutable request and one trusted execution receipt;
+- bind every accepted batch interpretation to one immutable request and one trusted execution
+  receipt, while accepting non-batch interpretations against their frozen plan without a receipt;
 - remain provider-agnostic across Codex, Claude Code, and future CLI agents;
 - recover deterministically without repeating a valid completed batch;
 - preserve exact Research Quality Policy semantics and v1/v2 compatibility decisions unless a
@@ -50,21 +51,29 @@ Non-goals:
 One research iteration remains the unit that advances state and appends one journal row:
 
 1. a fresh planning invocation reads program, skill, state, journal, and relevant contracts;
-2. it emits one planning result containing the hypothesis and, when compute is justified, one
-   canonical batch request;
-3. the supervisor validates and freezes the request;
-4. the supervisor invokes the existing canonical adapter;
-5. a fresh interpretation invocation reads the frozen request, canonical compact evidence,
-   receipt, state, and relevant artifacts;
+2. it emits one planning result containing the hypothesis and selected action and, when batch
+   compute is justified, one canonical batch request;
+3. the supervisor validates and freezes the plan and its optional request;
+4. for `batch` only, the supervisor invokes the existing canonical adapter and creates a receipt;
+5. a fresh interpretation invocation reads the frozen plan, state, and applicable evidence;
 6. it emits the existing quality-aware iteration result;
 7. the supervisor validates and commits journal/state atomically as today.
 
 The two CLI processes are technical isolation around one autonomous researcher. They are not two
 agents with competing goals, independent memory, or separate scientific authority.
 
-Planning may also return a justified artifact-only diagnostic, terminal conclusion, or hard stop.
-In those cases no canonical executor is launched, but the final accepted result must still follow
-the applicable existing iteration contract.
+Planning may also return a justified `artifact_diagnostic`, `terminal`, or `hard_stop` action. For
+each non-batch action the supervisor freezes the plan, creates no execution intent or receipt,
+launches no canonical executor, and starts a fresh interpretation worker. That worker emits the
+applicable existing iteration-result contract, after which the supervisor performs the same
+mechanical validation and journal/state commit. The supervisor never promotes planning output
+directly into scientific interpretation. Planning and interpretation remain two technical
+invocations of one logical autonomous researcher.
+
+An `artifact_diagnostic` interpretation may use only permitted existing canonical evidence and
+artifacts. It may not create a new experiment result or make non-canonical facts authoritative.
+`terminal` and `hard_stop` likewise pass through the ordinary interpretation contract and status
+validation; the absence of compute does not justify a synthetic receipt.
 
 ### 2. Planning produces a small immutable contract
 
@@ -79,10 +88,12 @@ Introduce `bbb_autoresearch_execution_plan.v1`. Its normative content is deliber
   trading facts;
 - hard-stop reason when applicable.
 
-The supervisor validates exact identity, candidate ordering/uniqueness, configured candidate
-budget, strategy/window comparability, and current live config validation through the canonical
-execution path. It then writes the normalized request once and records its SHA256. After freezing,
-any byte change invalidates the stage; the worker cannot replace a request and retain its execution.
+For `batch`, the supervisor validates exact identity, candidate ordering/uniqueness, configured
+candidate budget, strategy/window comparability, and current live config validation through the
+canonical execution path. It then writes the normalized request once and records its SHA256. After
+freezing, any byte change invalidates the stage; the worker cannot replace a request and retain its
+execution. For a non-batch action the whole normalized plan is frozen, but no canonical request,
+execution intent, or execution receipt is created.
 
 ### 3. The supervisor owns canonical execution
 
@@ -109,8 +120,9 @@ This design does not create a new executor. It relocates ownership of the existi
 
 ### 4. A minimal receipt establishes execution provenance
 
-Introduce `bbb_autoresearch_execution_receipt.v1`, written only by the supervisor after canonical
-execution or deterministic recovery of its completed artifact. It binds:
+For a compute-bearing `batch` action, introduce `bbb_autoresearch_execution_receipt.v1`, written
+only by the supervisor after canonical execution or deterministic recovery of its completed
+artifact. It binds:
 
 - `session_id` and `iteration_id`;
 - baseline repository SHA;
@@ -127,22 +139,31 @@ The receipt is an integrity record, not a cryptographic attestation platform. At
 writes, immutable request/output hashes, process ownership, repository-baseline identity, and the
 existing canonical bundle verifier are sufficient for this local capability. A receipt authored or
 modified by a worker is invalid because the supervisor recomputes every field before acceptance.
+For `artifact_diagnostic`, `terminal`, and `hard_stop`, a receipt is neither required nor permitted
+to be synthesized because no canonical execution occurred.
 
 ### 5. Interpretation cannot redefine execution truth
 
-The interpretation prompt receives the original normalized request, adapter output, receipt, state,
-and canonical evidence. It may perform supplementary analysis and owns topology, side scope,
-trade-offs, quality assessment, conclusion, and next question. It may not execute another research
-experiment.
+Every action receives a fresh interpretation invocation. For `batch`, its prompt receives the
+original normalized request, adapter output, receipt, state, and canonical evidence. For a
+non-batch action, it receives the frozen plan, state, and only the existing canonical evidence
+permitted by that action, with no adapter output or receipt. In both paths it may perform
+supplementary analysis and owns topology, side scope, trade-offs, quality assessment, conclusion,
+and next question. It may not execute another research experiment.
 
 The final existing `bbb_autoresearch_iteration.v2` result remains the scientific result contract.
-Before acceptance the supervisor mechanically requires:
+Before accepting a `batch` interpretation the supervisor mechanically requires:
 
 - its experiment ID and candidate IDs/order equal the frozen request;
 - its execution result equals receipt and canonical summary identities/counts/run IDs/hash;
 - request and adapter-output hashes still equal the receipt;
 - receipt fields recompute from the current baseline and canonical artifacts;
 - existing provenance/integrity and Research Quality Policy validation pass.
+
+Before accepting a non-batch interpretation the supervisor instead requires that its action,
+identity, phase, and evidence references agree with the frozen plan, that no execution intent or
+receipt exists, and that the applicable existing iteration and Research Quality Policy validation
+passes. It performs no scientific interpretation in either path.
 
 No receipt field authorizes the supervisor to infer topology, choose a candidate, rank metrics, or
 replace worker interpretation.
@@ -185,28 +206,35 @@ The supervisor persists a small iteration control record with monotonic stages a
 
 - `planning_pending`: no valid plan exists. A failed planning process may retry with a fresh worker
   within its configured worker-attempt budget. No executor is launched.
-- `request_prepared`: a valid normalized request and its hash are durable; no execution receipt is
-  committed. The supervisor writes an execution-intent record before launching the adapter.
+- `request_prepared`: for `batch`, a valid normalized request and its hash are durable; no execution
+  receipt is committed. The supervisor writes an execution-intent record before launching the
+  adapter.
+- `non_batch_plan_prepared`: for `artifact_diagnostic`, `terminal`, or `hard_stop`, the normalized
+  plan is durable; no execution intent or receipt exists. Resume proceeds directly to a fresh
+  interpretation invocation.
 - `execution_completed`: a valid receipt and canonical artifacts exist; interpretation is not yet
   committed. Resume never runs the batch again and may retry only a fresh interpretation worker.
 - `interpretation_prepared`: a valid interpretation exists, but journal/state commit may be
-  incomplete. Resume revalidates frozen request, receipt, artifacts, and interpretation without
-  running either worker or executor again.
+  incomplete. Resume revalidates the frozen plan and interpretation plus, for `batch` only, the
+  request, receipt, and artifacts, without running either worker or executor again.
 - `committed`: journal contains the iteration and state has advanced.
 
 Recovery rules:
 
-1. A crash before a valid request retries planning only.
-2. A crash after request freeze but before execution intent may launch the executor once.
-3. If execution intent exists and the exact canonical bundle is complete and passes all current
+1. A crash before a valid plan retries planning only.
+2. A crash after a non-batch plan is frozen resumes interpretation directly; it never creates an
+   execution intent or receipt and never launches the executor.
+3. A crash after a batch request freezes but before execution intent may launch the executor once.
+4. If execution intent exists and the exact canonical bundle is complete and passes all current
    checks, the supervisor deterministically reconstructs/commits the receipt and does not rerun.
-4. If execution intent exists but no complete valid bundle proves completion, the outcome is
+5. If execution intent exists but no complete valid bundle proves completion, the outcome is
    ambiguous and fails closed rather than automatically creating a second experiment execution.
-5. A normal executor non-zero exit or unavailable canonical dependency hard-stops according to the
+6. A normal executor non-zero exit or unavailable canonical dependency hard-stops according to the
    execution failure policy; workers cannot provide a fallback.
-6. A crash after receipt commit retries interpretation only.
-7. A crash after interpretation validation but before journal append revalidates and commits it.
-8. Existing `(session_id, iteration_id)` journal detection recovers a crash between journal append
+7. A crash after receipt commit retries interpretation only.
+8. A crash after interpretation validation but before journal append revalidates and commits it;
+   the non-batch path revalidates without inventing execution provenance.
+9. Existing `(session_id, iteration_id)` journal detection recovers a crash between journal append
    and atomic state replace without duplicate journal rows.
 
 Planning and interpretation attempts have separate metadata and retry budgets. No worker retry can
@@ -252,4 +280,4 @@ The APPLY phase reuses rather than replaces:
   rests on supervisor-owned execution and receipt validation; stronger sandboxing remains optional
   defense in depth.
 - Supplementary analysis remains intentionally flexible, but it cannot supply canonical trading
-  facts or replace receipt-bound evidence.
+  facts, replace receipt-bound batch evidence, or create new truth during an artifact diagnostic.
