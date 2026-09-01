@@ -2,9 +2,10 @@
 
 BBB AutoResearch is a local autonomous research-control plane over the existing Research Service.
 It is not a strategy optimizer, evaluator, backtester, accounting engine, production promotion
-mechanism, or live-trading system. A fresh worker chooses one information-gaining research step;
-the mechanical supervisor validates its structured result, guards repository immutability, persists
-knowledge, and launches the next fresh worker.
+mechanism, or live-trading system. A fresh planning worker chooses one information-gaining research
+step; the supervisor alone runs any canonical batch; a fresh interpretation worker evaluates the
+evidence; and the mechanical supervisor validates and persists knowledge. The two worker processes
+are one logical autonomous researcher, not separate scientific roles.
 
 The evaluator remains Strategy Engine + Research Service historical execution/accounting + Market
 Data Service. Batch execution uses the current `RunBatchExperiment` path and its canonical per-run
@@ -27,17 +28,16 @@ syntax is deliberately operator-supplied and is split with `shlex`; the supervis
 `shell=True`. One reasonable local example, with permissions chosen explicitly by the operator, is:
 
 ```bash
-BBB_AUTORESEARCH_AGENT_COMMAND='codex exec -C . -s workspace-write -a never -' \
+BBB_AUTORESEARCH_AGENT_COMMAND='codex exec -C . -s workspace-write -' \
 python scripts/autoresearch_supervisor.py \
   --session ema-anchor-demo \
   --max-iterations 100
 ```
 
-The command may use `{prompt_file}`, `{result_file}`, `{session_dir}`, `{iteration_dir}`, and
-`{iteration_id}` placeholders. Without placeholders, the rendered prompt is still delivered on
-stdin. Do not add `--dangerously-bypass-approvals-and-sandbox` to tracked examples. The worker needs
-process access required for research, while the independent git guard verifies it made no tracked
-write.
+The command may use `{stage}`, `{prompt_file}`, `{result_file}`, `{session_dir}`, `{iteration_dir}`,
+and `{iteration_id}` placeholders. Without placeholders, each rendered stage prompt is delivered on
+stdin. Provider permissions are defense in depth: correctness comes from supervisor-owned execution,
+immutable request/receipt binding, stage output allowlists, and repository guards.
 
 Re-run the same supervisor command to resume. It reads committed state and starts the next iteration,
 not the previous one. Request graceful cancellation with:
@@ -60,10 +60,20 @@ var/autoresearch/<session_id>/
   journal.jsonl
   cancel.requested.json          # only when requested
   iterations/0001/
-    prompt.txt
-    stdout.log
-    stderr.log
+    planning_prompt.txt
+    planning.stdout.log
+    planning.stderr.log
+    execution_plan.json
+    canonical_request.json       # batch only; supervisor-frozen
+    execution_output.json        # batch only; supervisor-owned
+    execution_receipt.json       # batch only; supervisor-owned
+    executor.stdout.log          # batch only
+    executor.stderr.log          # batch only
+    interpretation_prompt.txt
+    interpretation.stdout.log
+    interpretation.stderr.log
     iteration_result.json
+    iteration_control.json
     supervisor_metadata.json
 ```
 
@@ -72,6 +82,11 @@ trade truth remains under the configured canonical Research artifact root; batch
 IDs are references in the iteration result/journal. Each retry is another fresh process and retains
 separate retry logs. If a process dies before state commit, the same iteration number is resumed and
 its durable attempt metadata bounds retries.
+
+New sessions are marked with `bbb_autoresearch_supervisor_execution.v1`; sessions initialized before
+the brokered protocol fail closed and must not be silently migrated. A frozen non-batch plan resumes
+at interpretation without an executor or receipt. A completed valid batch receipt resumes at
+interpretation without recompute. An ambiguous executor launch fails closed.
 
 The bundled EMA session template is quality-aware and initializes
 `bbb_autoresearch_state.v2`. Its immutable nested policy is

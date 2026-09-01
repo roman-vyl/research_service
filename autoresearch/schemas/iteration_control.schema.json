@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bbb_autoresearch_iteration_control.v1",
+  "type": "object", "additionalProperties": false,
+  "required": ["contract_version", "session_id", "iteration_id", "stage", "action", "plan_sha256", "request_sha256", "receipt_sha256", "interpretation_sha256", "execution_intent"],
+  "properties": {
+    "contract_version": {"const": "bbb_autoresearch_iteration_control.v1"},
+    "session_id": {"type": "string"}, "iteration_id": {"type": "integer", "minimum": 1},
+    "stage": {"enum": ["planning_pending", "request_prepared", "non_batch_plan_prepared", "execution_completed", "interpretation_prepared", "committed"]},
+    "action": {"type": ["string", "null"]},
+    "plan_sha256": {"type": ["string", "null"]}, "request_sha256": {"type": ["string", "null"]},
+    "receipt_sha256": {"type": ["string", "null"]}, "interpretation_sha256": {"type": ["string", "null"]},
+    "execution_intent": {"type": ["object", "null"]}
+  }
+}

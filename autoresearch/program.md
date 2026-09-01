@@ -38,11 +38,12 @@ For the current question:
    confounder before choosing compute.
 2. Choose the highest-information next action: a valid batch, an artifact-only diagnostic, a hard
    stop, or a terminal conclusion.
-3. If running an experiment, validate current live component/catalog semantics first. Construct
-   canonical `BatchExperimentRequest` candidates and invoke only
-   `scripts/autoresearch_execute_batch.py`, which uses `RunBatchExperiment` and canonical
-   persistence. Never implement a simulator, accounting calculation, direct MDS read, direct
-   Strategy Engine research call, or alternative metric calculation.
+3. If compute is justified, construct a complete canonical `BatchExperimentRequest` in the planning
+   result and stop. You MUST NOT execute it. Only the supervisor invokes
+   `scripts/autoresearch_execute_batch.py`. Never contact Engine/MDS for research execution,
+   implement a simulator or accounting calculation, access/copy raw market data, install or sync
+   dependencies, monkeypatch imports/HTTP, start substitute services, or repair the environment.
+   Canonical dependency failure is fail-closed and has no worker fallback.
 4. Inspect canonical compact batch results and, when justified, referenced run artifacts. Do not
    copy dense trades into the journal or state.
 5. Answer: What changed? What market property was proxied? What response topology appeared? What
@@ -52,7 +53,8 @@ For the current question:
    stage, assign stage-correct descriptive/primary/secondary/gate metric roles, and separately
    assess information value, structural promise, economic viability, robustness, side scope,
    multi-metric trade-offs, promotion disposition, and blockers.
-7. Write one result conforming to the exact schema path named by the iteration prompt, then exit.
+7. In planning, write only the execution plan named by the prompt. In the fresh interpretation
+   process, write the existing iteration result named by that prompt, then exit.
 
 Choose experiments to distinguish competing explanations, map topology, resolve boundaries, test
 redundancy or side asymmetry, detect thinning/concentration, or validate a discovered region.
