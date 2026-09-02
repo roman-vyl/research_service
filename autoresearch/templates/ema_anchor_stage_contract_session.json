@@ -1,0 +1,110 @@
+{
+  "contract_version": "bbb_autoresearch_state.v3",
+  "research_program": "ema-anchor-edge-research",
+  "skill_path": ".claude/skills/ema-anchor-edge-research/SKILL.md",
+  "strategy_context": {"strategy_id": "ema_pullback"},
+  "phase": "baseline",
+  "active_stage": "A_BASELINE",
+  "research_quality_policy": {
+    "contract_version": "bbb_research_quality_policy.v1",
+    "policy_id": "ema-anchor-stage-aware-v1",
+    "provenance": {
+      "source": "session",
+      "references": ["openspec/changes/autoresearch-research-quality-policy-v1"],
+      "rationale": "Resolved stage-aware policy for this session; no numeric threshold is implied."
+    },
+    "phase_bindings": [
+      {"phase": "baseline", "stage_kind": "descriptive_baseline"},
+      {"phase": "structural_1d", "stage_kind": "structural_entry"},
+      {"phase": "structural_interaction", "stage_kind": "structural_interaction"},
+      {"phase": "entry_region_selection", "stage_kind": "entry_region_selection"},
+      {"phase": "exit_geometry", "stage_kind": "exit_geometry"},
+      {"phase": "robustness_validation", "stage_kind": "robustness_validation"}
+    ],
+    "promotion_thresholds": {
+      "minimum_realised_trade_count": null,
+      "minimum_profit_factor": null,
+      "minimum_after_cost_return": null,
+      "maximum_trade_close_drawdown_magnitude": null,
+      "minimum_long_trade_count": null,
+      "minimum_short_trade_count": null,
+      "maximum_trade_count_reduction_fraction": null
+    },
+    "side_policy": {
+      "promotable_classifications": [
+        "two_sided_consistent",
+        "long_dominant",
+        "short_dominant",
+        "regime_specific_directional"
+      ]
+    },
+    "validation_policy": {
+      "required_before_entry_region_promotion": false,
+      "required_evidence": []
+    }
+  },
+  "stage_contract": {
+    "starting_strategy_fixture": "autoresearch/fixtures/ema_anchor_100_200_500_naked.json",
+    "semantic_bindings": [
+      {
+        "dimension": "symmetric_measurement_geometry",
+        "targets": [
+          {
+            "component_role": "exits",
+            "component_id": "atr_stop_loss",
+            "instance_id": "sl-measurement",
+            "parameter_name": "distance.multiplier",
+            "fixed_parameters": {}
+          },
+          {
+            "component_role": "exits",
+            "component_id": "atr_take_profit",
+            "instance_id": "tp-measurement",
+            "parameter_name": "distance.multiplier",
+            "fixed_parameters": {}
+          }
+        ]
+      },
+      {
+        "dimension": "anchor_stack_width",
+        "targets": [
+          {
+            "component_role": "setup",
+            "component_id": "anchor_stack_width_setup",
+            "instance_id": "stage-width",
+            "parameter_name": "min_current_width_atr",
+            "fixed_parameters": {
+              "atr_timeframe": "base",
+              "atr_period": 14,
+              "min_recent_width_atr": 4.0,
+              "width_lookback_bars": 80
+            }
+          }
+        ]
+      },
+      {
+        "dimension": "untouched_anchor_lookback",
+        "targets": [
+          {
+            "component_role": "setup",
+            "component_id": "untouched_anchor_setup",
+            "instance_id": "stage-lookback",
+            "parameter_name": "lookback",
+            "fixed_parameters": {"active_bars": 3}
+          }
+        ]
+      }
+    ],
+    "measurement_geometries": [
+      {"geometry_id": "A-2", "distance": 2.0},
+      {"geometry_id": "A-3", "distance": 3.0},
+      {"geometry_id": "A-4", "distance": 4.0}
+    ]
+  },
+  "budgets": {
+    "max_iterations": null,
+    "max_wall_clock_seconds": null,
+    "max_consecutive_agent_failures": 3,
+    "max_candidates_per_iteration": null
+  }
+}

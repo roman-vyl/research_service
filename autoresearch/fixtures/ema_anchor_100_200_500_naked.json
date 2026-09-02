@@ -1,0 +1,48 @@
+{
+  "enabled": true,
+  "strategy_id": "ema_pullback",
+  "ticker": "BTCUSDT.P",
+  "base_timeframe": "5m",
+  "raw_spec": {
+    "trade_sides": ["long", "short"],
+    "anchor_stack": {
+      "fast": {"source": "close", "timeframe": "base", "period": 100},
+      "anchor": {"source": "close", "timeframe": "base", "period": 200},
+      "slow": {"source": "close", "timeframe": "base", "period": 500}
+    },
+    "components": {
+      "direction": "ema_anchor_stack_trend",
+      "blockers": [],
+      "trigger": {"component_id": "touch_anchor"},
+      "risk": "no_risk_filter"
+    },
+    "setups": [],
+    "contexts": {},
+    "trade_management": {
+      "exit_policy": {
+        "always_on": {
+          "exits": [
+            {
+              "instance_id": "sl-measurement",
+              "component_id": "atr_stop_loss",
+              "exit_kind": "stop_loss",
+              "distance": {"timeframe": "base", "period": 14, "multiplier": 2.0}
+            },
+            {
+              "instance_id": "tp-measurement",
+              "component_id": "atr_take_profit",
+              "exit_kind": "take_profit",
+              "distance": {"timeframe": "base", "period": 14, "multiplier": 2.0}
+            }
+          ]
+        },
+        "profiles": {
+          "aligned": {"exits": []},
+          "countertrend": {"exits": []},
+          "neutral": {"exits": []}
+        }
+      },
+      "exit_management": {}
+    }
+  }
+}
