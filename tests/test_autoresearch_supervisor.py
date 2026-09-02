@@ -148,6 +148,14 @@ result_path.write_text(json.dumps(result))
 """
 
 
+@pytest.fixture(autouse=True)
+def _research_service_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    # run_supervisor now resolves the one sanctioned Research Service base URL
+    # from the launch profile wrapper's environment before rendering any
+    # worker prompt; the test harness plays that role here.
+    monkeypatch.setenv("BBB_AUTORESEARCH_RESEARCH_SERVICE_URL", "http://research-service.test")
+
+
 def _repo(tmp_path: Path) -> tuple[Path, Path]:
     (tmp_path / "autoresearch/prompts").mkdir(parents=True)
     source_root = Path(__file__).parents[1]

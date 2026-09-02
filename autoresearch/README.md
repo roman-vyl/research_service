@@ -33,6 +33,7 @@ For a host-run supervisor, export writable absolute host roots and use the host 
 ```bash
 export RESEARCH_ARTIFACTS_ROOT=/Users/operator/bbb_data/autoresearch
 export RESEARCH_CONFIGS_ROOT=/Users/operator/bbb_data/autoresearch/configs
+export BBB_AUTORESEARCH_RESEARCH_SERVICE_URL=http://127.0.0.1:8000
 export BBB_AUTORESEARCH_AGENT_COMMAND='codex exec -C . -s workspace-write -'
 scripts/autoresearch_run_host.sh \
   --session ema-anchor-demo \

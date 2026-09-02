@@ -13,6 +13,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 REPO_ROOT = Path(__file__).parents[1]
 REFERENCE_PATH = REPO_ROOT / "autoresearch/references/strategy_specification_reference.md"
 PROGRAM_PATH = REPO_ROOT / "autoresearch/program.md"
@@ -20,9 +22,13 @@ PROGRAM_PATH = REPO_ROOT / "autoresearch/program.md"
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
 from autoresearch_supervisor import (  # noqa: E402
+    ContractError,
     render_interpretation_prompt,
     render_planning_prompt,
+    resolve_research_service_base_url,
 )
+
+_FAKE_BASE_URL = "http://research-service.example.test:9999"
 
 
 def test_reference_document_exists_and_is_navigation_not_a_second_contract() -> None:
@@ -63,8 +69,60 @@ def test_planning_entry_point_still_points_to_program_md(tmp_path: Path) -> None
         "iteration": 1,
         "contract_version": "bbb_autoresearch_state.v2",
     }
-    prompt = render_planning_prompt(state, REPO_ROOT, tmp_path)
+    prompt = render_planning_prompt(state, REPO_ROOT, tmp_path, _FAKE_BASE_URL)
     assert str(PROGRAM_PATH) in prompt
+
+
+def test_resolve_research_service_base_url_is_fail_closed_when_unset() -> None:
+    with pytest.raises(ContractError, match="BBB_AUTORESEARCH_RESEARCH_SERVICE_URL"):
+        resolve_research_service_base_url({})
+
+
+def test_resolve_research_service_base_url_reads_launch_profile_env_var() -> None:
+    assert (
+        resolve_research_service_base_url({"BBB_AUTORESEARCH_RESEARCH_SERVICE_URL": _FAKE_BASE_URL})
+        == _FAKE_BASE_URL
+    )
+
+
+def test_planning_prompt_contains_concrete_sanctioned_component_catalog_url(
+    tmp_path: Path,
+) -> None:
+    state = {
+        "session_id": "s1",
+        "skill_path": ".claude/skills/ema-anchor-edge-research/SKILL.md",
+        "iteration": 1,
+        "contract_version": "bbb_autoresearch_state.v2",
+    }
+    prompt = render_planning_prompt(state, REPO_ROOT, tmp_path, _FAKE_BASE_URL)
+
+    assert _FAKE_BASE_URL in prompt
+    assert (
+        f"GET {_FAKE_BASE_URL}/api/research/component-catalog?strategy_id=ema_pullback" in prompt
+    )
+    normalized = " ".join(prompt.lower().split())
+    assert "do not discover or contact strategy engine or market data service directly" in (
+        normalized
+    )
+    # No placeholder must survive rendering -- an unresolved "{...}" would mean
+    # the worker sees a template artifact instead of an actionable URL.
+    assert "{research_service_base_url}" not in prompt
+
+
+def test_fresh_iteration_zero_bootstrap_also_gets_concrete_catalog_url(tmp_path: Path) -> None:
+    # iteration == 0 prepends bootstrap.md raw before the rendered planning.md --
+    # confirm the bootstrap-stage worker still ends up with the concrete URL in
+    # its combined prompt, not just a template placeholder.
+    state = {
+        "session_id": "s1",
+        "skill_path": ".claude/skills/ema-anchor-edge-research/SKILL.md",
+        "iteration": 0,
+        "contract_version": "bbb_autoresearch_state.v2",
+    }
+    prompt = render_planning_prompt(state, REPO_ROOT, tmp_path, _FAKE_BASE_URL)
+    assert (
+        f"GET {_FAKE_BASE_URL}/api/research/component-catalog?strategy_id=ema_pullback" in prompt
+    )
 
 
 def test_interpretation_entry_point_still_points_to_program_md(tmp_path: Path) -> None:
@@ -88,7 +146,7 @@ def test_fresh_iteration_zero_bootstrap_also_points_to_program_md(tmp_path: Path
         "iteration": 0,
         "contract_version": "bbb_autoresearch_state.v2",
     }
-    prompt = render_planning_prompt(state, REPO_ROOT, tmp_path)
+    prompt = render_planning_prompt(state, REPO_ROOT, tmp_path, _FAKE_BASE_URL)
     assert "autoresearch/program.md" in prompt
 
 
