@@ -1,0 +1,9 @@
+{
+  "$schema":"https://json-schema.org/draft/2020-12/schema", "$id":"bbb_autoresearch_iteration.v3",
+  "type":"object", "additionalProperties":false,
+  "required":["contract_version","session_id","iteration_id","status","phase","hypothesis","market_property_proxy","experiment","execution_result","observed_response","side_interpretation","risk_assessment","conclusion","next_discriminating_question","proposed_next_experiment","hard_stop_reason","research_quality_assessment","stage_disposition"],
+  "properties": {
+    "contract_version":{"const":"bbb_autoresearch_iteration.v3"}, "session_id":{"type":"string"}, "iteration_id":{"type":"integer","minimum":1}, "status":{"enum":["completed","hard_stop","failed"]}, "phase":{"type":"string"}, "hypothesis":{"type":"string"}, "market_property_proxy":{"type":"string"}, "experiment":{"type":"object"}, "execution_result":{"type":"object"}, "observed_response":{"type":"object"}, "side_interpretation":{"type":"object"}, "risk_assessment":{"type":"object"}, "conclusion":{"type":"string"}, "next_discriminating_question":{"type":"string"}, "proposed_next_experiment":{}, "hard_stop_reason":{}, "research_quality_assessment":{"$ref":"research_quality_assessment.schema.json"},
+    "stage_disposition":{"type":"object","additionalProperties":false,"required":["stage","status","evidence"],"properties":{"stage":{"enum":["A_BASELINE","B1_WIDTH","B2_LOOKBACK","B3_WIDTH_X_LOOKBACK"]},"status":{"enum":["in_progress","characterized","terminally_rejected"]},"evidence":{"type":"array","items":{"$ref":"research_quality_assessment.schema.json#/$defs/EvidenceRef"}}}}
+  }
+}

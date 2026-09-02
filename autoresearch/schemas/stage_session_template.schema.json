@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bbb_autoresearch_stage_session_template.v1",
+  "description": "Operator input contract for an opt-in state.v3 controlled A-to-B session. The concrete strategy document is supplied before harness initialization, not by APPLY.",
+  "type": "object",
+  "required": ["contract_version", "research_program", "skill_path", "phase", "active_stage", "research_quality_policy", "stage_contract", "budgets"],
+  "properties": {
+    "contract_version": {"const": "bbb_autoresearch_state.v3"},
+    "research_program": {"const": "ema-anchor-edge-research"},
+    "skill_path": {"type": "string", "minLength": 1},
+    "phase": {"const": "baseline"},
+    "active_stage": {"const": "A_BASELINE"},
+    "research_quality_policy": {"$ref": "research_quality_policy.schema.json"},
+    "stage_contract": {
+      "type": "object", "additionalProperties": false,
+      "required": ["starting_strategy_fixture", "semantic_bindings", "measurement_geometries"],
+      "properties": {
+        "starting_strategy_fixture": {"type": "string", "minLength": 1},
+        "semantic_bindings": {
+          "type": "array", "minItems": 3, "maxItems": 3,
+          "items": {
+            "type": "object", "additionalProperties": false,
+            "required": ["dimension", "targets"],
+            "properties": {
+              "dimension": {"enum": ["symmetric_measurement_geometry", "anchor_stack_width", "untouched_anchor_lookback"]},
+              "targets": {
+                "type": "array", "minItems": 1, "maxItems": 2,
+                "items": {
+                  "type": "object", "additionalProperties": false,
+                  "required": ["component_role", "component_id", "instance_id", "parameter_name"],
+                  "properties": {
+                    "component_role": {"type": "string", "minLength": 1},
+                    "component_id": {"type": "string", "minLength": 1},
+                    "instance_id": {"type": ["string", "null"], "minLength": 1},
+                    "parameter_name": {"type": "string", "minLength": 1}
+                  }
+                }
+              }
+            }
+          }
+        },
+        "measurement_geometries": {"$ref": "stage_contract.schema.json#/properties/measurement_geometries"}
+      }
+    },
+    "budgets": {"type": "object"}
+  }
+}

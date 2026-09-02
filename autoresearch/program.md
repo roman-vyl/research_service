@@ -32,6 +32,15 @@ component availability and parameter schemas. Do not infer strategy-specificatio
 memory, from a prior iteration's guess, or from reading Strategy Engine/Market Data Service source
 code. Do not discover Strategy Engine or Market Data Service directly.
 
+For a `bbb_autoresearch_state.v3` session, the nested
+`bbb_autoresearch_stage_contract.v1` is an immutable execution boundary. Everything in the frozen
+starting strategy is immutable by default. A planning worker may vary only the typed semantic
+dimensions listed for the active stage and must use the configured `geometry_id`; it must never
+invent a raw path, geometry, component identity, or stage. `A_BASELINE` measures configured
+symmetric geometries one at a time and does not optimize exits. B1 tests width only, B2 starts
+again from the naked strategy and tests lookback only, and B3 is unavailable until B1 and B2 are
+independently closed. B3 is optional, never an automatic next step.
+
 ## One fresh-worker iteration
 
 Perform exactly one meaningful decision/experiment cycle and exit. A supervisor starts a fresh
@@ -82,8 +91,9 @@ research findings. Do not disguise them as scientific conclusions.
 
 ## Required output
 
-The output path is supplied by the iteration prompt. A quality-aware session MUST contain one
-`bbb_autoresearch_iteration.v2` object with one `bbb_research_quality_assessment.v1`; a legacy v1
+The output path is supplied by the iteration prompt. A v3 stage-contract session MUST contain one
+`bbb_autoresearch_iteration.v3`; another quality-aware session MUST contain one
+`bbb_autoresearch_iteration.v2`. Both contain one `bbb_research_quality_assessment.v1`; a legacy v1
 session continues to use the v1 enclosing contract named by its prompt. Record exact experiment and candidate identities, window
 policy, strategy context, axes, execution/accounting assumptions, batch artifact path, run IDs,
 market-data hash, topology classification, aggregate/long/short interpretation, explicit

@@ -22,7 +22,8 @@ v1 and v2 sessions SHALL retain their existing contracts and behavior without si
 
 ### Requirement: Canonical starting strategy is validated and frozen
 
-The session template SHALL reference a checked-in complete canonical starting-strategy fixture.
+The controlled session template SHALL reference a complete operator-approved canonical
+starting-strategy fixture.
 Initialization SHALL resolve the fixture, validate it through the existing canonical
 Research→Strategy Engine configuration-validation path, copy the validated strategy into session
 state, and bind its content hash. The snapshot SHALL include strategy/ticker/timeframe identity,
@@ -41,6 +42,13 @@ change an initialized session.
 - **WHEN** the fixture is incomplete, fails canonical configuration validation, or its required
   canonical validation dependency is unavailable
 - **THEN** initialization fails closed and creates no runnable v3 session.
+
+#### Scenario: Operator fixture is not yet supplied during implementation
+
+- **WHEN** the versioned stage-contract machinery is implemented before an operator-approved
+  starting document is available
+- **THEN** APPLY may complete, but initialization of the controlled v3 harness session fails closed
+  until its template references that complete document.
 
 #### Scenario: Fixture changes after initialization
 

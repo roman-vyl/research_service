@@ -34,6 +34,18 @@ from autoresearch_quality_contracts import (
     validate_assessment,
     validate_policy,
 )
+from autoresearch_stage_contracts import (
+    ITERATION_VERSION_V3,
+    JOURNAL_VERSION_V3,
+    PLAN_VERSION_V2,
+    STAGE_PHASES,
+    STATE_VERSION_V3,
+    StageContractError,
+    validate_disposition,
+    validate_stage_context,
+    validate_stage_contract,
+    validate_stage_request,
+)
 
 STATE_VERSION = "bbb_autoresearch_state.v1"
 STATE_VERSION_V2 = "bbb_autoresearch_state.v2"
@@ -90,6 +102,13 @@ _STATE_V2_KEYS = _STATE_KEYS | {
     "latest_quality_assessment",
     "promotion_history",
 }
+_STATE_V3_KEYS = _STATE_V2_KEYS | {
+    "stage_contract",
+    "active_stage",
+    "phase_a_references",
+    "stage_dispositions",
+    "stage_history",
+}
 _ITERATION_KEYS = {
     "contract_version",
     "session_id",
@@ -109,6 +128,7 @@ _ITERATION_KEYS = {
     "hard_stop_reason",
 }
 _ITERATION_V2_KEYS = _ITERATION_KEYS | {"research_quality_assessment"}
+_ITERATION_V3_KEYS = _ITERATION_V2_KEYS | {"stage_disposition"}
 _EXPERIMENT_KEYS = {
     "kind",
     "experiment_id",
@@ -185,6 +205,7 @@ _PLAN_KEYS = {
     "explanatory_metadata",
     "hard_stop_reason",
 }
+_PLAN_V2_KEYS = _PLAN_KEYS | {"stage_context"}
 _RECEIPT_KEYS = {
     "contract_version",
     "session_id",
@@ -275,9 +296,11 @@ def _sha256(path: Path) -> str:
 def validate_execution_plan(
     plan: dict[str, Any], state: dict[str, Any]
 ) -> BatchExperimentRequest | None:
-    _require_exact_keys(plan, _PLAN_KEYS, "execution plan")
-    if plan.get("contract_version") != PLAN_VERSION:
-        raise ContractError(f"execution plan contract_version must be {PLAN_VERSION}")
+    v3 = state.get("contract_version") == STATE_VERSION_V3
+    expected_version = PLAN_VERSION_V2 if v3 else PLAN_VERSION
+    _require_exact_keys(plan, _PLAN_V2_KEYS if v3 else _PLAN_KEYS, "execution plan")
+    if plan.get("contract_version") != expected_version:
+        raise ContractError(f"execution plan contract_version must be {expected_version}")
     if plan.get("session_id") != state["session_id"]:
         raise ContractError("execution plan session_id differs from state")
     if plan.get("iteration_id") != state["iteration"] + 1:
@@ -306,6 +329,11 @@ def validate_execution_plan(
     if action != "batch":
         if plan.get("canonical_request") is not None:
             raise ContractError("non-batch plan must not contain canonical_request")
+        if v3:
+            try:
+                validate_stage_context(plan["stage_context"], state)
+            except StageContractError as exc:
+                raise ContractError(f"invalid stage context: {exc}") from exc
         return None
     if not isinstance(plan.get("canonical_request"), dict):
         raise ContractError("batch plan requires canonical_request")
@@ -316,6 +344,11 @@ def validate_execution_plan(
     budget = state["budgets"].get("max_candidates_per_iteration")
     if budget is not None and len(request.candidates) > budget:
         raise ContractError("canonical request candidate count exceeds session budget")
+    if v3:
+        try:
+            validate_stage_request(request, plan, state)
+        except StageContractError as exc:
+            raise ContractError(f"stage contract rejected canonical request: {exc}") from exc
     return request
 
 
@@ -615,10 +648,16 @@ def _validate_datetime(value: object, context: str) -> None:
 
 def validate_state(state: dict[str, Any]) -> None:
     version = state.get("contract_version")
-    if version not in {STATE_VERSION, STATE_VERSION_V2}:
-        raise ContractError(f"contract_version must be {STATE_VERSION} or {STATE_VERSION_V2}")
+    if version not in {STATE_VERSION, STATE_VERSION_V2, STATE_VERSION_V3}:
+        raise ContractError(
+            f"contract_version must be {STATE_VERSION}, {STATE_VERSION_V2}, or {STATE_VERSION_V3}"
+        )
     _require_exact_keys(
-        state, _STATE_V2_KEYS if version == STATE_VERSION_V2 else _STATE_KEYS, "state"
+        state,
+        _STATE_V3_KEYS
+        if version == STATE_VERSION_V3
+        else (_STATE_V2_KEYS if version == STATE_VERSION_V2 else _STATE_KEYS),
+        "state",
     )
     if not isinstance(state.get("session_id"), str):
         raise ContractError("session_id must be a string")
@@ -706,7 +745,7 @@ def validate_state(state: dict[str, Any]) -> None:
             raise ContractError(f"{state['status']} state requires stop_reason")
     elif stop_reason is not None:
         raise ContractError("stop_reason must be null unless state is hard_stopped or cancelled")
-    if version == STATE_VERSION_V2:
+    if version in {STATE_VERSION_V2, STATE_VERSION_V3}:
         try:
             policy = validate_policy(state["research_quality_policy"])
             binding = phase_binding(policy, state["phase"])
@@ -755,6 +794,111 @@ def validate_state(state: dict[str, Any]) -> None:
             if isinstance(exc, ContractError):
                 raise
             raise ContractError(f"invalid research quality state semantics: {exc}") from exc
+    if version == STATE_VERSION_V3:
+        try:
+            validate_stage_contract(state["stage_contract"])
+            if state["active_stage"] not in STAGE_PHASES:
+                raise StageContractError("active_stage is invalid")
+            if state["phase"] != STAGE_PHASES[state["active_stage"]]:
+                raise StageContractError("phase differs from active stage")
+            if (
+                not isinstance(state["phase_a_references"], list)
+                or not isinstance(state["stage_dispositions"], list)
+                or not isinstance(state["stage_history"], list)
+            ):
+                raise StageContractError("stage durable collections must be arrays")
+            geometry_ids = {
+                g["geometry_id"] for g in state["stage_contract"]["measurement_geometries"]
+            }
+            reference_ids: list[str] = []
+            for ref in state["phase_a_references"]:
+                _require_exact_keys(
+                    ref,
+                    {
+                        "geometry_id",
+                        "distance",
+                        "experiment_id",
+                        "candidate_id",
+                        "run_id",
+                        "batch_artifact_path",
+                        "receipt_sha256",
+                        "market_data_hash",
+                        "realised_trade_count",
+                        "win_rate",
+                    },
+                    "phase A reference",
+                )
+                if (
+                    ref["geometry_id"] not in geometry_ids
+                    or type(ref["realised_trade_count"]) is not int
+                    or ref["realised_trade_count"] < 0
+                ):
+                    raise StageContractError("phase A reference is invalid")
+                for key in (
+                    "experiment_id",
+                    "candidate_id",
+                    "run_id",
+                    "batch_artifact_path",
+                    "market_data_hash",
+                ):
+                    if not isinstance(ref[key], str) or not ref[key]:
+                        raise StageContractError(f"phase A reference {key} is invalid")
+                if not isinstance(ref["win_rate"], str) or not ref["win_rate"]:
+                    raise StageContractError("phase A reference win_rate is invalid")
+                if not isinstance(ref["receipt_sha256"], str) or not re.fullmatch(
+                    r"[0-9a-f]{64}", ref["receipt_sha256"]
+                ):
+                    raise StageContractError("phase A reference receipt_sha256 is invalid")
+                reference_ids.append(ref["geometry_id"])
+            if len(reference_ids) != len(set(reference_ids)):
+                raise StageContractError("phase A geometry reference is duplicated")
+            for entry in state["stage_dispositions"]:
+                if not isinstance(entry, dict) or set(entry) != {"iteration_id", "disposition"}:
+                    raise StageContractError("persisted stage disposition is invalid")
+                validate_disposition(entry["disposition"], entry["disposition"]["stage"])
+                if type(entry.get("iteration_id")) is not int or entry["iteration_id"] < 1:
+                    raise StageContractError("persisted stage disposition is invalid")
+            for item in state["stage_history"]:
+                if not isinstance(item, dict) or set(item) != {
+                    "iteration_id",
+                    "stage",
+                    "status",
+                    "geometry_id",
+                }:
+                    raise StageContractError("stage history entry is invalid")
+                if (
+                    type(item["iteration_id"]) is not int
+                    or item["iteration_id"] < 1
+                    or item["stage"] not in STAGE_PHASES
+                    or item["status"] not in {"in_progress", "characterized", "terminally_rejected"}
+                    or not isinstance(item["geometry_id"], str)
+                    or not item["geometry_id"]
+                ):
+                    raise StageContractError("stage history entry is invalid")
+            closed = {
+                entry["disposition"]["stage"]
+                for entry in state["stage_dispositions"]
+                if entry["disposition"]["status"] in {"characterized", "terminally_rejected"}
+            }
+            configured = {
+                g["geometry_id"] for g in state["stage_contract"]["measurement_geometries"]
+            }
+            completed = {r["geometry_id"] for r in state["phase_a_references"]}
+            if state["active_stage"] != "A_BASELINE" and (
+                configured != completed or "A_BASELINE" not in closed
+            ):
+                raise StageContractError(
+                    "B stages require a complete, closed Phase-A reference line"
+                )
+            if (
+                state["active_stage"] in {"B2_LOOKBACK", "B3_WIDTH_X_LOOKBACK"}
+                and "B1_WIDTH" not in closed
+            ):
+                raise StageContractError("B2/B3 require independently closed B1")
+            if state["active_stage"] == "B3_WIDTH_X_LOOKBACK" and "B2_LOOKBACK" not in closed:
+                raise StageContractError("B3 requires independently closed B2")
+        except (StageContractError, KeyError) as exc:
+            raise ContractError(f"invalid v3 stage state: {exc}") from exc
 
 
 def validate_state_transition(previous: dict[str, Any], current: dict[str, Any]) -> None:
@@ -772,6 +916,8 @@ def validate_state_transition(previous: dict[str, Any], current: dict[str, Any])
         )
     if previous.get("research_quality_policy") != current.get("research_quality_policy"):
         raise ContractError("research_quality_policy is immutable")
+    if previous.get("stage_contract") != current.get("stage_contract"):
+        raise ContractError("stage_contract is immutable")
     if current["iteration"] < previous["iteration"]:
         raise ContractError("iteration cannot move backwards")
     if previous["status"] in TERMINAL_STATUSES and current != previous:
@@ -784,12 +930,19 @@ def validate_iteration_result(
     *,
     artifacts_root: Path | None = None,
 ) -> None:
-    quality_aware = state.get("contract_version") == STATE_VERSION_V2
-    expected_version = ITERATION_VERSION_V2 if quality_aware else ITERATION_VERSION
+    v3 = state.get("contract_version") == STATE_VERSION_V3
+    quality_aware = state.get("contract_version") in {STATE_VERSION_V2, STATE_VERSION_V3}
+    expected_version = (
+        ITERATION_VERSION_V3
+        if v3
+        else (ITERATION_VERSION_V2 if quality_aware else ITERATION_VERSION)
+    )
     if result.get("contract_version") != expected_version:
         raise ContractError(f"contract_version must be {expected_version}")
     _require_exact_keys(
-        result, _ITERATION_V2_KEYS if quality_aware else _ITERATION_KEYS, "iteration result"
+        result,
+        _ITERATION_V3_KEYS if v3 else (_ITERATION_V2_KEYS if quality_aware else _ITERATION_KEYS),
+        "iteration result",
     )
     if result.get("session_id") != state["session_id"]:
         raise ContractError("iteration result session_id differs from state")
@@ -915,6 +1068,11 @@ def validate_iteration_result(
             )
         except (ValidationError, ValueError) as exc:
             raise ContractError(f"invalid research quality assessment: {exc}") from exc
+    if v3:
+        try:
+            validate_disposition(result["stage_disposition"], state["active_stage"])
+        except StageContractError as exc:
+            raise ContractError(f"invalid stage disposition: {exc}") from exc
 
 
 def _verify_batch_artifact(
@@ -1050,12 +1208,21 @@ def atomic_write_json(path: Path, value: dict[str, Any]) -> None:
 
 
 def append_journal(path: Path, event: dict[str, Any]) -> None:
-    if event.get("contract_version") not in {JOURNAL_VERSION, JOURNAL_VERSION_V2}:
+    if event.get("contract_version") not in {
+        JOURNAL_VERSION,
+        JOURNAL_VERSION_V2,
+        JOURNAL_VERSION_V3,
+    }:
         raise ContractError(
             f"journal contract_version must be {JOURNAL_VERSION} or {JOURNAL_VERSION_V2}"
         )
-    if event["contract_version"] == JOURNAL_VERSION_V2:
-        _require_exact_keys(event, _JOURNAL_V2_KEYS, "journal event")
+    if event["contract_version"] in {JOURNAL_VERSION_V2, JOURNAL_VERSION_V3}:
+        expected_keys = _JOURNAL_V2_KEYS | (
+            {"active_stage", "stage_disposition", "geometry_id"}
+            if event["contract_version"] == JOURNAL_VERSION_V3
+            else set()
+        )
+        _require_exact_keys(event, expected_keys, "journal event")
         if type(event["iteration_id"]) is not int or event["iteration_id"] < 1:
             raise ContractError("journal iteration_id must be positive")
         _validate_datetime(event["timestamp"], "journal timestamp")
@@ -1075,6 +1242,14 @@ def append_journal(path: Path, event: dict[str, Any]) -> None:
             validate_assessment(event["research_quality_assessment"])
         except ValidationError as exc:
             raise ContractError(f"invalid journal quality assessment: {exc}") from exc
+        if event["contract_version"] == JOURNAL_VERSION_V3:
+            if event["active_stage"] not in STAGE_PHASES:
+                raise ContractError("journal active_stage is invalid")
+            _require_string(event, "geometry_id")
+            try:
+                validate_disposition(event["stage_disposition"], event["active_stage"])
+            except StageContractError as exc:
+                raise ContractError(f"invalid journal stage disposition: {exc}") from exc
     path.parent.mkdir(parents=True, exist_ok=True)
     payload = json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n"
     with path.open("a", encoding="utf-8") as handle:
@@ -1151,10 +1326,30 @@ def render_planning_prompt(
         root,
         iteration_root,
         {
-            "plan_schema_path": root / "autoresearch/schemas/execution_plan.schema.json",
+            "plan_schema_path": root
+            / "autoresearch/schemas"
+            / (
+                "execution_plan.v2.schema.json"
+                if state["contract_version"] == STATE_VERSION_V3
+                else "execution_plan.schema.json"
+            ),
             "result_path": iteration_root / "execution_plan.json",
             "analysis_dir": iteration_root / "planning_analysis",
             "research_service_base_url": research_service_base_url,
+            "stage_contract_context": (
+                json.dumps(
+                    {
+                        "active_stage": state["active_stage"],
+                        "stage_contract": state["stage_contract"],
+                        "phase_a_references": state["phase_a_references"],
+                        "stage_dispositions": state["stage_dispositions"],
+                    },
+                    ensure_ascii=False,
+                    sort_keys=True,
+                )
+                if state["contract_version"] == STATE_VERSION_V3
+                else "Legacy session: no typed stage contract."
+            ),
         },
     )
 
@@ -1177,9 +1372,25 @@ def render_interpretation_prompt(
         / "autoresearch"
         / "schemas"
         / (
-            "iteration_result.v2.schema.json"
+            "iteration_result.v3.schema.json"
+            if state["contract_version"] == STATE_VERSION_V3
+            else "iteration_result.v2.schema.json"
             if state["contract_version"] == STATE_VERSION_V2
             else "iteration_result.schema.json"
+        ),
+        "stage_contract_context": (
+            json.dumps(
+                {
+                    "active_stage": state["active_stage"],
+                    "stage_contract": state["stage_contract"],
+                    "phase_a_references": state["phase_a_references"],
+                    "stage_dispositions": state["stage_dispositions"],
+                },
+                ensure_ascii=False,
+                sort_keys=True,
+            )
+            if state["contract_version"] == STATE_VERSION_V3
+            else "Legacy session: no typed stage contract."
         ),
     }
     return _render_stage_prompt("interpretation.md", state, root, iteration_root, values)
@@ -1254,12 +1465,18 @@ def _budget_reason(state: dict[str, Any], max_iterations: int | None) -> str | N
     return None
 
 
-def _journal_event(state: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+def _journal_event(
+    state: dict[str, Any], result: dict[str, Any], session_root: Path | None = None
+) -> dict[str, Any]:
     experiment = result["experiment"]
     execution = result["execution_result"]
     event = {
         "contract_version": (
-            JOURNAL_VERSION_V2 if state["contract_version"] == STATE_VERSION_V2 else JOURNAL_VERSION
+            JOURNAL_VERSION_V3
+            if state["contract_version"] == STATE_VERSION_V3
+            else JOURNAL_VERSION_V2
+            if state["contract_version"] == STATE_VERSION_V2
+            else JOURNAL_VERSION
         ),
         "session_id": state["session_id"],
         "iteration_id": result["iteration_id"],
@@ -1283,12 +1500,25 @@ def _journal_event(state: dict[str, Any], result: dict[str, Any]) -> dict[str, A
         "conclusion": result["conclusion"],
         "next_question": result["next_discriminating_question"],
     }
-    if state["contract_version"] == STATE_VERSION_V2:
+    if state["contract_version"] in {STATE_VERSION_V2, STATE_VERSION_V3}:
         event["research_quality_assessment"] = result["research_quality_assessment"]
+    if state["contract_version"] == STATE_VERSION_V3:
+        event.update(
+            active_stage=state["active_stage"],
+            stage_disposition=result["stage_disposition"],
+            geometry_id=load_json(
+                (session_root or session_dir(state["session_id"]))
+                / "iterations"
+                / f"{result['iteration_id']:04d}"
+                / "execution_plan.json"
+            )["stage_context"]["geometry_id"],
+        )
     return event
 
 
-def _advance_state(state: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
+def _advance_state(
+    state: dict[str, Any], result: dict[str, Any], session_root: Path | None = None
+) -> dict[str, Any]:
     observed = result["observed_response"]
     side = result["side_interpretation"]
     risk = result["risk_assessment"]
@@ -1349,7 +1579,7 @@ def _advance_state(state: dict[str, Any], result: dict[str, Any]) -> dict[str, A
             else None
         ),
     )
-    if state["contract_version"] == STATE_VERSION_V2:
+    if state["contract_version"] in {STATE_VERSION_V2, STATE_VERSION_V3}:
         policy = validate_policy(state["research_quality_policy"])
         assessment = result["research_quality_assessment"]
         promotion = assessment["promotion"]
@@ -1364,6 +1594,90 @@ def _advance_state(state: dict[str, Any], result: dict[str, Any]) -> dict[str, A
                     "region_id": subject["region_id"] if subject is not None else None,
                     "decision": promotion["decision"],
                     "blockers": promotion["blockers"],
+                },
+            ],
+        )
+    if state["contract_version"] == STATE_VERSION_V3:
+        disposition = result["stage_disposition"]
+        active_stage = state["active_stage"]
+        stage_dispositions = [
+            *state["stage_dispositions"],
+            {"iteration_id": result["iteration_id"], "disposition": disposition},
+        ]
+        phase_a_references = list(state["phase_a_references"])
+        plan_path = (
+            (session_root or session_dir(state["session_id"]))
+            / "iterations"
+            / f"{result['iteration_id']:04d}"
+            / "execution_plan.json"
+        )
+        plan = load_json(plan_path)
+        geometry_id = plan["stage_context"]["geometry_id"]
+        if active_stage == "A_BASELINE" and result["experiment"]["kind"] == "batch":
+            summary = _verify_batch_artifact(result)
+            completed = [item for item in summary.candidates if item.status == "completed"]
+            if len(completed) != 1:
+                raise ContractError("Phase A reference requires its sole candidate to complete")
+            candidate = completed[0]
+            if candidate.realised_trade_count is None or candidate.win_rate is None:
+                raise ContractError(
+                    "Phase A reference requires canonical realised_trade_count and win_rate"
+                )
+            receipt_path = plan_path.parent / "execution_receipt.json"
+            geometry = next(
+                g
+                for g in state["stage_contract"]["measurement_geometries"]
+                if g["geometry_id"] == geometry_id
+            )
+            phase_a_references = [r for r in phase_a_references if r["geometry_id"] != geometry_id]
+            phase_a_references.append(
+                {
+                    "geometry_id": geometry_id,
+                    "distance": geometry["distance"],
+                    "experiment_id": summary.experiment_id,
+                    "candidate_id": candidate.candidate_id,
+                    "run_id": candidate.run_id,
+                    "batch_artifact_path": result["execution_result"]["batch_artifact_path"],
+                    "receipt_sha256": _sha256(receipt_path),
+                    "market_data_hash": candidate.market_data_hash,
+                    "realised_trade_count": candidate.realised_trade_count,
+                    "win_rate": str(candidate.win_rate) if candidate.win_rate is not None else None,
+                }
+            )
+        next_stage = active_stage
+        if disposition["status"] in {"characterized", "terminally_rejected"}:
+            if active_stage == "A_BASELINE":
+                configured = {
+                    g["geometry_id"] for g in state["stage_contract"]["measurement_geometries"]
+                }
+                if {r["geometry_id"] for r in phase_a_references} != configured:
+                    raise ContractError(
+                        "Phase A cannot close before every configured geometry is referenced"
+                    )
+                next_stage = "B1_WIDTH"
+            elif active_stage == "B1_WIDTH":
+                next_stage = "B2_LOOKBACK"
+            elif (
+                active_stage == "B2_LOOKBACK"
+                and proposed is not None
+                and proposed.get("stage") == "B3_WIDTH_X_LOOKBACK"
+            ):
+                next_stage = "B3_WIDTH_X_LOOKBACK"
+        updated.update(
+            active_stage=next_stage,
+            phase=STAGE_PHASES[next_stage],
+            active_stage_binding=phase_binding(policy, STAGE_PHASES[next_stage]).model_dump(
+                mode="json"
+            ),
+            phase_a_references=phase_a_references,
+            stage_dispositions=stage_dispositions,
+            stage_history=[
+                *state["stage_history"],
+                {
+                    "iteration_id": result["iteration_id"],
+                    "stage": active_stage,
+                    "status": disposition["status"],
+                    "geometry_id": geometry_id,
                 },
             ],
         )
@@ -1618,7 +1932,7 @@ def run_supervisor(
             validate_execution_plan(plan, state)
             validate_iteration_result(recovered, state)
             _validate_interpretation_binding(recovered, plan, state, iteration_root)
-            atomic_write_json(state_path, _advance_state(state, recovered))
+            atomic_write_json(state_path, _advance_state(state, recovered, root))
             continue
         metadata_path = iteration_root / "supervisor_metadata.json"
         metadata = _read_metadata(metadata_path)
@@ -1825,8 +2139,8 @@ def run_supervisor(
             result = load_json(result_path)
             validate_iteration_result(result, state)
             _validate_interpretation_binding(result, plan, state, iteration_root)
-            append_journal(journal_path, _journal_event(state, result))
-            updated = _advance_state(state, result)
+            append_journal(journal_path, _journal_event(state, result, root))
+            updated = _advance_state(state, result, root)
             control["stage"] = "committed"
             atomic_write_json(control_path, control)
             atomic_write_json(state_path, updated)

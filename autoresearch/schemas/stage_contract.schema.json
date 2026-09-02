@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bbb_autoresearch_stage_contract.v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["contract_version", "programme", "starting_strategy", "semantic_bindings", "measurement_geometries"],
+  "properties": {
+    "contract_version": {"const": "bbb_autoresearch_stage_contract.v1"},
+    "programme": {"const": "EMA_ANCHOR_A_TO_B"},
+    "starting_strategy": {
+      "type": "object", "additionalProperties": false,
+      "required": ["source_path", "source_sha256", "resolved_sha256", "strategy"],
+      "properties": {
+        "source_path": {"type": "string", "minLength": 1},
+        "source_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "resolved_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "strategy": {"type": "object"}
+      }
+    },
+    "semantic_bindings": {
+      "type": "array", "minItems": 3, "maxItems": 3,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["dimension", "targets"],
+        "properties": {
+          "dimension": {"enum": ["symmetric_measurement_geometry", "anchor_stack_width", "untouched_anchor_lookback"]},
+          "targets": {
+            "type": "array", "minItems": 1, "maxItems": 2,
+            "items": {
+              "type": "object", "additionalProperties": false,
+              "required": ["component_role", "component_id", "instance_id", "parameter_name", "params_storage", "fixed_parameters"],
+              "properties": {
+                "component_role": {"type": "string", "minLength": 1},
+                "component_id": {"type": "string", "minLength": 1},
+                "instance_id": {"type": ["string", "null"], "minLength": 1},
+                "parameter_name": {"type": "string", "minLength": 1},
+                "params_storage": {"enum": ["flat", "nested", "structural"]},
+                "fixed_parameters": {"type": "object"}
+              }
+            }
+          }
+        }
+      }
+    },
+    "measurement_geometries": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["geometry_id", "distance"],
+        "properties": {"geometry_id": {"type": "string", "minLength": 1}, "distance": {"type": "number", "exclusiveMinimum": 0}}
+      }
+    }
+  }
+}

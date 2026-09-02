@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "bbb_autoresearch_execution_plan.v2",
+  "type": "object", "additionalProperties": false,
+  "required": ["contract_version", "session_id", "iteration_id", "phase", "hypothesis", "question", "market_property_proxy", "competing_explanation", "action", "canonical_request", "explanatory_metadata", "hard_stop_reason", "stage_context"],
+  "properties": {
+    "contract_version": {"const": "bbb_autoresearch_execution_plan.v2"},
+    "session_id": {"type": "string", "minLength": 1}, "iteration_id": {"type": "integer", "minimum": 1},
+    "phase": {"type": "string", "minLength": 1}, "hypothesis": {"type": "string", "minLength": 1},
+    "question": {"type": "string", "minLength": 1}, "market_property_proxy": {"type": "string", "minLength": 1},
+    "competing_explanation": {"type": "string", "minLength": 1},
+    "action": {"enum": ["batch", "artifact_diagnostic", "terminal", "hard_stop"]},
+    "canonical_request": {"type": ["object", "null"]}, "explanatory_metadata": {"type": "object"},
+    "hard_stop_reason": {"type": ["string", "null"]},
+    "stage_context": {
+      "type": "object", "additionalProperties": false,
+      "required": ["active_stage", "starting_strategy_sha256", "geometry_id", "reference_strategy_sha256", "allowed_semantic_dimensions", "prerequisite_disposition_refs"],
+      "properties": {
+        "active_stage": {"enum": ["A_BASELINE", "B1_WIDTH", "B2_LOOKBACK", "B3_WIDTH_X_LOOKBACK"]},
+        "starting_strategy_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "geometry_id": {"type": "string", "minLength": 1},
+        "reference_strategy_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "allowed_semantic_dimensions": {"type": "array", "uniqueItems": true, "items": {"enum": ["symmetric_measurement_geometry", "anchor_stack_width", "untouched_anchor_lookback"]}},
+        "prerequisite_disposition_refs": {"type": "array", "uniqueItems": true, "items": {"type": "integer", "minimum": 1}}
+      }
+    }
+  }
+}

@@ -149,6 +149,22 @@ Legacy templates without `research_quality_policy` still initialize exact
 initializes a new session from a fully resolved quality-aware template and explicitly carries over
 only reviewed research context.
 
+### Controlled A→B stage-contract sessions (v3)
+
+`bbb_autoresearch_state.v3` is an explicit opt-in enclosing contract. Its template references a
+complete operator-approved starting-strategy fixture and defines three typed semantic bindings plus
+configured symmetric measurement geometries. Initialization reads the live Research component
+catalog and calls canonical Research config validation before creating the session. Missing or
+invalid operator input therefore fails closed without a partial runtime directory.
+
+The initialized state freezes the normalized strategy and hashes. The supervisor enforces
+`A_BASELINE` (one configured geometry/candidate per experiment), matched-geometry width-only B1,
+naked-reset lookback-only B2, and optional width×lookback B3 only after independently closed B1/B2.
+Everything outside the active typed dimensions, including all identities, is immutable. The
+supervisor does not select values, rank results, judge uplift, or force B3. Existing v1/v2 sessions
+remain exact and are not migrated. A concrete controlled session cannot initialize until its full
+operator fixture is supplied.
+
 Inspect the files directly when needed:
 
 ```bash

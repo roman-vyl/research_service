@@ -10,7 +10,7 @@ than reconstructing or accidentally changing the experimental control.
 
 - Introduce opt-in `bbb_autoresearch_state.v3` sessions with an immutable resolved starting-strategy
   snapshot and an immutable typed A→B stage contract.
-- Load a checked-in canonical EMA-anchor starting-strategy fixture at initialization, validate it
+- Load an operator-approved canonical EMA-anchor starting-strategy fixture at initialization, validate it
   through the existing Research→Engine config-validation boundary, and freeze the resolved copy in
   session state so later fixture edits cannot mutate an active session.
 - Define four typed stages: `A_BASELINE`, `B1_WIDTH`, `B2_LOOKBACK`, and
@@ -55,8 +55,10 @@ parallel research product.
 
 - AutoResearch templates, schemas, initialization, planning context, supervisor validation, durable
   state/journal representation, and deterministic tests.
-- One checked-in full canonical EMA100/EMA200/EMA500 starting-strategy fixture, retaining trigger,
-  direction, exits, ticker/timeframe, component identity, and every other required field.
+- A fixture-reference and validation boundary for a full operator-approved canonical starting
+  strategy, retaining trigger, direction, exits, ticker/timeframe, component identity, and every
+  other required field. The concrete EMA100/EMA200/EMA500 document is required when the controlled
+  harness session is initialized, not while the contract machinery is implemented.
 - The EMA-anchor methodology text only where needed to describe configured matched geometries and
   the A→B1→B2→optional-B3 causal ladder.
 - Existing `scripts/autoresearch_execute_batch.py`, Research evaluator/application path, Strategy

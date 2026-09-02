@@ -1,5 +1,9 @@
 # BBB AutoResearch interpretation stage {iteration_id}
 
+Immutable typed stage context (legacy sessions explicitly say none):
+
+`{stage_contract_context}`
+
 Read completely: `{program_path}`, `{skill_path}`, `{state_path}`, frozen plan `{plan_path}`, and the
 applicable supervisor-owned evidence named below. This is a fresh process representing the same
 logical researcher. Do not execute an experiment, contact Engine/MDS, install dependencies, create

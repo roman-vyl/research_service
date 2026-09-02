@@ -30,12 +30,32 @@ def main(argv: list[str] | None = None) -> int:
         "budgets": state["budgets"],
         "recent_journal": [json.loads(line) for line in rows[-args.journal_rows :]],
     }
-    if state["contract_version"] == "bbb_autoresearch_state.v2":
+    if state["contract_version"] in {"bbb_autoresearch_state.v2", "bbb_autoresearch_state.v3"}:
         output.update(
             research_quality_policy=state["research_quality_policy"],
             active_stage_binding=state["active_stage_binding"],
             latest_quality_assessment=state["latest_quality_assessment"],
             promotion_history=state["promotion_history"],
+        )
+    if state["contract_version"] == "bbb_autoresearch_state.v3":
+        configured = [
+            item["geometry_id"] for item in state["stage_contract"]["measurement_geometries"]
+        ]
+        completed = [item["geometry_id"] for item in state["phase_a_references"]]
+        closed = {
+            item["disposition"]["stage"]
+            for item in state["stage_dispositions"]
+            if item["disposition"]["status"] in {"characterized", "terminally_rejected"}
+        }
+        available = [state["active_stage"]]
+        if {"B1_WIDTH", "B2_LOOKBACK"}.issubset(closed):
+            available.append("B3_WIDTH_X_LOOKBACK")
+        output.update(
+            active_stage=state["active_stage"],
+            configured_geometry_ids=configured,
+            completed_geometry_ids=completed,
+            stage_dispositions=state["stage_dispositions"],
+            available_stages=list(dict.fromkeys(available)),
         )
     print(json.dumps(output, ensure_ascii=False, indent=2, sort_keys=True))
     return 0

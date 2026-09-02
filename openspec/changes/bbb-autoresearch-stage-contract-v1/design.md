@@ -52,9 +52,9 @@ plan/request hashes already transitively bind the new fields.
 Alternative: add optional fields to v2. Rejected because exact versioned contracts and old-session
 recovery would become ambiguous.
 
-### 2. Validate then snapshot the checked-in starting fixture
+### 2. Validate then snapshot the operator-supplied starting fixture
 
-The session template references one repository fixture plus its expected research programme. Init
+The controlled session template references one operator-approved fixture plus its expected research programme. Init
 loads it as a complete `DeployableStrategyInstance`, resolves the configured semantic bindings
 against the current Research-proxied live component catalog, and submits the complete instance
 through the existing Research configuration-validation application path. Only after both checks
@@ -224,9 +224,11 @@ the versioned schemas/status tooling. It does not rewrite v3 sessions into v2.
 
 ## Open Questions
 
-- The exact checked-in ticker/timeframe, component IDs, instance IDs, parameter names, and distance
-  units must be taken from the operator-approved current canonical strategy and live catalog during
-  APPLY; they are fixture data, not new Stage Contract semantics.
+- The exact ticker/timeframe, component IDs, instance IDs, parameter names, and distance units must
+  be taken from the operator-approved current canonical strategy and live catalog before the
+  controlled harness session is initialized. Their absence does not block implementation of the
+  contract machinery; it blocks that session's initialization. They are fixture data, not new
+  Stage Contract semantics.
 - The initial configured geometry IDs/distances belong to the session template. The agreed smoke
   line may use A-2/A-3/A-4, but their exact canonical parameter encoding must follow the live exit
   component schema rather than be guessed in OpenSpec.

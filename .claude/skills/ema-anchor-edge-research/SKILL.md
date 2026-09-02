@@ -187,6 +187,15 @@ For every meaningful improvement ask whether it is specific to the market-state 
 
 Compare `Q(x)` shape and `Q(x, y)` topology separately for long and short. Asymmetry is not automatically bad, but label it honestly; do not call a one-sided finding universal.
 
+## Controlled A→B causal ladder
+
+For the controlled A→B programme, treat Phase A as an operator-configured naked-anchor reference
+line of independent symmetric measurement geometries, not exit optimization. Study B1 width and B2
+untouched lookback independently against the identical referenced geometry; B2 resets to the naked
+strategy rather than carrying B1 forward. Only after both one-dimensional questions are
+sufficiently characterized or terminally rejected may width×lookback B3 be considered. B3 is
+scientifically optional: preserve `NO_STABLE_EDGE` when an interaction experiment is not justified.
+
 ## Mandatory reasoning checkpoint
 
 After every meaningful experiment answer:
