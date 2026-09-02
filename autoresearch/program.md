@@ -25,6 +25,13 @@ completely. The domain skill is research methodology; this file is operational a
 Read the durable state and relevant journal tail. Inspect only the current canonical contracts and
 code needed for this iteration. Chat history and remembered context are not sources of truth.
 
+Before constructing or modifying any strategy specification, read
+`autoresearch/references/strategy_specification_reference.md` completely. Use the sanctioned
+Research component catalog it describes (`GET /api/research/component-catalog`) for current
+component availability and parameter schemas. Do not infer strategy-specification syntax from
+memory, from a prior iteration's guess, or from reading Strategy Engine/Market Data Service source
+code. Do not discover Strategy Engine or Market Data Service directly.
+
 ## One fresh-worker iteration
 
 Perform exactly one meaningful decision/experiment cycle and exit. A supervisor starts a fresh
