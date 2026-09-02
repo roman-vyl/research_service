@@ -51,9 +51,10 @@ scripts/autoresearch_run_docker.sh \
 ```
 
 Both wrappers set only Research runtime configuration and forward every CLI argument unchanged to
-`scripts/autoresearch_supervisor.py`. They use `python` from `PATH`, so activate the intended
-environment before invoking them. Provider credentials, the agent command, and other ordinary
-runtime variables remain operator-owned.
+`scripts/autoresearch_supervisor.py`. The host wrapper runs the repo-local `.venv/bin/python`
+directly, so no prior `source .venv/bin/activate` is required; it fails fast if that virtualenv is
+missing or not executable. The Docker wrapper still uses `python` from `PATH` inside the container.
+Provider credentials, the agent command, and other ordinary runtime variables remain operator-owned.
 
 Initialize and inspect a session:
 
@@ -157,13 +158,16 @@ configured symmetric measurement geometries. Initialization reads the live Resea
 catalog and calls canonical Research config validation before creating the session. Missing or
 invalid operator input therefore fails closed without a partial runtime directory.
 
-The initialized state freezes the normalized strategy and hashes. The supervisor enforces
+The checked-in controlled input is
+`autoresearch/templates/ema_anchor_stage_contract_session.json`; it references the
+operator-approved naked EMA100/EMA200/EMA500 fixture at
+`autoresearch/fixtures/ema_anchor_100_200_500_naked.json`. The initialized state freezes the
+normalized strategy and hashes. The supervisor enforces
 `A_BASELINE` (one configured geometry/candidate per experiment), matched-geometry width-only B1,
 naked-reset lookback-only B2, and optional width×lookback B3 only after independently closed B1/B2.
 Everything outside the active typed dimensions, including all identities, is immutable. The
 supervisor does not select values, rank results, judge uplift, or force B3. Existing v1/v2 sessions
-remain exact and are not migrated. A concrete controlled session cannot initialize until its full
-operator fixture is supplied.
+remain exact and are not migrated.
 
 Inspect the files directly when needed:
 
