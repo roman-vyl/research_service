@@ -259,6 +259,43 @@ def _find_instance(raw: dict[str, Any], target: dict[str, Any]) -> dict[str, Any
     return matches[0]
 
 
+def validate_resolved_stage_targets(contract: dict[str, Any]) -> None:
+    """Resolve mandatory starting-strategy targets before session creation."""
+
+    validate_stage_contract(contract)
+    raw = contract["starting_strategy"]["strategy"]["raw_spec"]
+    geometry = _binding(contract, "symmetric_measurement_geometry")
+    exit_kinds: set[str] = set()
+    for target in geometry["targets"]:
+        if (
+            target["component_role"] != "exits"
+            or target["parameter_name"] != "distance.multiplier"
+            or target["params_storage"] != "structural"
+        ):
+            raise StageContractError("geometry target contract is invalid")
+        instance = _find_instance(raw, target)
+        distance = instance.get("distance")
+        if not isinstance(distance, dict) or "multiplier" not in distance:
+            raise StageContractError("bound exit has no distance.multiplier")
+        exit_kinds.add(str(instance.get("exit_kind")))
+    if exit_kinds != {"stop_loss", "take_profit"}:
+        raise StageContractError("geometry targets must resolve one stop-loss and one take-profit")
+
+    # B1/B2 targets are explicit prototypes that may be absent from the naked
+    # strategy.  If an identity is already present, it must still be unique;
+    # otherwise enabling the typed dimension later would be ambiguous.
+    for dimension in ("anchor_stack_width", "untouched_anchor_lookback"):
+        target = _binding(contract, dimension)["targets"][0]
+        matches = [
+            item
+            for item in _instances(raw, target)
+            if item.get("component_id") == target["component_id"]
+            and item.get("instance_id") == target["instance_id"]
+        ]
+        if len(matches) > 1:
+            raise StageContractError(f"{dimension} prototype identity is ambiguous")
+
+
 def reference_strategy(state: dict[str, Any], geometry_id: str) -> dict[str, Any]:
     strategy = copy.deepcopy(state["stage_contract"]["starting_strategy"]["strategy"])
     geometry = next(

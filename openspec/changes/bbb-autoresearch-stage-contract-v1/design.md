@@ -60,6 +60,13 @@ against the current Research-proxied live component catalog, and submits the com
 through the existing Research configuration-validation application path. Only after both checks
 pass does init create the session directory.
 
+Initialization also resolves the declared TP and SL component/instance identities against the
+validated starting strategy. Missing, duplicate, ambiguous, wrongly typed, or mismatched exit
+bindings fail before the session directory exists. Width/lookback prototypes carry explicit
+operator-supplied immutable values for every non-mutable parameter. The catalog confirms component
+availability plus parameter names, types, and constraints; catalog defaults are never used as
+implicit research configuration.
+
 State stores a normalized resolved copy and SHA256, not merely the fixture path. Bootstrap records
 fixture path/source hash and resolved hash for provenance. No worker participates in initialization.
 Validation failure or unavailable canonical dependencies leaves no partially runnable session.
@@ -157,6 +164,13 @@ worker decides the disposition. The supervisor verifies that references are vali
 matches the frozen plan, and mechanical prerequisites hold. It does not derive closure from win
 rate, trade count, topology, or quality assessment.
 
+For a closing disposition, validity means more than validating the `EvidenceRef` shape. A
+`canonical_metric` reference must resolve to a candidate and metric in the authoritative canonical
+result for the iteration; a `prior_assessment` reference must identify a retained assessment
+iteration in state; and an `analysis_artifact` reference must resolve to the retained analysis
+artifact for that iteration without escaping its namespace. The supervisor performs only these
+referential-integrity checks and does not evaluate the scientific strength of the evidence.
+
 `A_BASELINE` can close only after every configured reference mechanically exists. B1/B2 may close
 as `characterized` or `terminally_rejected`. B2 becomes available after B1 closes. B3 becomes
 available only after both B1 and B2 close, but the worker may instead write an evidence-backed
@@ -196,8 +210,9 @@ successful-trade-count field, or later promotion semantic is introduced.
 - [The fixture becomes stale against the live Engine catalog] → Init re-resolves bindings and runs
   canonical config validation; stale fixtures fail before session creation.
 - [Semantic resolver code can drift from component schemas] → Bind by component/instance identity,
-  confirm parameter names against live `params_schema`, freeze resolved bindings, and cover missing,
-  duplicate, reordered, or ambiguous instances with fail-closed tests.
+  confirm parameter names and explicit operator-owned immutable values against live `params_schema`,
+  freeze resolved bindings, and cover missing, duplicate, reordered, or ambiguous instances with
+  fail-closed tests. Never infer a research value from a catalog default.
 - [A worker declares a stage characterized too early] → Preserve that decision and its evidence as
   worker-owned scientific judgment; do not compensate with hidden numeric supervisor thresholds.
 - [State v3 increases durable contract surface] → Keep the nested stage contract narrow, use exact

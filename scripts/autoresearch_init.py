@@ -27,8 +27,25 @@ from autoresearch_quality_contracts import phase_binding, validate_policy
 from autoresearch_stage_contracts import (
     STATE_VERSION_V3,
     canonical_sha256,
+    validate_resolved_stage_targets,
     validate_stage_contract,
 )
+
+
+def _validate_explicit_catalog_value(name: str, value: Any, definition: dict[str, Any]) -> None:
+    kind = definition.get("type")
+    if (
+        (kind == "integer" and (type(value) is not int))
+        or (kind == "number" and (not isinstance(value, (int, float)) or isinstance(value, bool)))
+        or (kind == "string" and not isinstance(value, str))
+    ):
+        raise ValueError(f"explicit fixed parameter {name} has wrong catalog type")
+    if definition.get("enum") is not None and value not in definition["enum"]:
+        raise ValueError(f"explicit fixed parameter {name} is outside catalog enum")
+    if definition.get("min") is not None and value < definition["min"]:
+        raise ValueError(f"explicit fixed parameter {name} is below catalog minimum")
+    if definition.get("max") is not None and value > definition["max"]:
+        raise ValueError(f"explicit fixed parameter {name} is above catalog maximum")
 
 
 def _load_v3_stage_contract(
@@ -95,22 +112,30 @@ def _load_v3_stage_contract(
                 )
             allowed = set(component.get("params_schema", {}))
             parameter = target.get("parameter_name")
+            fixed = target.get("fixed_parameters")
+            if not isinstance(fixed, dict):
+                raise ValueError("semantic target requires explicit fixed_parameters")
             if binding.get("dimension") == "symmetric_measurement_geometry":
                 if parameter != "distance.multiplier":
                     raise ValueError("geometry target must use distance.multiplier")
+                if fixed:
+                    raise ValueError("geometry target fixed_parameters must be empty")
                 target["params_storage"] = "structural"
-                target["fixed_parameters"] = {}
             else:
                 if parameter not in allowed:
                     raise ValueError(
                         f"semantic binding parameter absent from live catalog: {component_id}.{parameter}"
                     )
+                required_fixed = allowed - {parameter}
+                if set(fixed) != required_fixed:
+                    raise ValueError(
+                        f"semantic target fixed_parameters differ from catalog schema: "
+                        f"missing={sorted(required_fixed - set(fixed))}, "
+                        f"extra={sorted(set(fixed) - required_fixed)}"
+                    )
+                for name, value in fixed.items():
+                    _validate_explicit_catalog_value(name, value, component["params_schema"][name])
                 target["params_storage"] = component.get("params_storage")
-                target["fixed_parameters"] = {
-                    name: definition.get("default")
-                    for name, definition in component.get("params_schema", {}).items()
-                    if name != parameter
-                }
     normalized = fixture
     contract = {
         "contract_version": "bbb_autoresearch_stage_contract.v1",
@@ -125,6 +150,7 @@ def _load_v3_stage_contract(
         "measurement_geometries": config.get("measurement_geometries"),
     }
     validate_stage_contract(contract)
+    validate_resolved_stage_targets(contract)
     return contract
 
 

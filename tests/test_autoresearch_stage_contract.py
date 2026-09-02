@@ -23,6 +23,7 @@ from autoresearch_stage_contracts import (
 import autoresearch_init
 from autoresearch_init import initialize_session
 from autoresearch_supervisor import render_interpretation_prompt, render_planning_prompt
+from autoresearch_quality_contracts import EvidenceRef, verify_evidence_integrity
 
 
 def _strategy() -> dict:
@@ -268,6 +269,23 @@ def test_b1_allows_only_width_and_preserves_identity_geometry() -> None:
     with pytest.raises(StageContractError, match="outside"):
         validate_stage_request(_request(candidate), _plan(state), state)
 
+    fixed_mutation = reference_strategy(state, "A-2")
+    fixed_mutation["raw_spec"]["setups"].append(
+        {
+            "component_id": "anchor_stack_width_setup",
+            "instance_id": "stage-width",
+            "params": {
+                "atr_timeframe": "base",
+                "atr_period": 99,
+                "min_current_width_atr": 2.5,
+                "min_recent_width_atr": 4.0,
+                "width_lookback_bars": 80,
+            },
+        }
+    )
+    with pytest.raises(StageContractError, match="fixed fields"):
+        validate_stage_request(_request(fixed_mutation), _plan(state), state)
+
 
 def test_component_array_reordering_is_not_a_semantic_mutation() -> None:
     state = _state("B1_WIDTH")
@@ -340,6 +358,105 @@ def test_closing_disposition_requires_evidence() -> None:
         )
 
 
+def test_stage_closure_evidence_must_resolve_to_retained_authority(tmp_path: Path) -> None:
+    analysis_root = tmp_path / "interpretation_analysis"
+    analysis_root.mkdir()
+    retained = analysis_root / "topology.json"
+    retained.write_text("{}")
+    facts = {"c1": {"win_rate": "0.55", "realised_trade_count": 100}}
+    valid = [
+        EvidenceRef.model_validate(
+            {
+                "kind": "canonical_metric",
+                "claim_id": "wr",
+                "candidate_id": "c1",
+                "metric_path": "win_rate",
+                "iteration_id": None,
+                "analysis_path": None,
+            }
+        ),
+        EvidenceRef.model_validate(
+            {
+                "kind": "prior_assessment",
+                "claim_id": "prior",
+                "candidate_id": None,
+                "metric_path": None,
+                "iteration_id": 2,
+                "analysis_path": None,
+            }
+        ),
+        EvidenceRef.model_validate(
+            {
+                "kind": "analysis_artifact",
+                "claim_id": "shape",
+                "candidate_id": None,
+                "metric_path": None,
+                "iteration_id": None,
+                "analysis_path": str(retained),
+            }
+        ),
+    ]
+    verify_evidence_integrity(
+        valid,
+        candidate_facts=facts,
+        prior_assessment_iterations={2},
+        analysis_path=str(retained),
+        analysis_root=analysis_root,
+    )
+
+    bad_values = [
+        EvidenceRef.model_validate(
+            {
+                "kind": "canonical_metric",
+                "claim_id": "fake",
+                "candidate_id": "fake",
+                "metric_path": "win_rate",
+                "iteration_id": None,
+                "analysis_path": None,
+            }
+        ),
+        EvidenceRef.model_validate(
+            {
+                "kind": "canonical_metric",
+                "claim_id": "missing-metric",
+                "candidate_id": "c1",
+                "metric_path": "profit_factor",
+                "iteration_id": None,
+                "analysis_path": None,
+            }
+        ),
+        EvidenceRef.model_validate(
+            {
+                "kind": "prior_assessment",
+                "claim_id": "missing",
+                "candidate_id": None,
+                "metric_path": None,
+                "iteration_id": 99,
+                "analysis_path": None,
+            }
+        ),
+        EvidenceRef.model_validate(
+            {
+                "kind": "analysis_artifact",
+                "claim_id": "arbitrary",
+                "candidate_id": None,
+                "metric_path": None,
+                "iteration_id": None,
+                "analysis_path": str(tmp_path / "outside.json"),
+            }
+        ),
+    ]
+    for evidence in bad_values:
+        with pytest.raises(ValueError):
+            verify_evidence_integrity(
+                [evidence],
+                candidate_facts=facts,
+                prior_assessment_iterations={2},
+                analysis_path=evidence.analysis_path,
+                analysis_root=analysis_root,
+            )
+
+
 def test_v3_init_without_operator_fixture_fails_before_partial_session(tmp_path: Path) -> None:
     repository_template = json.loads(
         (
@@ -388,12 +505,14 @@ def test_v3_init_validates_and_freezes_operator_fixture(
                             "component_id": "atr_stop_loss",
                             "instance_id": "sl",
                             "parameter_name": "distance.multiplier",
+                            "fixed_parameters": {},
                         },
                         {
                             "component_role": "exits",
                             "component_id": "atr_take_profit",
                             "instance_id": "tp",
                             "parameter_name": "distance.multiplier",
+                            "fixed_parameters": {},
                         },
                     ],
                 },
@@ -405,6 +524,7 @@ def test_v3_init_validates_and_freezes_operator_fixture(
                             "component_id": "anchor_stack_width_setup",
                             "instance_id": "stage-width",
                             "parameter_name": "min_current_width_atr",
+                            "fixed_parameters": {"atr_period": 14},
                         }
                     ],
                 },
@@ -416,6 +536,7 @@ def test_v3_init_validates_and_freezes_operator_fixture(
                             "component_id": "untouched_anchor_setup",
                             "instance_id": "stage-lookback",
                             "parameter_name": "lookback",
+                            "fixed_parameters": {"active_bars": 3},
                         }
                     ],
                 },
@@ -435,13 +556,16 @@ def test_v3_init_validates_and_freezes_operator_fixture(
                 "params_storage": "nested",
                 "params_schema": {
                     "min_current_width_atr": {"default": 2.0},
-                    "atr_period": {"default": 14},
+                    "atr_period": {"type": "integer", "default": 99},
                 },
             },
             {
                 "component_id": "untouched_anchor_setup",
                 "params_storage": "flat",
-                "params_schema": {"lookback": {"default": 50}, "active_bars": {"default": 3}},
+                "params_schema": {
+                    "lookback": {"type": "integer", "default": 50},
+                    "active_bars": {"type": "integer", "default": 99},
+                },
             },
         ]
     }
@@ -485,6 +609,36 @@ def test_v3_init_validates_and_freezes_operator_fixture(
     assert state["contract_version"] == "bbb_autoresearch_state.v3"
     assert state["active_stage"] == "A_BASELINE"
     assert state["stage_contract"]["starting_strategy"]["strategy"] == frozen
+    bindings = {item["dimension"]: item for item in state["stage_contract"]["semantic_bindings"]}
+    assert bindings["anchor_stack_width"]["targets"][0]["fixed_parameters"] == {"atr_period": 14}
+    assert bindings["untouched_anchor_lookback"]["targets"][0]["fixed_parameters"] == {
+        "active_bars": 3
+    }
+
+    original_fixture = _strategy()
+    cases = []
+    wrong_template = copy.deepcopy(template)
+    wrong_template["stage_contract"]["semantic_bindings"][0]["targets"][0]["instance_id"] = "wrong"
+    cases.append(("v3-wrong-exit", wrong_template, copy.deepcopy(original_fixture)))
+
+    missing_fixture = copy.deepcopy(original_fixture)
+    missing_fixture["raw_spec"]["trade_management"]["exit_policy"]["always_on"]["exits"].pop()
+    cases.append(("v3-missing-exit", copy.deepcopy(template), missing_fixture))
+
+    ambiguous_fixture = copy.deepcopy(original_fixture)
+    exits = ambiguous_fixture["raw_spec"]["trade_management"]["exit_policy"]["always_on"]["exits"]
+    exits.append(copy.deepcopy(exits[0]))
+    cases.append(("v3-ambiguous-exit", copy.deepcopy(template), ambiguous_fixture))
+
+    for session_id, bad_template, bad_fixture in cases:
+        bad_fixture_path = tmp_path / f"{session_id}.json"
+        bad_fixture_path.write_text(json.dumps(bad_fixture))
+        bad_template["stage_contract"]["starting_strategy_fixture"] = str(bad_fixture_path)
+        bad_template_path = tmp_path / f"{session_id}-template.json"
+        bad_template_path.write_text(json.dumps(bad_template))
+        with pytest.raises(ValueError, match="missing or ambiguous"):
+            initialize_session(session_id, bad_template_path, tmp_path)
+        assert not (tmp_path / "var/autoresearch" / session_id).exists()
 
 
 def test_v3_prompts_receive_compact_exact_stage_controls(tmp_path: Path) -> None:

@@ -23,14 +23,17 @@
   is an operator-provided harness input and is not an APPLY precondition.
 - [x] 2.2 Implement typed semantic-binding resolution through the existing Research-proxied live
   component catalog for geometry, width, and lookback; reject missing, duplicate, ambiguous, or
-  catalog-incompatible instances/parameters without a generic path language.
+  catalog-incompatible instances/parameters without a generic path language. Resolve mandatory
+  exit identities before session creation and require explicit operator-owned values for all
+  non-mutable width/lookback prototype parameters rather than using catalog defaults.
 - [x] 2.3 Make v3 initialization validate the full fixture through the existing canonical Research
   config-validation application path before creating the session directory.
 - [x] 2.4 Freeze normalized starting strategy, source/resolved hashes, resolved typed bindings,
   configured geometries, and programme contract into state/bootstrap; prove later fixture edits do
   not affect the initialized session.
 - [x] 2.5 Add deterministic init tests for valid snapshotting, unavailable dependencies, invalid
-  strategy/catalog binding, no partial session creation, and unchanged legacy initialization.
+  strategy/catalog binding, missing/wrong/ambiguous exit bindings, explicit fixed prototype values,
+  no partial session creation, and unchanged legacy initialization.
 
 ## 3. Typed candidate mutation enforcement
 
@@ -60,7 +63,9 @@
   configured geometry before allowing Phase A closure without ranking them.
 - [x] 4.3 Validate and persist worker-authored `in_progress`, `characterized`, and
   `terminally_rejected` stage dispositions with applicable evidence, without deriving closure from
-  metrics or changing existing Research Quality Policy judgments.
+  metrics or changing existing Research Quality Policy judgments. Mechanically resolve closing
+  evidence against current canonical metrics, retained prior assessments, or retained iteration
+  analysis artifacts.
 - [x] 4.4 Enforce A→B1→B2 availability and prohibit B3 until B1/B2 independently close; make B3
   optional and preserve an evidence-backed terminal/`NO_STABLE_EDGE` conclusion after B2.
 - [x] 4.5 Advance state v3 and journal v3 mechanically with stage history/reference evidence while
@@ -68,7 +73,7 @@
   semantics.
 - [x] 4.6 Add lifecycle tests covering characterized and rejected B1/B2, premature B3 rejection,
   optional justified B3, optional terminal conclusion without B3, and supervisor no-winner/no-
-  scientific-interpretation behavior.
+  scientific-interpretation behavior, including fail-closed fabricated disposition evidence.
 
 ## 5. Brokered execution and recovery integration
 

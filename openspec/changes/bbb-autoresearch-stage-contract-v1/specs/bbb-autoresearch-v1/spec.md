@@ -30,6 +30,8 @@ state, and bind its content hash. The snapshot SHALL include strategy/ticker/tim
 the EMA100/EMA200/EMA500 stack, trigger, direction, setups, blockers, contexts, exits, risk,
 component parameters, and every required component `instance_id`. A later fixture edit SHALL NOT
 change an initialized session.
+Initialization SHALL resolve the declared symmetric-geometry TP and SL component/instance targets
+unambiguously against the validated starting strategy before creating the session directory.
 
 #### Scenario: Valid starting fixture
 
@@ -42,6 +44,12 @@ change an initialized session.
 - **WHEN** the fixture is incomplete, fails canonical configuration validation, or its required
   canonical validation dependency is unavailable
 - **THEN** initialization fails closed and creates no runnable v3 session.
+
+#### Scenario: Invalid bound exit identity
+
+- **WHEN** a required TP/SL binding is missing, duplicated, ambiguous, or resolves to the wrong
+  declared component/instance identity
+- **THEN** initialization fails closed before creating any partial session directory.
 
 #### Scenario: Operator fixture is not yet supplied during implementation
 
@@ -63,6 +71,10 @@ The v1 A→B stage contract SHALL express mutation authority only with the seman
 NOT expose a generic JSONPath, JSON Pointer, array-index, patch, or arbitrary field-mutation DSL.
 The supervisor SHALL resolve each dimension to the applicable validated component instance in the
 frozen strategy and SHALL treat every field not owned by an allowed dimension as immutable.
+Every non-mutable parameter of a width/lookback component prototype SHALL have an explicit
+operator-supplied immutable value. The live component catalog SHALL validate component and
+parameter availability, names, types, and constraints, but its default values SHALL NOT supply
+research semantics implicitly.
 Strategy identity, ticker, timeframe, EMA periods, component IDs, all component `instance_id`
 values, trigger/direction structure, and unrelated parameters SHALL never be mutable.
 
@@ -78,6 +90,12 @@ values, trigger/direction structure, and unrelated parameters SHALL never be mut
 - **WHEN** a candidate changes an unrelated field, an EMA period, ticker/timeframe, component ID,
   `instance_id`, trigger, direction, or another field outside its active semantic dimensions
 - **THEN** the supervisor rejects the plan fail-closed before canonical execution.
+
+#### Scenario: Explicit fixed prototype parameters
+
+- **WHEN** initialization resolves a width or lookback prototype
+- **THEN** all non-mutable parameter values come from the immutable operator contract and are
+  validated against the catalog, and changing any such fixed value is rejected before execution.
 
 ### Requirement: Phase A establishes configured symmetric references
 
@@ -187,6 +205,18 @@ terminally rejected, and whether B3 is justified. The supervisor SHALL validate 
 contract shape and canonical evidence references and persist it mechanically; it SHALL NOT compute
 uplift thresholds, select an optimum, infer scientific closure from metrics, rank candidates, or
 force B3.
+For `characterized` and `terminally_rejected`, the supervisor SHALL additionally verify that every
+disposition evidence reference resolves to an available authoritative source: a candidate and
+metric in the current canonical result, an exact retained prior-assessment iteration in state, or
+the retained iteration analysis artifact. A syntactically valid but nonexistent candidate, metric,
+prior iteration, or arbitrary/escaping analysis path SHALL fail closed. This verification SHALL
+NOT assess evidence strength or derive the disposition.
+
+#### Scenario: Fabricated closing evidence
+
+- **WHEN** a closing stage disposition cites a nonexistent candidate or metric, a prior iteration
+  absent from retained state, or an arbitrary analysis path
+- **THEN** the supervisor rejects it without interpreting the scientific conclusion.
 
 #### Scenario: Worker closes a flat B1 response
 

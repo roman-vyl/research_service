@@ -13,6 +13,9 @@ than reconstructing or accidentally changing the experimental control.
 - Load an operator-approved canonical EMA-anchor starting-strategy fixture at initialization, validate it
   through the existing Research→Engine config-validation boundary, and freeze the resolved copy in
   session state so later fixture edits cannot mutate an active session.
+- Require operator-supplied immutable values for every non-mutable width/lookback prototype
+  parameter; the live catalog validates names, types, and availability but never supplies hidden
+  research values from component defaults.
 - Define four typed stages: `A_BASELINE`, `B1_WIDTH`, `B2_LOOKBACK`, and
   `B3_WIDTH_X_LOOKBACK`, using only the semantic mutation dimensions
   `symmetric_measurement_geometry`, `anchor_stack_width`, and `untouched_anchor_lookback` rather
@@ -29,6 +32,9 @@ than reconstructing or accidentally changing the experimental control.
   out-of-scope changes, identity changes, geometry mismatches, or causal-order violations before
   canonical execution. It does not choose parameter values, characterize topology, rank candidates,
   judge uplift, or decide whether B3 is scientifically worthwhile.
+- Resolve mandatory TP/SL component and instance bindings before creating a v3 session, and verify
+  closing-disposition evidence against retained canonical candidates/metrics, prior assessments,
+  or iteration analysis artifacts before accepting stage closure.
 - Preserve exact v1/v2 compatibility and all supervisor-owned execution, canonical-evidence,
   quality-policy, recovery, and no-scalar-winner boundaries.
 - Refine the structural-entry methodology from one global fixed neutral exit to matched fixed

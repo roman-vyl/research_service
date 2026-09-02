@@ -28,11 +28,13 @@ from research_service.runtime.settings import Settings
 
 from autoresearch_quality_contracts import (
     CANONICAL_METRIC_PATHS,
+    EvidenceRef,
     PromotionBlocker,
     enforce_quality_policy,
     phase_binding,
     validate_assessment,
     validate_policy,
+    verify_evidence_integrity,
 )
 from autoresearch_stage_contracts import (
     ITERATION_VERSION_V3,
@@ -929,6 +931,7 @@ def validate_iteration_result(
     state: dict[str, Any],
     *,
     artifacts_root: Path | None = None,
+    iteration_root: Path | None = None,
 ) -> None:
     v3 = state.get("contract_version") == STATE_VERSION_V3
     quality_aware = state.get("contract_version") in {STATE_VERSION_V2, STATE_VERSION_V3}
@@ -1071,8 +1074,35 @@ def validate_iteration_result(
     if v3:
         try:
             validate_disposition(result["stage_disposition"], state["active_stage"])
+            if result["stage_disposition"]["status"] != "in_progress":
+                disposition_evidence = [
+                    EvidenceRef.model_validate(item)
+                    for item in result["stage_disposition"]["evidence"]
+                ]
+                current_facts = (
+                    {
+                        candidate.candidate_id: candidate.model_dump(mode="python")
+                        for candidate in canonical_summary.candidates
+                        if candidate.status == "completed"
+                    }
+                    if canonical_summary is not None
+                    else {}
+                )
+                verify_evidence_integrity(
+                    disposition_evidence,
+                    candidate_facts=current_facts,
+                    prior_assessment_iterations={
+                        item["iteration_id"] for item in state["promotion_history"]
+                    },
+                    analysis_path=execution["analysis_path"],
+                    analysis_root=(iteration_root / "interpretation_analysis")
+                    if iteration_root is not None
+                    else None,
+                )
         except StageContractError as exc:
             raise ContractError(f"invalid stage disposition: {exc}") from exc
+        except (ValidationError, ValueError) as exc:
+            raise ContractError(f"unverifiable stage disposition evidence: {exc}") from exc
 
 
 def _verify_batch_artifact(
@@ -1930,7 +1960,7 @@ def run_supervisor(
             recovered = load_json(result_path)
             plan = load_json(iteration_root / "execution_plan.json")
             validate_execution_plan(plan, state)
-            validate_iteration_result(recovered, state)
+            validate_iteration_result(recovered, state, iteration_root=iteration_root)
             _validate_interpretation_binding(recovered, plan, state, iteration_root)
             atomic_write_json(state_path, _advance_state(state, recovered, root))
             continue
@@ -2104,7 +2134,7 @@ def run_supervisor(
                 if failure is None:
                     try:
                         result = load_json(result_path)
-                        validate_iteration_result(result, state)
+                        validate_iteration_result(result, state, iteration_root=iteration_root)
                         _validate_interpretation_binding(result, plan, state, iteration_root)
                         control.update(
                             stage="interpretation_prepared",
@@ -2137,7 +2167,7 @@ def run_supervisor(
                 _write_hard_stop(state_path, state, "prepared interpretation changed")
                 return 2
             result = load_json(result_path)
-            validate_iteration_result(result, state)
+            validate_iteration_result(result, state, iteration_root=iteration_root)
             _validate_interpretation_binding(result, plan, state, iteration_root)
             append_journal(journal_path, _journal_event(state, result, root))
             updated = _advance_state(state, result, root)

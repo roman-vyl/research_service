@@ -109,32 +109,68 @@ DecimalString = Annotated[
 NumericString = Annotated[str, Field(pattern=r"^-?(?:0|[1-9][0-9]*)(?:\.[0-9]+)?$")]
 
 DESCRIPTIVE_ECONOMICS = {
-    "gross_pnl", "fees_paid", "net_pnl", "return_pct", "profit_factor", "max_drawdown"
+    "gross_pnl",
+    "fees_paid",
+    "net_pnl",
+    "return_pct",
+    "profit_factor",
+    "max_drawdown",
 }
 BASELINE_PRIMARY_ALLOWED = {
-    "realised_trade_count", "open_position_count", "long.trades", "short.trades",
+    "realised_trade_count",
+    "open_position_count",
+    "long.trades",
+    "short.trades",
 }
 CONDITIONAL_ENTRY_EVIDENCE = {
-    "baseline_uplift", "win_rate", "long.win_rate", "short.win_rate",
+    "baseline_uplift",
+    "win_rate",
+    "long.win_rate",
+    "short.win_rate",
 }
 SAMPLE_THINNING_EVIDENCE = {"realised_trade_count", "thinning"}
 SIDE_BEHAVIOR_EVIDENCE = {"long.win_rate", "short.win_rate"}
 STRUCTURAL_PRIMARY_ALLOWED = {
-    "baseline_uplift", "response_topology", "neighborhood_stability",
-    "realised_trade_count", "win_rate", "long.win_rate", "short.win_rate", "thinning",
-    "temporal_concentration", "regime_concentration",
+    "baseline_uplift",
+    "response_topology",
+    "neighborhood_stability",
+    "realised_trade_count",
+    "win_rate",
+    "long.win_rate",
+    "short.win_rate",
+    "thinning",
+    "temporal_concentration",
+    "regime_concentration",
 }
 EXIT_PRIMARY = {
-    "net_pnl", "return_pct", "profit_factor", "max_drawdown", "payoff_geometry",
-    "realised_trade_count", "long.net_pnl", "long.return_pct", "long.profit_factor",
-    "short.net_pnl", "short.return_pct", "short.profit_factor", "neighborhood_stability",
+    "net_pnl",
+    "return_pct",
+    "profit_factor",
+    "max_drawdown",
+    "payoff_geometry",
+    "realised_trade_count",
+    "long.net_pnl",
+    "long.return_pct",
+    "long.profit_factor",
+    "short.net_pnl",
+    "short.return_pct",
+    "short.profit_factor",
+    "neighborhood_stability",
 }
 ROBUSTNESS_PRIMARY = {
-    "validation_evidence", "neighborhood_stability", "realised_trade_count", "thinning",
-    "temporal_concentration", "regime_concentration",
+    "validation_evidence",
+    "neighborhood_stability",
+    "realised_trade_count",
+    "thinning",
+    "temporal_concentration",
+    "regime_concentration",
 }
 ROBUSTNESS_PRIMARY_ALLOWED = ROBUSTNESS_PRIMARY | {
-    "response_topology", "win_rate", "long.trades", "long.win_rate", "short.trades",
+    "response_topology",
+    "win_rate",
+    "long.trades",
+    "long.win_rate",
+    "short.trades",
     "short.win_rate",
 }
 
@@ -165,10 +201,14 @@ class PromotionThresholds(ExactModel):
 
 
 class SidePolicy(ExactModel):
-    promotable_classifications: list[Literal[
-        "two_sided_consistent", "long_dominant", "short_dominant",
-        "regime_specific_directional",
-    ]]
+    promotable_classifications: list[
+        Literal[
+            "two_sided_consistent",
+            "long_dominant",
+            "short_dominant",
+            "regime_specific_directional",
+        ]
+    ]
 
     @model_validator(mode="after")
     def unique(self) -> "SidePolicy":
@@ -269,24 +309,45 @@ class EvidenceRef(ExactModel):
         elif self.kind == "prior_assessment":
             if self.iteration_id is None:
                 raise ValueError("prior_assessment evidence requires iteration_id")
-            if self.candidate_id is not None or self.metric_path is not None or self.analysis_path is not None:
+            if (
+                self.candidate_id is not None
+                or self.metric_path is not None
+                or self.analysis_path is not None
+            ):
                 raise ValueError("prior_assessment evidence has invalid fields")
         else:
             if not self.analysis_path:
                 raise ValueError("analysis_artifact evidence requires analysis_path")
-            if self.candidate_id is not None or self.metric_path is not None or self.iteration_id is not None:
+            if (
+                self.candidate_id is not None
+                or self.metric_path is not None
+                or self.iteration_id is not None
+            ):
                 raise ValueError("analysis_artifact evidence has invalid fields")
         return self
 
 
 class InformationValue(ExactModel):
     status: Literal["informative", "limited", "uninformative"]
-    outcomes: list[Literal[
-        "flat_response", "monotonic_response", "threshold", "plateau", "broad_optimum",
-        "isolated_spike", "boundary_running", "u_shape", "inverted_u", "side_asymmetry",
-        "thinning_detected", "temporal_concentration_detected",
-        "regime_concentration_detected", "hypothesis_supported", "hypothesis_rejected",
-    ]]
+    outcomes: list[
+        Literal[
+            "flat_response",
+            "monotonic_response",
+            "threshold",
+            "plateau",
+            "broad_optimum",
+            "isolated_spike",
+            "boundary_running",
+            "u_shape",
+            "inverted_u",
+            "side_asymmetry",
+            "thinning_detected",
+            "temporal_concentration_detected",
+            "regime_concentration_detected",
+            "hypothesis_supported",
+            "hypothesis_rejected",
+        ]
+    ]
     rationale: str = Field(min_length=1)
     evidence_refs: list[EvidenceRef]
 
@@ -328,7 +389,9 @@ class GateResult(ExactModel):
 
     @model_validator(mode="after")
     def candidate_shape(self) -> "GateResult":
-        if any(not item for item in self.candidate_ids) or len(self.candidate_ids) != len(set(self.candidate_ids)):
+        if any(not item for item in self.candidate_ids) or len(self.candidate_ids) != len(
+            set(self.candidate_ids)
+        ):
             raise ValueError("gate candidate_ids must be unique non-empty strings")
         if set(self.observed_by_candidate) != set(self.candidate_ids):
             raise ValueError("observed_by_candidate keys must equal candidate_ids")
@@ -356,8 +419,16 @@ class EconomicViability(ExactModel):
 
 class RobustnessDimension(ExactModel):
     dimension: Literal[
-        "neighborhood", "parameter_perturbation", "sample_size", "thinning", "temporal",
-        "regime", "side", "holdout", "alternate_window", "alternate_ticker",
+        "neighborhood",
+        "parameter_perturbation",
+        "sample_size",
+        "thinning",
+        "temporal",
+        "regime",
+        "side",
+        "holdout",
+        "alternate_window",
+        "alternate_ticker",
     ]
     status: Literal["supported", "failed", "not_tested", "not_available", "not_applicable"]
     evidence_refs: list[EvidenceRef]
@@ -380,7 +451,11 @@ class Robustness(ExactModel):
 class SideAssessment(ExactModel):
     classification: SideClassification
     claim_scope: Literal[
-        "two_sided", "long_only", "short_only", "regime_specific", "unresolved",
+        "two_sided",
+        "long_only",
+        "short_only",
+        "regime_specific",
+        "unresolved",
         "not_applicable",
     ]
     rationale: str = Field(min_length=1)
@@ -388,7 +463,11 @@ class SideAssessment(ExactModel):
 
 class TradeoffDimension(ExactModel):
     dimension: Literal[
-        "profitability", "absolute_after_cost_result", "risk", "sample_size", "side_breadth",
+        "profitability",
+        "absolute_after_cost_result",
+        "risk",
+        "sample_size",
+        "side_breadth",
         "neighborhood_stability",
     ]
     assessment: Literal["left_better", "right_better", "equivalent", "uncertain"]
@@ -401,9 +480,7 @@ class TradeoffComparison(ExactModel):
     stage_kind: StageKind
     same_market_universe: bool
     dimensions: list[TradeoffDimension] = Field(min_length=1)
-    relation: Literal[
-        "left_dominates", "right_dominates", "tradeoff", "equivalent", "incomparable"
-    ]
+    relation: Literal["left_dominates", "right_dominates", "tradeoff", "equivalent", "incomparable"]
 
     @model_validator(mode="after")
     def relation_is_pareto_consistent(self) -> "TradeoffComparison":
@@ -435,11 +512,22 @@ class TradeoffSummary(ExactModel):
 
 class PromotionBlocker(ExactModel):
     code: Literal[
-        "missing_evidence", "no_structural_response", "isolated_spike", "boundary_unresolved",
-        "thin_sample", "configured_gate_failed", "after_cost_nonpositive",
-        "economic_inconsistency", "neighborhood_unsupported", "directional_validation_missing",
-        "required_validation_missing", "validation_failed", "temporal_concentration",
-        "regime_concentration", "side_masking", "other",
+        "missing_evidence",
+        "no_structural_response",
+        "isolated_spike",
+        "boundary_unresolved",
+        "thin_sample",
+        "configured_gate_failed",
+        "after_cost_nonpositive",
+        "economic_inconsistency",
+        "neighborhood_unsupported",
+        "directional_validation_missing",
+        "required_validation_missing",
+        "validation_failed",
+        "temporal_concentration",
+        "regime_concentration",
+        "side_masking",
+        "other",
     ]
     gate_id: GateId | None
     message: str = Field(min_length=1)
@@ -448,8 +536,12 @@ class PromotionBlocker(ExactModel):
 
 class Promotion(ExactModel):
     decision: Literal[
-        "continue_discovery", "investigate_region", "eligible_for_next_stage",
-        "validation_required", "rejected_structurally", "demoted_after_validation",
+        "continue_discovery",
+        "investigate_region",
+        "eligible_for_next_stage",
+        "validation_required",
+        "rejected_structurally",
+        "demoted_after_validation",
         "no_stable_edge",
     ]
     blockers: list[PromotionBlocker]
@@ -552,6 +644,41 @@ def _metric(candidate: dict[str, Any], path: str) -> Any:
     return value
 
 
+def verify_evidence_integrity(
+    evidence_refs: list[EvidenceRef],
+    *,
+    candidate_facts: dict[str, dict[str, Any]],
+    prior_assessment_iterations: set[int],
+    analysis_path: str | None,
+    analysis_root: Path | None = None,
+) -> None:
+    """Mechanically bind evidence refs to already-authoritative retained facts.
+
+    This performs no scientific interpretation.  It is the strict variant used
+    for a v3 stage-closing disposition, where every reference must be presently
+    verifiable rather than merely well-shaped.
+    """
+
+    for evidence in evidence_refs:
+        if evidence.kind == "canonical_metric":
+            if evidence.candidate_id not in candidate_facts:
+                raise ValueError("canonical evidence references an unknown current candidate")
+            _metric(candidate_facts[evidence.candidate_id], evidence.metric_path or "")
+        elif evidence.kind == "prior_assessment":
+            if evidence.iteration_id not in prior_assessment_iterations:
+                raise ValueError("prior assessment evidence references no retained assessment")
+        else:
+            if evidence.analysis_path != analysis_path or analysis_root is None:
+                raise ValueError("analysis evidence does not match a retained iteration artifact")
+            try:
+                root = analysis_root.resolve(strict=True)
+                artifact = Path(evidence.analysis_path or "").resolve(strict=True)
+            except (OSError, RuntimeError) as exc:
+                raise ValueError("analysis evidence artifact is unavailable") from exc
+            if not artifact.is_file() or not artifact.is_relative_to(root):
+                raise ValueError("analysis evidence escapes the retained analysis namespace")
+
+
 def _required_canonical_decimal(candidate: dict[str, Any], field: str) -> Decimal:
     raw = candidate.get(field)
     if raw is None:
@@ -624,7 +751,10 @@ def enforce_quality_policy(
     for comparison in assessment.tradeoff_summary.comparisons:
         if comparison.stage_kind != binding.stage_kind:
             raise ValueError("tradeoff comparison stage differs from assessment stage")
-        if comparison.left_subject_ref not in subject_refs or comparison.right_subject_ref not in subject_refs:
+        if (
+            comparison.left_subject_ref not in subject_refs
+            or comparison.right_subject_ref not in subject_refs
+        ):
             raise ValueError("tradeoff comparison references an unknown candidate or region")
 
     candidate_ids = set(candidate_facts)
@@ -651,7 +781,9 @@ def enforce_quality_policy(
     if (strong_claim or economic_claim) and subject is None:
         raise ValueError("promotion or viability claim requires a promotion_subject")
     if subject is not None:
-        referenced = set(subject.representative_candidate_ids) | set(subject.neighborhood_candidate_ids)
+        referenced = set(subject.representative_candidate_ids) | set(
+            subject.neighborhood_candidate_ids
+        )
         if subject.baseline_candidate_id is not None:
             referenced.add(subject.baseline_candidate_id)
         if not referenced <= candidate_ids:
@@ -659,7 +791,10 @@ def enforce_quality_policy(
     if decision == "no_stable_edge":
         return
 
-    if assessment.side_assessment.classification == "two_sided_consistent" and assessment.side_assessment.claim_scope != "two_sided":
+    if (
+        assessment.side_assessment.classification == "two_sided_consistent"
+        and assessment.side_assessment.claim_scope != "two_sided"
+    ):
         raise ValueError("two_sided_consistent requires two_sided claim scope")
     directional_scopes = {
         "long_dominant": "long_only",
@@ -677,7 +812,12 @@ def enforce_quality_policy(
     if not representatives:
         raise ValueError("promotion requires representative candidates")
 
-    if stage in {"structural_interaction", "entry_region_selection", "exit_geometry", "robustness_validation"}:
+    if stage in {
+        "structural_interaction",
+        "entry_region_selection",
+        "exit_geometry",
+        "robustness_validation",
+    }:
         if assessment.structural_promise.neighborhood_stability != "supported":
             raise ValueError("promotion requires neighborhood support")
         if not subject.neighborhood_candidate_ids:
@@ -687,12 +827,25 @@ def enforce_quality_policy(
     if stage == "entry_region_selection":
         structural = assessment.structural_promise
         if structural.status != "promising" or structural.sample_adequacy != "adequate":
-            raise ValueError("entry-region promotion requires promising structure and adequate sample")
+            raise ValueError(
+                "entry-region promotion requires promising structure and adequate sample"
+            )
         if not structural.topology:
             raise ValueError("entry-region promotion requires explicit topology")
-        if assessment.side_assessment.classification in {"not_applicable", "mixed_unresolved", "aggregate_masks_side_failure"}:
-            raise ValueError("entry-region promotion requires a promotable explicit side classification")
-        if blockers & {"thin_sample", "temporal_concentration", "regime_concentration", "side_masking"}:
+        if assessment.side_assessment.classification in {
+            "not_applicable",
+            "mixed_unresolved",
+            "aggregate_masks_side_failure",
+        }:
+            raise ValueError(
+                "entry-region promotion requires a promotable explicit side classification"
+            )
+        if blockers & {
+            "thin_sample",
+            "temporal_concentration",
+            "regime_concentration",
+            "side_masking",
+        }:
             raise ValueError("entry-region promotion has a disqualifying structural blocker")
 
     permitted = set(policy.side_policy.promotable_classifications)
@@ -701,7 +854,11 @@ def enforce_quality_policy(
         raise ValueError("side classification is not permitted for promotion")
 
     dimensions = {item.dimension: item.status for item in assessment.robustness.dimensions}
-    directional = classification in {"long_dominant", "short_dominant", "regime_specific_directional"}
+    directional = classification in {
+        "long_dominant",
+        "short_dominant",
+        "regime_specific_directional",
+    }
     if directional and not (
         dimensions.get("temporal") == "supported" and dimensions.get("regime") == "supported"
     ):
@@ -710,10 +867,7 @@ def enforce_quality_policy(
     validation = policy.validation_policy
     required_now = bool(validation.required_evidence) and (
         stage in {"exit_geometry", "robustness_validation"}
-        or (
-            stage == "entry_region_selection"
-            and validation.required_before_entry_region_promotion
-        )
+        or (stage == "entry_region_selection" and validation.required_before_entry_region_promotion)
     )
     if required_now:
         for kind in validation.required_evidence:
@@ -743,22 +897,47 @@ def enforce_quality_policy(
         if not expected:
             raise ValueError(f"hard promotion invariant failed: {gate_id}")
 
-    if stage in {"structural_interaction", "entry_region_selection", "exit_geometry", "robustness_validation"}:
+    if stage in {
+        "structural_interaction",
+        "entry_region_selection",
+        "exit_geometry",
+        "robustness_validation",
+    }:
         require_boolean_gate("neighborhood_supported", True)
     require_boolean_gate("side_classification_permitted", classification in permitted)
     if required_now:
         require_boolean_gate("required_validation", True)
 
     configured_paths: dict[str, tuple[str, Any]] = {
-        "minimum_realised_trade_count": ("realised_trade_count", policy.promotion_thresholds.minimum_realised_trade_count),
-        "minimum_profit_factor": ("profit_factor", policy.promotion_thresholds.minimum_profit_factor),
-        "minimum_after_cost_return": ("return_pct", policy.promotion_thresholds.minimum_after_cost_return),
-        "maximum_trade_close_drawdown_magnitude": ("max_drawdown", policy.promotion_thresholds.maximum_trade_close_drawdown_magnitude),
-        "minimum_long_trade_count": ("long.trades", policy.promotion_thresholds.minimum_long_trade_count),
-        "minimum_short_trade_count": ("short.trades", policy.promotion_thresholds.minimum_short_trade_count),
+        "minimum_realised_trade_count": (
+            "realised_trade_count",
+            policy.promotion_thresholds.minimum_realised_trade_count,
+        ),
+        "minimum_profit_factor": (
+            "profit_factor",
+            policy.promotion_thresholds.minimum_profit_factor,
+        ),
+        "minimum_after_cost_return": (
+            "return_pct",
+            policy.promotion_thresholds.minimum_after_cost_return,
+        ),
+        "maximum_trade_close_drawdown_magnitude": (
+            "max_drawdown",
+            policy.promotion_thresholds.maximum_trade_close_drawdown_magnitude,
+        ),
+        "minimum_long_trade_count": (
+            "long.trades",
+            policy.promotion_thresholds.minimum_long_trade_count,
+        ),
+        "minimum_short_trade_count": (
+            "short.trades",
+            policy.promotion_thresholds.minimum_short_trade_count,
+        ),
     }
     structural_thresholds = {
-        "minimum_realised_trade_count", "minimum_long_trade_count", "minimum_short_trade_count",
+        "minimum_realised_trade_count",
+        "minimum_long_trade_count",
+        "minimum_short_trade_count",
         "maximum_trade_count_reduction_fraction",
     }
     for gate_id, (path, threshold) in configured_paths.items():
@@ -770,15 +949,31 @@ def enforce_quality_policy(
                 raise ValueError(f"absent or stage-inapplicable threshold invented gate {gate_id}")
             continue
         gate = gates.get(gate_id)
-        if gate is None or gate.source != "configured_threshold" or gate.threshold != str(threshold):
+        if (
+            gate is None
+            or gate.source != "configured_threshold"
+            or gate.threshold != str(threshold)
+        ):
             raise ValueError(f"configured gate is missing or has wrong threshold: {gate_id}")
-        observed = {candidate_id: _metric(candidate_facts[candidate_id], path) for candidate_id in representatives}
+        observed = {
+            candidate_id: _metric(candidate_facts[candidate_id], path)
+            for candidate_id in representatives
+        }
         if gate_id == "maximum_trade_close_drawdown_magnitude":
-            passed = all(abs(Decimal(str(value))) <= Decimal(str(threshold)) for value in observed.values())
+            passed = all(
+                abs(Decimal(str(value))) <= Decimal(str(threshold)) for value in observed.values()
+            )
         else:
-            passed = all(value is not None and Decimal(str(value)) >= Decimal(str(threshold)) for value in observed.values())
-        expected_observed = {key: str(value) if value is not None else None for key, value in observed.items()}
-        if gate.observed_by_candidate != expected_observed or gate.status != ("pass" if passed else "fail"):
+            passed = all(
+                value is not None and Decimal(str(value)) >= Decimal(str(threshold))
+                for value in observed.values()
+            )
+        expected_observed = {
+            key: str(value) if value is not None else None for key, value in observed.items()
+        }
+        if gate.observed_by_candidate != expected_observed or gate.status != (
+            "pass" if passed else "fail"
+        ):
             raise ValueError(f"configured gate contradicts canonical metrics: {gate_id}")
         if not passed:
             raise ValueError(f"configured promotion gate failed: {gate_id}")
@@ -791,18 +986,26 @@ def enforce_quality_policy(
     elif stage in {"entry_region_selection", "exit_geometry", "robustness_validation"}:
         if subject.baseline_candidate_id is None:
             raise ValueError("trade-count reduction gate requires baseline_candidate_id")
-        baseline_count = Decimal(str(_metric(candidate_facts[subject.baseline_candidate_id], "realised_trade_count")))
+        baseline_count = Decimal(
+            str(_metric(candidate_facts[subject.baseline_candidate_id], "realised_trade_count"))
+        )
         if baseline_count <= 0:
             raise ValueError("trade-count reduction gate requires positive baseline trade count")
         observed = {
-            candidate_id: (baseline_count - Decimal(str(_metric(candidate_facts[candidate_id], "realised_trade_count")))) / baseline_count
+            candidate_id: (
+                baseline_count
+                - Decimal(str(_metric(candidate_facts[candidate_id], "realised_trade_count")))
+            )
+            / baseline_count
             for candidate_id in representatives
         }
         if reduction_gate is None or reduction_gate.threshold != str(reduction_threshold):
             raise ValueError("configured trade-count reduction gate is missing")
         expected_observed = {key: str(value) for key, value in observed.items()}
         passed = all(value <= reduction_threshold for value in observed.values())
-        if reduction_gate.observed_by_candidate != expected_observed or reduction_gate.status != ("pass" if passed else "fail"):
+        if reduction_gate.observed_by_candidate != expected_observed or reduction_gate.status != (
+            "pass" if passed else "fail"
+        ):
             raise ValueError("trade-count reduction gate contradicts canonical metrics")
         if not passed:
             raise ValueError("configured trade-count reduction gate failed")
@@ -822,11 +1025,17 @@ def enforce_quality_policy(
             if gate is None or gate.source != "hard_invariant" or gate.threshold is not None:
                 raise ValueError(f"required hard invariant gate is missing: {gate_id}")
             passed = all(observed.values())
-            if gate.observed_by_candidate != observed or gate.status != ("pass" if passed else "fail"):
+            if gate.observed_by_candidate != observed or gate.status != (
+                "pass" if passed else "fail"
+            ):
                 raise ValueError(f"hard invariant gate contradicts canonical metrics: {gate_id}")
             if not passed:
                 raise ValueError(f"hard promotion invariant failed: {gate_id}")
-        if assessment.economic_viability.status != "viable" or assessment.economic_viability.after_cost_status != "positive" or assessment.economic_viability.metric_consistency != "consistent":
+        if (
+            assessment.economic_viability.status != "viable"
+            or assessment.economic_viability.after_cost_status != "positive"
+            or assessment.economic_viability.metric_consistency != "consistent"
+        ):
             raise ValueError("economic viability claim contradicts required exit/robustness gates")
 
 
@@ -850,9 +1059,7 @@ def write_contract_schemas(schema_dir: Path) -> None:
     iteration["$id"] = "bbb_autoresearch_iteration.v2"
     iteration["title"] = "BBB AutoResearch iteration result v2"
     iteration["required"].append("research_quality_assessment")
-    iteration["properties"]["contract_version"] = {
-        "const": "bbb_autoresearch_iteration.v2"
-    }
+    iteration["properties"]["contract_version"] = {"const": "bbb_autoresearch_iteration.v2"}
     iteration["properties"]["research_quality_assessment"] = {
         "$ref": "research_quality_assessment.schema.json"
     }
@@ -873,19 +1080,23 @@ def write_contract_schemas(schema_dir: Path) -> None:
         ]
     )
     state["properties"]["contract_version"] = {"const": "bbb_autoresearch_state.v2"}
-    state["properties"]["research_quality_policy"] = {
-        "$ref": "research_quality_policy.schema.json"
-    }
+    state["properties"]["research_quality_policy"] = {"$ref": "research_quality_policy.schema.json"}
     state["properties"]["active_stage_binding"] = {
         "type": "object",
         "additionalProperties": False,
         "required": ["phase", "stage_kind"],
         "properties": {
             "phase": {"type": "string", "minLength": 1},
-            "stage_kind": {"enum": [
-                "descriptive_baseline", "structural_entry", "structural_interaction",
-                "entry_region_selection", "exit_geometry", "robustness_validation",
-            ]},
+            "stage_kind": {
+                "enum": [
+                    "descriptive_baseline",
+                    "structural_entry",
+                    "structural_interaction",
+                    "entry_region_selection",
+                    "exit_geometry",
+                    "robustness_validation",
+                ]
+            },
         },
     }
     state["properties"]["latest_quality_assessment"] = {
@@ -903,11 +1114,17 @@ def write_contract_schemas(schema_dir: Path) -> None:
             "properties": {
                 "iteration_id": {"type": "integer", "minimum": 1},
                 "region_id": {"type": ["string", "null"], "minLength": 1},
-                "decision": {"enum": [
-                    "continue_discovery", "investigate_region", "eligible_for_next_stage",
-                    "validation_required", "rejected_structurally",
-                    "demoted_after_validation", "no_stable_edge",
-                ]},
+                "decision": {
+                    "enum": [
+                        "continue_discovery",
+                        "investigate_region",
+                        "eligible_for_next_stage",
+                        "validation_required",
+                        "rejected_structurally",
+                        "demoted_after_validation",
+                        "no_stable_edge",
+                    ]
+                },
                 "blockers": {
                     "type": "array",
                     "items": {
@@ -929,12 +1146,29 @@ def write_contract_schemas(schema_dir: Path) -> None:
         "type": "object",
         "additionalProperties": False,
         "required": [
-            "contract_version", "session_id", "iteration_id", "timestamp",
-            "baseline_git_sha", "research_phase", "hypothesis", "competing_explanation",
-            "experiment_id", "candidate_ids", "window_policy", "strategy_context",
-            "parameter_axes", "execution_accounting_assumptions", "batch_artifact_path",
-            "run_ids", "market_data_hash", "outcome_classification", "side_interpretation",
-            "risk_assessment", "conclusion", "next_question", "research_quality_assessment",
+            "contract_version",
+            "session_id",
+            "iteration_id",
+            "timestamp",
+            "baseline_git_sha",
+            "research_phase",
+            "hypothesis",
+            "competing_explanation",
+            "experiment_id",
+            "candidate_ids",
+            "window_policy",
+            "strategy_context",
+            "parameter_axes",
+            "execution_accounting_assumptions",
+            "batch_artifact_path",
+            "run_ids",
+            "market_data_hash",
+            "outcome_classification",
+            "side_interpretation",
+            "risk_assessment",
+            "conclusion",
+            "next_question",
+            "research_quality_assessment",
         ],
         "properties": {
             "contract_version": {"const": "bbb_autoresearch_journal.v2"},
@@ -968,24 +1202,25 @@ def write_contract_schemas(schema_dir: Path) -> None:
                 "type": "object",
                 "additionalProperties": False,
                 "required": [
-                    "thinning_risk", "temporal_regime_concentration_concern",
+                    "thinning_risk",
+                    "temporal_regime_concentration_concern",
                     "other_confounders",
                 ],
                 "properties": {
                     "thinning_risk": {"type": ["string", "null"], "minLength": 1},
                     "temporal_regime_concentration_concern": {
-                        "type": ["string", "null"], "minLength": 1,
+                        "type": ["string", "null"],
+                        "minLength": 1,
                     },
                     "other_confounders": {
-                        "type": "array", "items": {"type": "string"},
+                        "type": "array",
+                        "items": {"type": "string"},
                     },
                 },
             },
             "conclusion": {"type": "string", "minLength": 1},
             "next_question": {"type": "string", "minLength": 1},
-            "research_quality_assessment": {
-                "$ref": "research_quality_assessment.schema.json"
-            },
+            "research_quality_assessment": {"$ref": "research_quality_assessment.schema.json"},
         },
     }
     (schema_dir / "journal_event.v2.schema.json").write_text(
