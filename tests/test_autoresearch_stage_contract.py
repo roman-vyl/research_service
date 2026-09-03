@@ -695,6 +695,11 @@ def test_v3_prompts_receive_compact_exact_stage_controls(tmp_path: Path) -> None
         assert '"symmetric_measurement_geometry"' in prompt
     assert "not scan or optimize exit geometry" in planning
     assert "B3 is optional" in planning
+    assert "broad coarse sweep" in planning
+    assert "map the response topology" in planning
+    assert "not to select the best sampled point" in planning
+    assert "all supported or plausibly distinct neighborhoods" in " ".join(planning.split())
+    assert "unresolved boundaries remain" in planning
     assert "Active stage: A_CONTROL" in planning
     assert "Mutable semantic dimensions for this stage (the only fields you may vary): (none)" in (
         planning
