@@ -12,6 +12,7 @@ from research_service.application.experiments import BatchExperimentRequest
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from autoresearch_stage_contracts import (
+    STAGE_PHASES,
     StageContractError,
     canonical_sha256,
     geometry_references,
@@ -166,8 +167,15 @@ def _state(stage: str = "A_BASELINE") -> dict:
                 },
             }
         )
+    stage_kind = {
+        "A_BASELINE": "descriptive_baseline",
+        "B1_WIDTH": "structural_entry",
+        "B2_LOOKBACK": "structural_entry",
+        "B3_WIDTH_X_LOOKBACK": "structural_interaction",
+    }[stage]
     return {
         "active_stage": stage,
+        "active_stage_binding": {"phase": STAGE_PHASES[stage], "stage_kind": stage_kind},
         "stage_contract": _contract(),
         "phase_a_references": refs,
         "stage_dispositions": dispositions,

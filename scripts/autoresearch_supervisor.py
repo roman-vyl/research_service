@@ -30,6 +30,7 @@ from autoresearch_quality_contracts import (
     CANONICAL_METRIC_PATHS,
     EvidenceRef,
     PromotionBlocker,
+    describe_stage_metric_role_contract,
     enforce_quality_policy,
     phase_binding,
     validate_assessment,
@@ -1472,6 +1473,11 @@ def render_interpretation_prompt(
         "analysis_dir": iteration_root / "interpretation_analysis",
         "canonical_metric_paths": ", ".join(
             f"`{metric_path}`" for metric_path in sorted(CANONICAL_METRIC_PATHS)
+        ),
+        "stage_metric_role_contract": (
+            describe_stage_metric_role_contract(state["active_stage_binding"]["stage_kind"])
+            if state["contract_version"] in {STATE_VERSION_V2, STATE_VERSION_V3}
+            else "N/A (legacy v1 contract has no stage metric-role assessment)."
         ),
         "result_schema_path": root
         / "autoresearch"

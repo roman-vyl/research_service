@@ -577,6 +577,54 @@ def phase_binding(policy: ResearchQualityPolicy, phase: str) -> PhaseBinding:
     return matches[0]
 
 
+def describe_stage_metric_role_contract(stage_kind: StageKind) -> str:
+    """Render the one current stage's metric-role contract that validate_metric_roles enforces.
+
+    A compact, worker-facing cheat-sheet resolved from the same constants the mechanical
+    validator checks against -- not a copy maintained by hand, and not the full quality policy.
+    """
+    if stage_kind == "descriptive_baseline":
+        return (
+            f"Stage: {stage_kind}\n"
+            "metric_roles.primary is required and must be non-empty; every entry must be one of: "
+            f"{', '.join(sorted(BASELINE_PRIMARY_ALLOWED))}.\n"
+            "primary must include realised_trade_count.\n"
+            "promotion_gates must be empty at this stage.\n"
+            "Baseline economics (return_pct, profit_factor, net_pnl, max_drawdown, ...) remain "
+            "descriptive and must never be promoted to primary."
+        )
+    if stage_kind in {"structural_entry", "structural_interaction", "entry_region_selection"}:
+        lines = [
+            f"Stage: {stage_kind}",
+            f"metric_roles.primary must be a subset of: {', '.join(sorted(STRUCTURAL_PRIMARY_ALLOWED))}.",
+            "secondary is required, non-empty, and must be a subset of: "
+            f"{', '.join(sorted(DESCRIPTIVE_ECONOMICS))}.",
+            f"primary must include at least one of: {', '.join(sorted(CONDITIONAL_ENTRY_EVIDENCE))}.",
+            "primary must include response_topology.",
+            f"primary must include at least one of: {', '.join(sorted(SAMPLE_THINNING_EVIDENCE))}.",
+        ]
+        if stage_kind in {"structural_interaction", "entry_region_selection"}:
+            lines.append("primary must include neighborhood_stability.")
+            lines.append(
+                f"primary must include at least one of: {', '.join(sorted(SIDE_BEHAVIOR_EVIDENCE))}."
+            )
+        lines.append("promotion_gates must not include after_cost_positive at this stage.")
+        return "\n".join(lines)
+    if stage_kind == "exit_geometry":
+        return (
+            f"Stage: {stage_kind}\n"
+            f"metric_roles.primary must equal exactly: {', '.join(sorted(EXIT_PRIMARY))}.\n"
+            "promotion_gates must include after_cost_positive."
+        )
+    return (
+        f"Stage: {stage_kind}\n"
+        f"metric_roles.primary must include all of: {', '.join(sorted(ROBUSTNESS_PRIMARY))}, and "
+        "may additionally include only: "
+        f"{', '.join(sorted(ROBUSTNESS_PRIMARY_ALLOWED - ROBUSTNESS_PRIMARY))}.\n"
+        "promotion_gates must include after_cost_positive."
+    )
+
+
 def validate_metric_roles(assessment: ResearchQualityAssessment) -> None:
     stage = assessment.stage.stage_kind
     roles = assessment.stage.metric_roles

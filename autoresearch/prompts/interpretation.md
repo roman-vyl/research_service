@@ -51,4 +51,10 @@ Allowed canonical metric paths (rendered from the current contract layer):
 
 Do not invent metric roles or metric paths absent from the applicable result contract and the
 allowlist above. Do not combine fields belonging to different evidence kinds.
+
+Before writing `stage.metric_roles`, apply this exact contract for the current stage (rendered from
+the current contract layer, not a hand-copied list):
+
+{stage_metric_role_contract}
+
 Exit after interpretation.

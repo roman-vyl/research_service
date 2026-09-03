@@ -131,6 +131,7 @@ def test_interpretation_entry_point_still_points_to_program_md(tmp_path: Path) -
         "skill_path": ".claude/skills/ema-anchor-edge-research/SKILL.md",
         "iteration": 1,
         "contract_version": "bbb_autoresearch_state.v2",
+        "active_stage_binding": {"phase": "baseline", "stage_kind": "descriptive_baseline"},
     }
     prompt = render_interpretation_prompt(state, REPO_ROOT, tmp_path, "batch")
     assert str(PROGRAM_PATH) in prompt

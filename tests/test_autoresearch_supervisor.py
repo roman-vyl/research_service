@@ -208,6 +208,7 @@ def test_interpretation_prompt_renders_evidence_ref_contract_allowlist(tmp_path:
         "skill_path": ".claude/skills/ema-anchor-edge-research/SKILL.md",
         "iteration": 1,
         "contract_version": "bbb_autoresearch_state.v2",
+        "active_stage_binding": {"phase": "baseline", "stage_kind": "descriptive_baseline"},
     }
 
     prompt = render_interpretation_prompt(state, Path(__file__).parents[1], tmp_path, "batch")
@@ -215,7 +216,8 @@ def test_interpretation_prompt_renders_evidence_ref_contract_allowlist(tmp_path:
     assert "`canonical_metric`" in prompt
     assert "non-empty `candidate_id`" in prompt
     assert "`iteration_id` and `analysis_path` are forbidden" in prompt
-    assert "never disguise file evidence as `canonical_metric`" in prompt
+    assert "disguise file evidence as `canonical_metric`" in prompt
+    assert "analysis_path` must equal that declared value exactly" in prompt
     rendered_allowlist = prompt.split(
         "Allowed canonical metric paths (rendered from the current contract layer):\n", 1
     )[1].split("\n\n", 1)[0]
@@ -235,11 +237,57 @@ def test_interpretation_prompt_allowlist_uses_contract_layer(
         "skill_path": ".claude/skills/ema-anchor-edge-research/SKILL.md",
         "iteration": 1,
         "contract_version": "bbb_autoresearch_state.v2",
+        "active_stage_binding": {"phase": "baseline", "stage_kind": "descriptive_baseline"},
     }
 
     prompt = render_interpretation_prompt(state, Path(__file__).parents[1], tmp_path, "batch")
 
     assert "`contract.probe`" in prompt
+
+
+def test_interpretation_prompt_renders_stage_metric_role_contract_for_baseline(
+    tmp_path: Path,
+) -> None:
+    # Regression: interpretation left stage.metric_roles.primary empty for
+    # descriptive_baseline (3/3 attempts, identical hard-stop) because
+    # nothing told the worker what validate_metric_roles enforces for the
+    # first stage.
+    state = {
+        "session_id": "s1",
+        "skill_path": ".claude/skills/ema-anchor-edge-research/SKILL.md",
+        "iteration": 1,
+        "contract_version": "bbb_autoresearch_state.v2",
+        "active_stage_binding": {"phase": "baseline", "stage_kind": "descriptive_baseline"},
+    }
+
+    prompt = render_interpretation_prompt(state, Path(__file__).parents[1], tmp_path, "batch")
+
+    assert "Stage: descriptive_baseline" in prompt
+    assert "primary must include realised_trade_count." in prompt
+    assert "promotion_gates must be empty at this stage." in prompt
+
+
+def test_interpretation_prompt_renders_stage_metric_role_contract_for_v3_session(
+    tmp_path: Path,
+) -> None:
+    # The original fix only rendered this for contract_version v2; v3
+    # sessions (the current AutoResearch default) must get it too.
+    state = {
+        "session_id": "s1",
+        "skill_path": ".claude/skills/ema-anchor-edge-research/SKILL.md",
+        "iteration": 1,
+        "contract_version": "bbb_autoresearch_state.v3",
+        "active_stage": "A_BASELINE",
+        "active_stage_binding": {"phase": "baseline", "stage_kind": "descriptive_baseline"},
+        "stage_contract": None,
+        "phase_a_references": [],
+        "stage_dispositions": [],
+    }
+
+    prompt = render_interpretation_prompt(state, Path(__file__).parents[1], tmp_path, "batch")
+
+    assert "Stage: descriptive_baseline" in prompt
+    assert "primary must include realised_trade_count." in prompt
 
 
 def test_interpretation_prompt_names_execution_receipt_as_experiment_id_authority(
@@ -254,6 +302,7 @@ def test_interpretation_prompt_names_execution_receipt_as_experiment_id_authorit
         "skill_path": ".claude/skills/ema-anchor-edge-research/SKILL.md",
         "iteration": 1,
         "contract_version": "bbb_autoresearch_state.v2",
+        "active_stage_binding": {"phase": "baseline", "stage_kind": "descriptive_baseline"},
     }
     iteration_root = tmp_path
     receipt_path = iteration_root / "execution_receipt.json"
