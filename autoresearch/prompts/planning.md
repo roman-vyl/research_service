@@ -14,6 +14,7 @@ not scan or optimize exit geometry; `stage_context.starting_strategy_sha256` abo
 identity a Phase A candidate must match, verbatim, never recomputed. B1/B2/B3 hold that same frozen
 exit distance fixed and vary only their own typed dimension. B3 is optional; never schedule it
 merely because B1 and B2 are closed.
+Prefer information-dense batches: batch execution has significant fixed wall-clock overhead, so include all scientifically useful neighboring candidates in one batch rather than splitting them across small sequential batches.
 
 Stage authority for this exact iteration (computed from the same source the supervisor validates
 against -- copy these values, never guess or recompute them):

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export BBB_AUTORESEARCH_LAUNCH_PROFILE="controlled-docker-v1"
 export RESEARCH_STRATEGY_ENGINE_URL="http://strategy-engine:8080"
 export RESEARCH_MARKET_DATA_URL="http://market-data-service:8080"
 export RESEARCH_ARTIFACTS_ROOT="${RESEARCH_ARTIFACTS_ROOT:-/data/runs}"

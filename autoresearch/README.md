@@ -23,17 +23,15 @@ they are valid. AutoResearch has no separate Engine/MDS addressing scheme: both 
 the existing Research `Settings` contract, and the supervisor passes its resolved settings only to
 the canonical executor.
 
-| Profile | Supervisor runtime | Strategy Engine | Market Data Service | Artifact/config roots |
-| --- | --- | --- | --- | --- |
-| HOST | macOS or Linux host | `http://127.0.0.1:8090` | `http://127.0.0.1:8080` | Required absolute host paths supplied by the operator |
-| DOCKER | container attached to the BBB Docker network | `http://strategy-engine:8080` | `http://market-data-service:8080` | Explicit container paths; defaults are `/data/runs` and `/data/configs` |
+| Profile | Supervisor runtime | Research Service | Strategy Engine | Market Data Service | Artifact/config roots |
+| --- | --- | --- | --- | --- | --- |
+| HOST | macOS or Linux host | `http://127.0.0.1:8000` | `http://127.0.0.1:8090` | `http://127.0.0.1:8080` | `$HOME/bbb_data/autoresearch` and `configs` below it |
+| DOCKER | container attached to the BBB Docker network | `http://research-service:8080` | `http://strategy-engine:8080` | `http://market-data-service:8080` | Explicit container paths; defaults are `/data/runs` and `/data/configs` |
 
-For a host-run supervisor, export writable absolute host roots and use the host wrapper:
+For a controlled host run, use the host wrapper; it owns all service URLs, canonical roots, and the
+repo-local Python path rather than accepting them from operator environment:
 
 ```bash
-export RESEARCH_ARTIFACTS_ROOT=/Users/operator/bbb_data/autoresearch
-export RESEARCH_CONFIGS_ROOT=/Users/operator/bbb_data/autoresearch/configs
-export BBB_AUTORESEARCH_RESEARCH_SERVICE_URL=http://127.0.0.1:8000
 export BBB_AUTORESEARCH_AGENT_COMMAND='codex exec -C . -s workspace-write -'
 scripts/autoresearch_run_host.sh \
   --session ema-anchor-demo \
@@ -53,16 +51,19 @@ scripts/autoresearch_run_docker.sh \
 Both wrappers set only Research runtime configuration and forward every CLI argument unchanged to
 `scripts/autoresearch_supervisor.py`. The host wrapper runs the repo-local `.venv/bin/python`
 directly, so no prior `source .venv/bin/activate` is required; it fails fast if that virtualenv is
-missing or not executable. The Docker wrapper still uses `python` from `PATH` inside the container.
+missing or not executable. Before reading an iteration or invoking an LLM, the supervisor verifies
+the wrapper profile and all three canonical `/health` endpoints. Direct supervisor CLI launch is
+rejected; the wrappers are the execution contract. The Docker wrapper still uses `python` from
+`PATH` inside the container.
 Provider credentials, the agent command, and other ordinary runtime variables remain operator-owned.
 
 Initialize and inspect a session:
 
 ```bash
-python scripts/autoresearch_init.py \
+.venv/bin/python scripts/autoresearch_init.py \
   --session ema-anchor-demo \
   --template autoresearch/templates/ema_anchor_session.json
-python scripts/autoresearch_status.py --session ema-anchor-demo
+.venv/bin/python scripts/autoresearch_status.py --session ema-anchor-demo
 ```
 
 The installed Codex CLI accepts a prompt on stdin via non-interactive `codex exec`. Agent command

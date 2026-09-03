@@ -18,6 +18,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import httpx
 from pydantic import ValidationError
 
 from research_service.application.experiments import (
@@ -66,6 +67,79 @@ CONTROL_VERSION = "bbb_autoresearch_iteration_control.v1"
 TERMINAL_STATUSES = frozenset({"hard_stopped", "completed", "cancelled"})
 SESSION_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 REPO_ROOT = Path(__file__).resolve().parents[1]
+HOST_LAUNCH_PROFILE = "controlled-host-v1"
+DOCKER_LAUNCH_PROFILE = "controlled-docker-v1"
+HOST_RESEARCH_SERVICE_URL = "http://127.0.0.1:8000"
+HOST_STRATEGY_ENGINE_URL = "http://127.0.0.1:8090"
+HOST_MARKET_DATA_URL = "http://127.0.0.1:8080"
+
+
+def _canonical_host_roots() -> tuple[Path, Path]:
+    artifacts = Path.home() / "bbb_data" / "autoresearch"
+    return artifacts, artifacts / "configs"
+
+
+def validate_cli_launch_profile(settings: Settings) -> tuple[str, str]:
+    """Fail closed when the supervisor CLI did not come through a known launcher."""
+
+    profile = os.getenv("BBB_AUTORESEARCH_LAUNCH_PROFILE")
+    research_service_url = os.getenv("BBB_AUTORESEARCH_RESEARCH_SERVICE_URL")
+    if profile == HOST_LAUNCH_PROFILE:
+        artifacts_root, configs_root = _canonical_host_roots()
+        expected = {
+            "Research Service URL": (research_service_url, HOST_RESEARCH_SERVICE_URL),
+            "Strategy Engine URL": (settings.strategy_engine_url, HOST_STRATEGY_ENGINE_URL),
+            "Market Data URL": (settings.market_data_url, HOST_MARKET_DATA_URL),
+            "artifacts root": (settings.artifacts_root.resolve(), artifacts_root.resolve()),
+            "configs root": (settings.configs_root.resolve(), configs_root.resolve()),
+            "Python": (Path(sys.executable).resolve(), (REPO_ROOT / ".venv/bin/python").resolve()),
+        }
+        mismatches = [
+            f"{name}: expected {wanted}, got {actual}"
+            for name, (actual, wanted) in expected.items()
+            if actual != wanted
+        ]
+        if mismatches:
+            raise ContractError("invalid controlled HOST launch profile: " + "; ".join(mismatches))
+        return profile, HOST_RESEARCH_SERVICE_URL
+    if profile == DOCKER_LAUNCH_PROFILE:
+        if research_service_url != "http://research-service:8080":
+            raise ContractError("invalid controlled DOCKER Research Service URL")
+        if settings.strategy_engine_url != "http://strategy-engine:8080":
+            raise ContractError("invalid controlled DOCKER Strategy Engine URL")
+        if settings.market_data_url != "http://market-data-service:8080":
+            raise ContractError("invalid controlled DOCKER Market Data URL")
+        if not settings.artifacts_root.is_absolute() or not settings.configs_root.is_absolute():
+            raise ContractError("controlled DOCKER artifact/config roots must be absolute")
+        return profile, research_service_url
+    raise ContractError(
+        "direct AutoResearch supervisor CLI launch is forbidden; use "
+        "scripts/autoresearch_run_host.sh or scripts/autoresearch_run_docker.sh"
+    )
+
+
+def preflight_launch_services(profile: str, settings: Settings, research_service_url: str) -> None:
+    """Verify the launcher's three canonical dependencies before any LLM invocation."""
+
+    endpoints = {
+        "Research Service": research_service_url,
+        "Strategy Engine": settings.strategy_engine_url,
+        "Market Data Service": settings.market_data_url,
+    }
+    try:
+        with httpx.Client(timeout=5.0, trust_env=False) as client:
+            for name, base_url in endpoints.items():
+                response = client.get(f"{base_url.rstrip('/')}/health")
+                response.raise_for_status()
+                try:
+                    body = response.json()
+                except ValueError as exc:
+                    raise ContractError(f"{name} health response is not JSON") from exc
+                if not isinstance(body, dict) or body.get("status") not in {"ok", "healthy"}:
+                    raise ContractError(f"{name} health response is not healthy")
+    except httpx.HTTPError as exc:
+        raise ContractError(f"{profile} preflight dependency unavailable: {exc}") from exc
+
 
 _STATE_KEYS = {
     "contract_version",
@@ -2331,6 +2405,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    settings = Settings()
+    try:
+        profile, research_service_url = validate_cli_launch_profile(settings)
+        preflight_launch_services(profile, settings, research_service_url)
+    except ContractError as exc:
+        raise SystemExit(f"AutoResearch launch preflight failed: {exc}") from exc
     if not args.agent_command:
         raise SystemExit("provide --agent-command or BBB_AUTORESEARCH_AGENT_COMMAND")
     return run_supervisor(
