@@ -13,6 +13,7 @@ from typing import Any
 import httpx
 
 from autoresearch_supervisor import (
+    ContractError,
     REPO_ROOT,
     STATE_VERSION,
     STATE_VERSION_V2,
@@ -22,6 +23,7 @@ from autoresearch_supervisor import (
     utc_now,
     validate_state,
     resolve_research_service_base_url,
+    validate_cli_launch_profile,
 )
 from autoresearch_quality_contracts import phase_binding, validate_policy
 from autoresearch_stage_contracts import (
@@ -30,6 +32,7 @@ from autoresearch_stage_contracts import (
     validate_resolved_stage_targets,
     validate_stage_contract,
 )
+from research_service.runtime.settings import Settings
 
 
 def _validate_explicit_catalog_value(name: str, value: Any, definition: dict[str, Any]) -> None:
@@ -280,6 +283,15 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--session", required=True)
     parser.add_argument("--template", required=True, type=Path)
     args = parser.parse_args(argv)
+    try:
+        template = json.loads(args.template.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as exc:
+        raise SystemExit(f"invalid session template: {exc}") from exc
+    if template.get("contract_version") == STATE_VERSION_V3:
+        try:
+            validate_cli_launch_profile(Settings(), operation="initialization")
+        except ContractError as exc:
+            raise SystemExit(f"AutoResearch initialization launch failed: {exc}") from exc
     root = initialize_session(args.session, args.template)
     print(root)
     return 0

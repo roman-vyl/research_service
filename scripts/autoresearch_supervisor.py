@@ -79,8 +79,10 @@ def _canonical_host_roots() -> tuple[Path, Path]:
     return artifacts, artifacts / "configs"
 
 
-def validate_cli_launch_profile(settings: Settings) -> tuple[str, str]:
-    """Fail closed when the supervisor CLI did not come through a known launcher."""
+def validate_cli_launch_profile(
+    settings: Settings, *, operation: str = "supervisor"
+) -> tuple[str, str]:
+    """Fail closed when a controlled CLI did not come through a known launcher."""
 
     profile = os.getenv("BBB_AUTORESEARCH_LAUNCH_PROFILE")
     research_service_url = os.getenv("BBB_AUTORESEARCH_RESEARCH_SERVICE_URL")
@@ -113,7 +115,7 @@ def validate_cli_launch_profile(settings: Settings) -> tuple[str, str]:
             raise ContractError("controlled DOCKER artifact/config roots must be absolute")
         return profile, research_service_url
     raise ContractError(
-        "direct AutoResearch supervisor CLI launch is forbidden; use "
+        f"direct AutoResearch {operation} CLI launch is forbidden; use "
         "scripts/autoresearch_run_host.sh or scripts/autoresearch_run_docker.sh"
     )
 

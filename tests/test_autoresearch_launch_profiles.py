@@ -12,6 +12,7 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO_ROOT / "scripts"))
 
+import autoresearch_init as init_module  # noqa: E402
 import autoresearch_supervisor as supervisor_module  # noqa: E402
 from autoresearch_supervisor import (  # noqa: E402
     ContractError,
@@ -52,6 +53,7 @@ def _fake_host_repo(tmp_path: Path, *, with_venv: bool = True) -> Path:
         REPO_ROOT / "scripts/autoresearch_run_host.sh",
         scripts_dir / "autoresearch_run_host.sh",
     )
+    (scripts_dir / "autoresearch_init.py").write_text("", encoding="utf-8")
     (scripts_dir / "autoresearch_supervisor.py").write_text("", encoding="utf-8")
     if with_venv:
         venv_bin = fake_repo / ".venv" / "bin"
@@ -74,7 +76,13 @@ def _environment(tmp_path: Path) -> dict[str, str]:
     return environment
 
 
-def test_host_profile_sets_loopback_endpoints_and_forwards_arguments(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("action", "entrypoint"),
+    (("init", "autoresearch_init.py"), ("run", "autoresearch_supervisor.py")),
+)
+def test_host_profile_dispatches_with_owned_environment_and_repo_python(
+    tmp_path: Path, action: str, entrypoint: str
+) -> None:
     fake_repo = _fake_host_repo(tmp_path)
     environment = _environment(tmp_path)
     environment["HOME"] = "/canonical-home"
@@ -82,6 +90,7 @@ def test_host_profile_sets_loopback_endpoints_and_forwards_arguments(tmp_path: P
     result = subprocess.run(
         [
             str(fake_repo / "scripts/autoresearch_run_host.sh"),
+            action,
             "--session",
             "smoke",
             "--max-iterations",
@@ -101,7 +110,7 @@ def test_host_profile_sets_loopback_endpoints_and_forwards_arguments(tmp_path: P
         "research_service=http://127.0.0.1:8000",
         f"profile={HOST_LAUNCH_PROFILE}",
         "marker=preserved",
-        f"arg={fake_repo / 'scripts/autoresearch_supervisor.py'}",
+        f"arg={fake_repo / 'scripts' / entrypoint}",
         "arg=--session",
         "arg=smoke",
         "arg=--max-iterations",
@@ -116,7 +125,7 @@ def test_host_profile_requires_repo_local_venv(tmp_path: Path) -> None:
     environment["RESEARCH_CONFIGS_ROOT"] = "/host/autoresearch/configs"
 
     result = subprocess.run(
-        [str(fake_repo / "scripts/autoresearch_run_host.sh"), "--session", "smoke"],
+        [str(fake_repo / "scripts/autoresearch_run_host.sh"), "run", "--session", "smoke"],
         capture_output=True,
         env=environment,
         text=True,
@@ -127,6 +136,29 @@ def test_host_profile_requires_repo_local_venv(tmp_path: Path) -> None:
     assert "repo-local virtualenv" in result.stderr
 
 
+@pytest.mark.parametrize("profile", ("host", "docker"))
+def test_launch_wrappers_reject_legacy_implicit_run(
+    tmp_path: Path, profile: str
+) -> None:
+    environment = _environment(tmp_path)
+    wrapper = (
+        _fake_host_repo(tmp_path) / "scripts/autoresearch_run_host.sh"
+        if profile == "host"
+        else REPO_ROOT / "scripts/autoresearch_run_docker.sh"
+    )
+
+    result = subprocess.run(
+        [str(wrapper), "--session", "smoke"],
+        capture_output=True,
+        env=environment,
+        text=True,
+    )
+
+    assert result.returncode == 2
+    assert "usage:" in result.stderr
+    assert "init|run" in result.stderr
+
+
 def test_direct_supervisor_cli_profile_is_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("BBB_AUTORESEARCH_LAUNCH_PROFILE", raising=False)
     with pytest.raises(ContractError, match="direct AutoResearch supervisor CLI launch"):
@@ -134,6 +166,47 @@ def test_direct_supervisor_cli_profile_is_rejected(monkeypatch: pytest.MonkeyPat
 
     with pytest.raises(SystemExit, match="direct AutoResearch supervisor CLI launch"):
         supervisor_module.main(["--session", "must-not-start", "--agent-command", "true"])
+
+
+def _v3_template(tmp_path: Path) -> Path:
+    template = tmp_path / "v3-template.json"
+    template.write_text('{"contract_version":"bbb_autoresearch_state.v3"}', encoding="utf-8")
+    return template
+
+
+def test_direct_controlled_v3_init_without_profile_fails_before_session_creation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.delenv("BBB_AUTORESEARCH_LAUNCH_PROFILE", raising=False)
+    called = False
+
+    def unexpected_initialize(*_args: object, **_kwargs: object) -> Path:
+        nonlocal called
+        called = True
+        raise AssertionError("initialize_session must not be called")
+
+    monkeypatch.setattr(init_module, "initialize_session", unexpected_initialize)
+    with pytest.raises(SystemExit, match="direct AutoResearch initialization CLI launch"):
+        init_module.main(
+            ["--session", "must-not-exist", "--template", str(_v3_template(tmp_path))]
+        )
+    assert called is False
+    assert not (tmp_path / "var/autoresearch/must-not-exist").exists()
+
+
+def test_controlled_v3_init_rejects_unknown_launch_profile(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("BBB_AUTORESEARCH_LAUNCH_PROFILE", "operator-invented")
+    monkeypatch.setattr(
+        init_module,
+        "initialize_session",
+        lambda *_args, **_kwargs: pytest.fail("initialize_session must not be called"),
+    )
+    with pytest.raises(SystemExit, match="direct AutoResearch initialization CLI launch"):
+        init_module.main(
+            ["--session", "must-not-exist", "--template", str(_v3_template(tmp_path))]
+        )
 
 
 def test_host_profile_rejects_noncanonical_execution_environment(
@@ -213,13 +286,24 @@ def test_preflight_fails_closed_when_a_canonical_service_is_unavailable(
         )
 
 
-def test_docker_profile_sets_service_dns_and_explicit_default_roots(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("action", "entrypoint"),
+    (("init", "autoresearch_init.py"), ("run", "autoresearch_supervisor.py")),
+)
+def test_docker_profile_dispatches_with_service_dns_and_explicit_default_roots(
+    tmp_path: Path, action: str, entrypoint: str
+) -> None:
     environment = _environment(tmp_path)
     environment.pop("RESEARCH_ARTIFACTS_ROOT", None)
     environment.pop("RESEARCH_CONFIGS_ROOT", None)
 
     result = subprocess.run(
-        [str(REPO_ROOT / "scripts/autoresearch_run_docker.sh"), "--session", "smoke"],
+        [
+            str(REPO_ROOT / "scripts/autoresearch_run_docker.sh"),
+            action,
+            "--session",
+            "smoke",
+        ],
         check=True,
         capture_output=True,
         env=environment,
@@ -234,7 +318,7 @@ def test_docker_profile_sets_service_dns_and_explicit_default_roots(tmp_path: Pa
         "research_service=http://research-service:8080",
         f"profile={DOCKER_LAUNCH_PROFILE}",
         "marker=preserved",
-        f"arg={REPO_ROOT / 'scripts/autoresearch_supervisor.py'}",
+        f"arg={REPO_ROOT / 'scripts' / entrypoint}",
         "arg=--session",
         "arg=smoke",
     ]

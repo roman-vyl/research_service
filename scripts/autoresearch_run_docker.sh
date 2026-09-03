@@ -9,4 +9,24 @@ export RESEARCH_CONFIGS_ROOT="${RESEARCH_CONFIGS_ROOT:-/data/configs}"
 export BBB_AUTORESEARCH_RESEARCH_SERVICE_URL="http://research-service:8080"
 
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-exec python "${repo_root}/scripts/autoresearch_supervisor.py" "$@"
+if [[ $# -eq 0 ]]; then
+  echo "usage: $0 init|run [arguments...]" >&2
+  exit 2
+fi
+
+action="$1"
+shift
+case "${action}" in
+  init)
+    entrypoint="${repo_root}/scripts/autoresearch_init.py"
+    ;;
+  run)
+    entrypoint="${repo_root}/scripts/autoresearch_supervisor.py"
+    ;;
+  *)
+    echo "usage: $0 init|run [arguments...]" >&2
+    exit 2
+    ;;
+esac
+
+exec python "${entrypoint}" "$@"

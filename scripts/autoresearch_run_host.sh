@@ -16,4 +16,24 @@ if [[ ! -x "${venv_python}" ]]; then
   exit 2
 fi
 
-exec "${venv_python}" "${repo_root}/scripts/autoresearch_supervisor.py" "$@"
+if [[ $# -eq 0 ]]; then
+  echo "usage: $0 init|run [arguments...]" >&2
+  exit 2
+fi
+
+action="$1"
+shift
+case "${action}" in
+  init)
+    entrypoint="${repo_root}/scripts/autoresearch_init.py"
+    ;;
+  run)
+    entrypoint="${repo_root}/scripts/autoresearch_supervisor.py"
+    ;;
+  *)
+    echo "usage: $0 init|run [arguments...]" >&2
+    exit 2
+    ;;
+esac
+
+exec "${venv_python}" "${entrypoint}" "$@"

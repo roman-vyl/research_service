@@ -34,6 +34,7 @@ repo-local Python path rather than accepting them from operator environment:
 ```bash
 export BBB_AUTORESEARCH_AGENT_COMMAND='codex exec -C . -s workspace-write -'
 scripts/autoresearch_run_host.sh \
+  run \
   --session ema-anchor-demo \
   --max-iterations 100
 ```
@@ -44,25 +45,30 @@ only when that container uses different mounted paths:
 ```bash
 export BBB_AUTORESEARCH_AGENT_COMMAND='codex exec -C . -s workspace-write -'
 scripts/autoresearch_run_docker.sh \
+  run \
   --session ema-anchor-demo \
   --max-iterations 100
 ```
 
-Both wrappers set only Research runtime configuration and forward every CLI argument unchanged to
-`scripts/autoresearch_supervisor.py`. The host wrapper runs the repo-local `.venv/bin/python`
-directly, so no prior `source .venv/bin/activate` is required; it fails fast if that virtualenv is
-missing or not executable. Before reading an iteration or invoking an LLM, the supervisor verifies
-the wrapper profile and all three canonical `/health` endpoints. Direct supervisor CLI launch is
-rejected; the wrappers are the execution contract. The Docker wrapper still uses `python` from
-`PATH` inside the container.
+Both wrappers require an explicit `init` or `run` action, set the corresponding canonical Research
+runtime profile, and forward the remaining CLI arguments unchanged to `scripts/autoresearch_init.py`
+or `scripts/autoresearch_supervisor.py`. The host wrapper runs the repo-local `.venv/bin/python`
+directly for both actions, so no prior `source .venv/bin/activate` is required; it fails fast if that
+virtualenv is missing or not executable. Controlled v3 initialization and supervisor execution
+validate the wrapper profile. Before reading an iteration or invoking an LLM, the supervisor also
+verifies all three canonical `/health` endpoints. Direct controlled v3 init and direct supervisor
+CLI launch are rejected; the wrappers are the execution contract. The Docker wrapper still uses
+`python` from `PATH` inside the container.
 Provider credentials, the agent command, and other ordinary runtime variables remain operator-owned.
 
-Initialize and inspect a session:
+Initialize a controlled session through the same runtime profile that will execute it, then inspect
+it. Do not construct `BBB_AUTORESEARCH_*`, `RESEARCH_*`, service URLs, roots, or Python selection by
+hand:
 
 ```bash
-.venv/bin/python scripts/autoresearch_init.py \
+scripts/autoresearch_run_host.sh init \
   --session ema-anchor-demo \
-  --template autoresearch/templates/ema_anchor_session.json
+  --template autoresearch/templates/ema_anchor_stage_contract_session.json
 .venv/bin/python scripts/autoresearch_status.py --session ema-anchor-demo
 ```
 
@@ -73,6 +79,7 @@ syntax is deliberately operator-supplied and is split with `shlex`; the supervis
 ```bash
 BBB_AUTORESEARCH_AGENT_COMMAND='codex exec -C . -s workspace-write -' \
 scripts/autoresearch_run_host.sh \
+  run \
   --session ema-anchor-demo \
   --max-iterations 100
 ```
