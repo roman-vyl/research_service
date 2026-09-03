@@ -37,14 +37,6 @@ STAGE_DIMENSIONS = {
     "B1_WIDTH": ("anchor_stack_width",),
     "B2_LOOKBACK": ("untouched_anchor_lookback",),
     "B3_WIDTH_X_LOOKBACK": ("anchor_stack_width", "untouched_anchor_lookback"),
-    # C shortlists from B3's already-collected evidence; it has no batch
-    # dimension of its own. D's per-shortlisted-region symmetric-distance
-    # sweep (`autoresearch-frozen-control-phased-discovery-v1` design.md
-    # Decision 3) is a later part -- until it lands, D stays empty like C,
-    # so a `batch` action here can only resubmit the unchanged frozen
-    # control, never scan anything ungoverned.
-    "C_ENTRY_REGION_SELECTION": (),
-    "D_EXIT_GEOMETRY": (),
 }
 STAGE_PHASES = {
     "A_CONTROL": "baseline",
@@ -54,6 +46,15 @@ STAGE_PHASES = {
     "C_ENTRY_REGION_SELECTION": "entry_region_selection",
     "D_EXIT_GEOMETRY": "exit_geometry",
 }
+# C_ENTRY_REGION_SELECTION and D_EXIT_GEOMETRY exist as stage *names* --
+# reserved in STAGES/STAGE_PHASES so the phase-binding/StageKind wiring is
+# already stable -- but their behavioral contract (state shape, shortlist
+# acceptance rule, per-region reference identity) is deliberately
+# undefined until real B1/B2/B3 evidence from a HOST research run shows
+# what shape that evidence actually takes. Until a follow-up change
+# defines them, no plan may target either stage: validate_stage_context
+# fails closed rather than silently accepting an undefined contract.
+PROVISIONAL_STAGES = ("C_ENTRY_REGION_SELECTION", "D_EXIT_GEOMETRY")
 DISPOSITIONS = ("in_progress", "characterized", "terminally_rejected")
 
 
@@ -178,6 +179,10 @@ def validate_stage_context(value: dict[str, Any], state: dict[str, Any]) -> None
     stage = value["active_stage"]
     if stage != state["active_stage"]:
         raise StageContractError("plan stage differs from state")
+    if stage in PROVISIONAL_STAGES:
+        raise StageContractError(
+            f"{stage} execution semantics are not yet defined; no plan may target it"
+        )
     expected_dims = list(STAGE_DIMENSIONS[stage])
     if value["allowed_semantic_dimensions"] != expected_dims:
         raise StageContractError("allowed semantic dimensions differ from stage authority")
@@ -195,16 +200,12 @@ def validate_stage_context(value: dict[str, Any], state: dict[str, Any]) -> None
     required_stages = {
         "A_CONTROL": set(),
         "B1_WIDTH": {"A_CONTROL"},
-        "B2_LOOKBACK": {"A_CONTROL", "B1_WIDTH"},
+        # B2_LOOKBACK depends only on A_CONTROL, not on B1_WIDTH: width and
+        # lookback are two independent structural discovery branches, both
+        # starting fresh from the naked control. Running B1 before B2 is
+        # just process serialization, not a causal dependency.
+        "B2_LOOKBACK": {"A_CONTROL"},
         "B3_WIDTH_X_LOOKBACK": {"A_CONTROL", "B1_WIDTH", "B2_LOOKBACK"},
-        "C_ENTRY_REGION_SELECTION": {"A_CONTROL", "B1_WIDTH", "B2_LOOKBACK", "B3_WIDTH_X_LOOKBACK"},
-        "D_EXIT_GEOMETRY": {
-            "A_CONTROL",
-            "B1_WIDTH",
-            "B2_LOOKBACK",
-            "B3_WIDTH_X_LOOKBACK",
-            "C_ENTRY_REGION_SELECTION",
-        },
     }[stage]
     accepted = {
         entry["iteration_id"]: entry["disposition"]["stage"]

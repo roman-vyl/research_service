@@ -41,6 +41,7 @@ from autoresearch_stage_contracts import (
     ITERATION_VERSION_V3,
     JOURNAL_VERSION_V3,
     PLAN_VERSION_V2,
+    PROVISIONAL_STAGES,
     STAGE_PHASES,
     STATE_VERSION_V3,
     StageContractError,
@@ -944,34 +945,23 @@ def validate_state(state: dict[str, Any]) -> None:
                 for entry in state["stage_dispositions"]
                 if entry["disposition"]["status"] in {"characterized", "terminally_rejected"}
             }
+            if state["active_stage"] in PROVISIONAL_STAGES:
+                raise StageContractError(
+                    f"{state['active_stage']} execution semantics are not yet defined"
+                )
             if state["active_stage"] != "A_CONTROL" and (
                 not state["phase_a_references"] or "A_CONTROL" not in closed
             ):
                 raise StageContractError(
                     "B stages require a complete, closed Phase-A reference line"
                 )
-            if (
-                state["active_stage"]
-                in {"B2_LOOKBACK", "B3_WIDTH_X_LOOKBACK", "C_ENTRY_REGION_SELECTION", "D_EXIT_GEOMETRY"}
-                and "B1_WIDTH" not in closed
+            # B1_WIDTH and B2_LOOKBACK are independent branches off A_CONTROL
+            # (not prerequisites of each other); only B3 -- the interaction
+            # stage -- requires both durably closed.
+            if state["active_stage"] == "B3_WIDTH_X_LOOKBACK" and (
+                "B1_WIDTH" not in closed or "B2_LOOKBACK" not in closed
             ):
-                raise StageContractError("B2/B3/C/D require independently closed B1")
-            if (
-                state["active_stage"]
-                in {"B3_WIDTH_X_LOOKBACK", "C_ENTRY_REGION_SELECTION", "D_EXIT_GEOMETRY"}
-                and "B2_LOOKBACK" not in closed
-            ):
-                raise StageContractError("B3/C/D require independently closed B2")
-            if (
-                state["active_stage"] in {"C_ENTRY_REGION_SELECTION", "D_EXIT_GEOMETRY"}
-                and "B3_WIDTH_X_LOOKBACK" not in closed
-            ):
-                raise StageContractError("C/D require closed B3")
-            if (
-                state["active_stage"] == "D_EXIT_GEOMETRY"
-                and "C_ENTRY_REGION_SELECTION" not in closed
-            ):
-                raise StageContractError("D requires closed C")
+                raise StageContractError("B3 requires independently closed B1 and B2")
         except (StageContractError, KeyError) as exc:
             raise ContractError(f"invalid v3 stage state: {exc}") from exc
 
@@ -1763,10 +1753,12 @@ def _advance_state(
                 and proposed.get("stage") == "B3_WIDTH_X_LOOKBACK"
             ):
                 next_stage = "B3_WIDTH_X_LOOKBACK"
-            elif active_stage == "B3_WIDTH_X_LOOKBACK":
-                next_stage = "C_ENTRY_REGION_SELECTION"
-            elif active_stage == "C_ENTRY_REGION_SELECTION":
-                next_stage = "D_EXIT_GEOMETRY"
+            # B3 closing does not auto-advance anywhere: C_ENTRY_REGION_SELECTION's
+            # behavioral contract is deliberately undefined until real B1/B2/B3
+            # evidence shape is observed (PROVISIONAL_STAGES). active_stage stays
+            # B3_WIDTH_X_LOOKBACK; a worker that proposes no next experiment
+            # here reaches "completed" via the ordinary terminal-completion path
+            # below, not a stage transition.
         updated.update(
             active_stage=next_stage,
             phase=STAGE_PHASES[next_stage],

@@ -186,11 +186,23 @@ def _state(stage: str = "A_CONTROL") -> dict:
     }
 
 
+_REQUIRED_STAGES = {
+    "A_CONTROL": set(),
+    "B1_WIDTH": {"A_CONTROL"},
+    "B2_LOOKBACK": {"A_CONTROL"},
+    "B3_WIDTH_X_LOOKBACK": {"A_CONTROL", "B1_WIDTH", "B2_LOOKBACK"},
+    "C_ENTRY_REGION_SELECTION": set(),
+    "D_EXIT_GEOMETRY": set(),
+}
+
+
 def _plan(state: dict) -> dict:
+    required_stage_names = _REQUIRED_STAGES[state["active_stage"]]
     required = [
         entry["iteration_id"]
         for entry in state["stage_dispositions"]
         if entry["disposition"]["status"] != "in_progress"
+        and entry["disposition"]["stage"] in required_stage_names
     ]
     dimensions = {
         "A_CONTROL": [],
@@ -698,32 +710,47 @@ def test_forged_candidate_is_rejected_despite_matching_starting_strategy_hash() 
         validate_stage_request(_request(tampered), plan, state)
 
 
-def test_c_and_d_are_reachable_once_b3_is_durably_closed() -> None:
-    # C_ENTRY_REGION_SELECTION and D_EXIT_GEOMETRY exist as real, causally
-    # ordered stages: once A_CONTROL/B1_WIDTH/B2_LOOKBACK/B3_WIDTH_X_LOOKBACK
-    # are all durably closed, their frozen-control candidate is accepted the
-    # same way any other stage's is.
+def test_c_and_d_are_unreachable_provisional_stages() -> None:
+    # C_ENTRY_REGION_SELECTION and D_EXIT_GEOMETRY exist as reserved stage
+    # names/phase bindings only. Their behavioral contract (state shape,
+    # shortlist acceptance rule, per-region reference identity) is
+    # deliberately undefined until real B1/B2/B3 evidence from a HOST
+    # research run shows what shape it takes -- no plan may target either
+    # stage yet, even once every prior stage is durably closed.
     for stage in ("C_ENTRY_REGION_SELECTION", "D_EXIT_GEOMETRY"):
         state = _state(stage)
-        candidate = reference_strategy(state)
-        validate_stage_request(_request(candidate), _plan(state), state)
+        plan = _plan(state)
+        with pytest.raises(StageContractError, match="not yet defined"):
+            validate_stage_context(plan["stage_context"], state)
 
 
-def test_c_prerequisite_disposition_refs_require_all_of_a_through_b3() -> None:
-    state = _state("C_ENTRY_REGION_SELECTION")
+def test_b2_lookback_does_not_require_b1_width_closed() -> None:
+    # B1_WIDTH and B2_LOOKBACK are independent branches off A_CONTROL, not
+    # prerequisites of each other.
+    state = _state("A_CONTROL")
+    state["active_stage"] = "B2_LOOKBACK"
+    state["active_stage_binding"] = {"phase": "structural_1d", "stage_kind": "structural_entry"}
+    state["phase_a_references"] = [{"experiment_id": "control-reference"}]
+    state["stage_dispositions"] = [
+        {
+            "iteration_id": 1,
+            "disposition": {
+                "stage": "A_CONTROL",
+                "status": "characterized",
+                "evidence": [_evidence(1)],
+            },
+        }
+    ]
     plan = _plan(state)
-    assert set(plan["stage_context"]["prerequisite_disposition_refs"]) == {1, 2, 3, 4}
+    assert plan["stage_context"]["prerequisite_disposition_refs"] == [1]
     validate_stage_context(plan["stage_context"], state)
-    plan["stage_context"]["prerequisite_disposition_refs"] = [1, 2, 3]
-    with pytest.raises(StageContractError, match="prerequisite"):
-        validate_stage_context(plan["stage_context"], state)
-
-
-def test_d_prerequisite_disposition_refs_additionally_require_c() -> None:
-    state = _state("D_EXIT_GEOMETRY")
-    plan = _plan(state)
-    assert set(plan["stage_context"]["prerequisite_disposition_refs"]) == {1, 2, 3, 4, 5}
-    validate_stage_context(plan["stage_context"], state)
-    plan["stage_context"]["prerequisite_disposition_refs"] = [1, 2, 3, 4]
-    with pytest.raises(StageContractError, match="prerequisite"):
-        validate_stage_context(plan["stage_context"], state)
+    candidate = reference_strategy(state)
+    candidate["raw_spec"]["setups"].append(
+        {
+            "component_id": "untouched_anchor_setup",
+            "instance_id": "stage-lookback",
+            "lookback": 50,
+            "active_bars": 3,
+        }
+    )
+    validate_stage_request(_request(candidate), plan, state)

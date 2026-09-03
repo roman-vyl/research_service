@@ -30,68 +30,68 @@ source instead of asking the harness (or the interpretation worker) to police it
 
 - Phase A (`descriptive_baseline`) becomes a single frozen naked control at one pre-chosen neutral
   symmetric ATR distance (3.0/3.0), not a three-point geometry scan. The stage contract's
-  `symmetric_measurement_geometry` dimension is removed from `A_BASELINE` and the frozen starting
-  strategy's exit distance becomes the immutable control value for the rest of the session.
-- `B1_WIDTH`, `B2_LOOKBACK`, and `B3_WIDTH_X_LOOKBACK` keep their existing typed dimensions (width,
-  lookback, width×lookback) and now explicitly run under that same frozen control exit -- exit
-  distance is not a free dimension anywhere in Phase B.
-- **New stage** `C_ENTRY_REGION_SELECTION` (`entry_region_selection`): takes B3's structural result
-  and requires the worker to shortlist 1-3 robust structural regions (not a single scalar winner)
-  that carry forward into exit-geometry measurement, per the existing quality-policy promotion
-  requirement.
-- **New stage** `D_EXIT_GEOMETRY` (`exit_geometry`): scans symmetric ATR exit distance only across
-  the shortlisted region(s) from `C_ENTRY_REGION_SELECTION` -- a small, already-narrowed
-  width×lookback×distance space, not the original full parameter space. This is the first stage
-  where economic metrics (PF, net/after-cost result, drawdown) become primary per the existing
-  quality-policy requirement.
+  `symmetric_measurement_geometry` dimension is removed from `A_BASELINE` (renamed `A_CONTROL`) and
+  the frozen starting strategy's exit distance becomes the immutable control value for the rest of
+  the session.
+- `B1_WIDTH` and `B2_LOOKBACK` each depend only on the closed `A_CONTROL` reference and are
+  independent of each other (neither is a prerequisite of the other); `B3_WIDTH_X_LOOKBACK` depends
+  on both durably closed. All three keep their existing typed dimensions (width, lookback,
+  width×lookback) and now explicitly run under that same frozen control exit -- exit distance is
+  not a free dimension anywhere in Phase B.
+- **Reserved, not implemented**: `C_ENTRY_REGION_SELECTION` (`entry_region_selection`) and
+  `D_EXIT_GEOMETRY` (`exit_geometry`) exist as stage names and `StageKind`/phase-string bindings
+  only. Their behavioral contract -- what a durable B1/B2 "result" looks like, the shortlist
+  acceptance rule, any exit-distance sweep mechanism -- is explicitly deferred to a follow-up
+  change, informed by real evidence from a HOST run through A/B1/B2/B3. No plan may target either
+  stage, and no stage transition may enter them automatically; the harness fails closed instead.
 - Managed/dynamic exit logic (break-even, stop movement, profit locking, trailing, signal/event
-  exits) is explicitly named as a future stage and explicitly **out of scope** for this change --
-  no `exit_management.mode: "managed"` work is authorized here.
-- `geometry_references`/`reference_strategy` and related stage-contract helpers are generalized so
-  the "reference identity a worker must echo, not compute" pattern covers every symmetric exit
-  distance a session measures (the single Phase A control value, and each configured distance swept
-  per shortlisted region in `exit_geometry`). `structural_entry`/`structural_interaction` (width,
-  lookback) stay continuous, worker-proposed dimensions with no fixed configured value set, as
-  today -- this pattern is not extended to them.
+  exits) is explicitly named as a future, unreserved stage and explicitly **out of scope** for this
+  change -- no `exit_management.mode: "managed"` work is authorized here.
 - Stage-aware metric-role contracts already defined for `entry_region_selection` and `exit_geometry`
-  in `autoresearch_quality_contracts.py` become reachable/enforced for the first time (they exist
-  today but no stage contract ever reaches them).
+  in `autoresearch_quality_contracts.py` remain unreachable (unchanged from today) since no plan can
+  target either stage yet; they will become reachable once the follow-up change defines those
+  stages' execution semantics.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `autoresearch-phased-discovery-v1`: the full six-stage AutoResearch causal program contract --
-  frozen naked control (Phase A), independent structural discovery (B1/B2/B3), structural-region
-  shortlisting (`entry_region_selection`), and symmetric exit-geometry measurement over the
-  shortlist (`exit_geometry`) -- including the frozen-control invariant, the per-stage typed
-  dimensions, and the shortlist-not-single-winner promotion contract between B3 and
-  `entry_region_selection`.
+- `autoresearch-phased-discovery-v1`: the AutoResearch causal program contract for Phase A and
+  Phase B -- frozen naked control (Phase A), independent structural discovery branches B1
+  (width) and B2 (lookback) off that control, and their interaction B3 -- including the
+  frozen-control invariant, the corrected B1/B2 independence graph, and the reserved-but-unreachable
+  `entry_region_selection`/`exit_geometry` stage names for a later change to define.
 
 ### Modified Capabilities
 
-(none -- `autoresearch-research-quality-policy-v1`'s existing requirements already describe this
-six-stage behavior; this change makes the stage contract mechanism actually reach and enforce
-`entry_region_selection`/`exit_geometry`, it does not change what those requirements say.)
+(none -- `autoresearch-research-quality-policy-v1`'s existing requirements already describe the
+six-`StageKind` program; this change does not touch what those requirements say, and does not yet
+make the two downstream stage kinds reachable.)
 
 ## Impact
 
 - `scripts/autoresearch_stage_contracts.py`: `STAGES`, `STAGE_DIMENSIONS`, `STAGE_PHASES`,
-  `DIMENSIONS`, `validate_stage_contract`, `validate_resolved_stage_targets`,
-  `reference_strategy`/`geometry_references` and their generalization, `validate_stage_request`.
-- `scripts/autoresearch_quality_contracts.py`: no new requirements, but `entry_region_selection`/
-  `exit_geometry` metric-role contracts go from unreachable to enforced; `describe_stage_metric_role_contract`
-  needs no new cases (already covers both) but should be exercised by tests once reachable.
-- `autoresearch/schemas/stage_contract.schema.json`, `autoresearch/schemas/execution_plan.v2.schema.json`:
-  new stage enum values, new/changed dimension shapes for the frozen-control and shortlist stages.
+  `PROVISIONAL_STAGES`, `DIMENSIONS`, `validate_stage_contract`, `validate_resolved_stage_targets`,
+  `reference_strategy`, `validate_stage_context`, `validate_stage_request`.
+- `scripts/autoresearch_quality_contracts.py`: unchanged -- `entry_region_selection`/`exit_geometry`
+  metric-role contracts remain defined-but-unreachable, same as before this change.
+- `autoresearch/schemas/stage_contract.schema.json`, `autoresearch/schemas/execution_plan.v2.schema.json`,
+  `autoresearch/schemas/session_state.v3.schema.json`, `autoresearch/schemas/journal_event.v3.schema.json`,
+  `autoresearch/schemas/iteration_result.v3.schema.json`: new stage enum values (names reserved,
+  behavior undefined for the two reserved ones), removed `measurement_geometries`/
+  `geometry_references` shape.
 - `autoresearch/templates/ema_anchor_stage_contract_session.json` and the starting-strategy fixture:
   frozen naked control fixed at 3.0/3.0 ATR instead of `measurement_geometries: [A-2, A-3, A-4]`.
-- `autoresearch/prompts/planning.md`, `autoresearch/prompts/interpretation.md`,
-  `autoresearch/program.md`, and the EMA-anchor domain skill: causal-sequence description, new
-  stage names, shortlist instruction for `entry_region_selection`.
-- `scripts/autoresearch_supervisor.py`: stage-context/geometry-id plumbing generalized to whichever
-  dimension identifier the active stage uses.
-- Test suites: `tests/test_autoresearch_stage_contract.py`, `tests/test_autoresearch_quality_policy.py`,
-  `tests/test_autoresearch_supervisor.py`, `tests/test_autoresearch_program_contract.py`.
+- `autoresearch/prompts/planning.md` and `autoresearch/program.md`: causal-sequence description,
+  new stage names, frozen-control framing.
+- `scripts/autoresearch_supervisor.py`: `phase_a_references`/`stage_history`/journal-event shapes
+  drop per-geometry keying (single control measurement); durable closed-stage invariants and
+  stage-transition logic corrected to the B1/B2-independent graph and to never auto-enter the
+  reserved stages.
+- Test suites: `tests/test_autoresearch_stage_contract.py`, `tests/test_autoresearch_supervisor.py`,
+  `tests/test_autoresearch_quality_policy.py`, `tests/test_autoresearch_state.py`,
+  `tests/test_autoresearch_program_contract.py`, `tests/test_autoresearch_guard.py`,
+  `tests/test_autoresearch_execute_batch.py`, `tests/test_autoresearch_strategy_spec_reference.py`,
+  `tests/test_batch_experiments.py`.
 - No change to Research Service, Strategy Engine, or canonical execution/accounting semantics --
   this is entirely an AutoResearch harness-side sequencing change.

@@ -1,9 +1,11 @@
 ## Purpose
 
-Defines the causal, six-stage AutoResearch discovery program for one strategy family: a frozen
-naked control, independent structural-entry discovery, structural-region shortlisting, and
-symmetric exit-geometry measurement over that shortlist -- so exit distance is never scanned
-alongside structural entry evidence in the same stage.
+Defines the causal AutoResearch discovery program for one strategy family: a frozen naked control,
+then two independent structural-entry discovery branches (width, lookback) that each start fresh
+from that control, then their interaction -- so exit distance is never scanned alongside structural
+entry evidence, and width discovery is never implicitly conditioned on a lookback choice or vice
+versa. Downstream region-shortlisting and exit-geometry stages are reserved by name only until real
+B1/B2/B3 evidence shows what shape they should take.
 
 ## ADDED Requirements
 
@@ -45,68 +47,69 @@ candidate. Exit distance SHALL NOT be an available semantic dimension in these s
 - **THEN** it SHALL vary only the lookback dimension from the naked baseline and SHALL NOT carry
   forward any width value chosen by prior width discovery
 
-### Requirement: Structural discovery shortlists regions, not a single winner
+### Requirement: Width and lookback discovery are independent branches off the control
 
-The `entry_region_selection` stage SHALL accept one to three structurally supported width×lookback
-regions carried forward from `structural_interaction`, each independently satisfying the existing
-structural-promise evidence bar (stability, neighborhood support, adequate sample, no
-disqualifying thinning or concentration). It SHALL NOT require or assume a single best region.
+B1 (width) and B2 (lookback) SHALL each depend only on the closed `descriptive_baseline` control
+reference. Neither SHALL be a prerequisite of the other: B2 SHALL be reachable whether or not B1 has
+been run or closed, and B1 SHALL be reachable whether or not B2 has been run or closed. Only B3
+(width×lookback interaction) SHALL require both B1 and B2 durably closed. Running B1 before B2 (or
+the reverse) in a given session is process serialization by a single-worker-at-a-time harness, never
+a causal dependency the stage contract enforces.
 
-#### Scenario: Two independently robust regions both shortlist
+#### Scenario: Lookback discovery is reachable before width discovery is closed
 
-- **WHEN** `structural_interaction` finds two non-overlapping width×lookback regions that each
-  independently show stable, neighborhood-supported structural promise
-- **THEN** both SHALL be eligible to shortlist into `entry_region_selection` rather than only the
-  higher-scoring one
+- **WHEN** a session's `descriptive_baseline` control reference is closed and no `structural_entry`
+  (width) disposition has been recorded yet
+- **THEN** a plan targeting `structural_entry` (lookback) SHALL still be accepted
 
-#### Scenario: An unsupported spike does not shortlist
+#### Scenario: Width discovery is reachable before lookback discovery is closed
 
-- **WHEN** a candidate region shows a favorable point result without neighborhood support or
-  adequate sample
-- **THEN** it SHALL NOT be shortlisted into `entry_region_selection`
+- **WHEN** a session's `descriptive_baseline` control reference is closed and no `structural_entry`
+  (lookback) disposition has been recorded yet
+- **THEN** a plan targeting `structural_entry` (width) SHALL still be accepted
 
-### Requirement: Exit geometry scans symmetric distance only over the shortlist
+#### Scenario: Interaction discovery requires both branches closed
 
-The `exit_geometry` stage SHALL scan symmetric ATR exit distance only across the region(s)
-shortlisted by `entry_region_selection`. It SHALL NOT re-open the width or lookback search space,
-and SHALL NOT scan exit distance against the full original Phase B parameter space.
+- **WHEN** a plan targets `structural_interaction` (width×lookback)
+- **THEN** the stage contract SHALL require both the width and the lookback `structural_entry`
+  dispositions to already be durably closed (`characterized` or `terminally_rejected`)
 
-#### Scenario: Exit-geometry sweep stays inside the shortlisted region
+### Requirement: Downstream region-selection and exit-geometry stages are reserved, not defined
 
-- **WHEN** `exit_geometry` constructs its distance sweep for a shortlisted region
-- **THEN** every candidate SHALL hold that region's width and lookback fixed and SHALL vary only
-  exit distance
+`entry_region_selection` and `exit_geometry` exist as reserved stage names and phase bindings only.
+Their behavioral contract -- what a "result" of B1/B2/B3 durably looks like, how B3 evidence is
+carried into a shortlist, the shortlist acceptance rule, and any per-region reference-identity
+mechanism for a later symmetric-exit sweep -- is deliberately undefined until a HOST research run
+produces real B1/B2/B3 evidence to design against. No execution plan SHALL target either stage; the
+harness SHALL fail closed rather than accept an undefined contract, and no stage transition SHALL
+ever set the active stage to either of them automatically.
 
-#### Scenario: Exit-geometry cannot be entered before a region is shortlisted
+#### Scenario: A plan cannot target entry_region_selection
 
-- **WHEN** no region has been accepted out of `entry_region_selection` for the active strategy
-- **THEN** a next step that schedules `exit_geometry` SHALL hard-stop as a causal-order violation
+- **WHEN** a planning worker constructs a plan whose `stage_context.active_stage` is
+  `entry_region_selection`
+- **THEN** the harness SHALL reject it because that stage's execution semantics are not yet defined
 
-### Requirement: Frozen-dimension reference identity extends to exit-geometry distances
+#### Scenario: A plan cannot target exit_geometry
 
-The harness-owned "reference identity a worker must echo, not compute" mechanism (published
-per-value reference hashes, deterministic supervisor recomputation) SHALL apply to every symmetric
-exit distance value a session measures against a fixed strategy: the single Phase A control value,
-and each configured distance swept in `exit_geometry` for a given shortlisted region. `structural_entry`/
-`structural_interaction` (width, lookback) remain continuous, worker-proposed dimensions with no
-fixed configured value set, exactly as today, and this requirement does not extend the reference-hash
-mechanism to them.
+- **WHEN** a planning worker constructs a plan whose `stage_context.active_stage` is `exit_geometry`
+- **THEN** the harness SHALL reject it because that stage's execution semantics are not yet defined
 
-#### Scenario: Exit-geometry distance reference identity is published, not computed by the worker
+#### Scenario: Closing B3 does not auto-advance into entry_region_selection
 
-- **WHEN** a planning worker constructs an `exit_geometry` batch candidate for a configured distance
-  value over a shortlisted region
-- **THEN** the session state SHALL publish the canonical reference hash for that (region, distance)
-  pair the same way it publishes per-geometry reference hashes today, and the worker SHALL copy it
-  rather than execute code to derive it
+- **WHEN** the `structural_interaction` (B3) disposition closes (`characterized` or
+  `terminally_rejected`)
+- **THEN** the session's active stage SHALL remain `structural_interaction`; a worker that proposes
+  no further experiment reaches ordinary terminal completion, not a transition into
+  `entry_region_selection`
 
 ### Requirement: Managed/dynamic exit logic remains out of scope
 
-No stage introduced by this capability SHALL enable `exit_management.mode: "managed"` or any
-bar-to-bar managed exit logic. A future managed-exit stage is anticipated but not specified here.
+No stage introduced or reserved by this capability SHALL enable `exit_management.mode: "managed"` or
+any bar-to-bar managed exit logic. A future managed-exit stage is anticipated but not specified here.
 
-#### Scenario: Exit-geometry candidates stay non-managed
+#### Scenario: Batch candidates stay non-managed
 
-- **WHEN** `exit_geometry` constructs a batch candidate
+- **WHEN** any stage in this capability constructs a batch candidate
 - **THEN** the candidate's `exit_management` SHALL remain unset/naked and `managed_policy_enabled`
   SHALL be derived as `false` by the existing harness-owned derivation
