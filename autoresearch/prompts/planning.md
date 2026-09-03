@@ -9,11 +9,11 @@ paths, geometries, or prerequisite evidence:
 
 `{stage_contract_context}`
 
-For v3, Phase A measures only configured geometries and does not optimize exits. B3 is optional;
-never schedule it merely because B1 and B2 are closed. `stage_contract.geometry_references` above
-lists the sanctioned `resolved_sha256` for every configured geometry; copy the entry matching your
-chosen `geometry_id` verbatim into `stage_context.reference_strategy_sha256` -- never compute,
-execute code, or approximate this value.
+For v3, Phase A (`A_CONTROL`) measures the one frozen naked control strategy exactly once and does
+not scan or optimize exit geometry; `stage_context.starting_strategy_sha256` above is the only
+identity a Phase A candidate must match, verbatim, never recomputed. B1/B2/B3 hold that same frozen
+exit distance fixed and vary only their own typed dimension. B3 is optional; never schedule it
+merely because B1 and B2 are closed.
 You may write declared textual/JSON analysis only under `{analysis_dir}`. Exit after planning.
 
 Your job is only to produce the requested planning artifact. Do not install, repair, extend,

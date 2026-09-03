@@ -3,7 +3,7 @@
   "$id": "bbb_autoresearch_stage_contract.v2",
   "type": "object",
   "additionalProperties": false,
-  "required": ["contract_version", "programme", "starting_strategy", "semantic_bindings", "measurement_geometries", "geometry_references"],
+  "required": ["contract_version", "programme", "starting_strategy", "semantic_bindings"],
   "properties": {
     "contract_version": {"const": "bbb_autoresearch_stage_contract.v2"},
     "programme": {"const": "EMA_ANCHOR_A_TO_B"},
@@ -40,23 +40,6 @@
             }
           }
         }
-      }
-    },
-    "measurement_geometries": {
-      "type": "array", "minItems": 1,
-      "items": {
-        "type": "object", "additionalProperties": false,
-        "required": ["geometry_id", "distance"],
-        "properties": {"geometry_id": {"type": "string", "minLength": 1}, "distance": {"type": "number", "exclusiveMinimum": 0}}
-      }
-    },
-    "geometry_references": {
-      "description": "Sanctioned public per-geometry reference metadata, one entry per measurement_geometries entry, in order. Each resolved_sha256 is canonical_sha256(reference_strategy(state, geometry_id)) -- the exact value a planning worker must copy into execution_plan.stage_context.reference_strategy_sha256 for its chosen geometry_id. Published here so the worker never needs to execute code to learn it; the supervisor independently recomputes and verifies this value on every validation.",
-      "type": "array", "minItems": 1,
-      "items": {
-        "type": "object", "additionalProperties": false,
-        "required": ["geometry_id", "resolved_sha256"],
-        "properties": {"geometry_id": {"type": "string", "minLength": 1}, "resolved_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"}}
       }
     }
   }

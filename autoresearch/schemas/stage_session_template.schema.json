@@ -13,7 +13,7 @@
     "research_quality_policy": {"$ref": "research_quality_policy.schema.json"},
     "stage_contract": {
       "type": "object", "additionalProperties": false,
-      "required": ["starting_strategy_fixture", "semantic_bindings", "measurement_geometries"],
+      "required": ["starting_strategy_fixture", "semantic_bindings"],
       "properties": {
         "starting_strategy_fixture": {"type": "string", "minLength": 1},
         "semantic_bindings": {
@@ -39,8 +39,7 @@
               }
             }
           }
-        },
-        "measurement_geometries": {"$ref": "stage_contract.schema.json#/properties/measurement_geometries"}
+        }
       }
     },
     "budgets": {"type": "object"}

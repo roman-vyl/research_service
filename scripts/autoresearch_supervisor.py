@@ -885,16 +885,12 @@ def validate_state(state: dict[str, Any]) -> None:
                 or not isinstance(state["stage_history"], list)
             ):
                 raise StageContractError("stage durable collections must be arrays")
-            geometry_ids = {
-                g["geometry_id"] for g in state["stage_contract"]["measurement_geometries"]
-            }
-            reference_ids: list[str] = []
+            if len(state["phase_a_references"]) > 1:
+                raise StageContractError("Phase-A control has at most one accepted reference")
             for ref in state["phase_a_references"]:
                 _require_exact_keys(
                     ref,
                     {
-                        "geometry_id",
-                        "distance",
                         "experiment_id",
                         "candidate_id",
                         "run_id",
@@ -906,11 +902,7 @@ def validate_state(state: dict[str, Any]) -> None:
                     },
                     "phase A reference",
                 )
-                if (
-                    ref["geometry_id"] not in geometry_ids
-                    or type(ref["realised_trade_count"]) is not int
-                    or ref["realised_trade_count"] < 0
-                ):
+                if type(ref["realised_trade_count"]) is not int or ref["realised_trade_count"] < 0:
                     raise StageContractError("phase A reference is invalid")
                 for key in (
                     "experiment_id",
@@ -927,9 +919,6 @@ def validate_state(state: dict[str, Any]) -> None:
                     r"[0-9a-f]{64}", ref["receipt_sha256"]
                 ):
                     raise StageContractError("phase A reference receipt_sha256 is invalid")
-                reference_ids.append(ref["geometry_id"])
-            if len(reference_ids) != len(set(reference_ids)):
-                raise StageContractError("phase A geometry reference is duplicated")
             for entry in state["stage_dispositions"]:
                 if not isinstance(entry, dict) or set(entry) != {"iteration_id", "disposition"}:
                     raise StageContractError("persisted stage disposition is invalid")
@@ -941,7 +930,6 @@ def validate_state(state: dict[str, Any]) -> None:
                     "iteration_id",
                     "stage",
                     "status",
-                    "geometry_id",
                 }:
                     raise StageContractError("stage history entry is invalid")
                 if (
@@ -949,8 +937,6 @@ def validate_state(state: dict[str, Any]) -> None:
                     or item["iteration_id"] < 1
                     or item["stage"] not in STAGE_PHASES
                     or item["status"] not in {"in_progress", "characterized", "terminally_rejected"}
-                    or not isinstance(item["geometry_id"], str)
-                    or not item["geometry_id"]
                 ):
                     raise StageContractError("stage history entry is invalid")
             closed = {
@@ -958,12 +944,8 @@ def validate_state(state: dict[str, Any]) -> None:
                 for entry in state["stage_dispositions"]
                 if entry["disposition"]["status"] in {"characterized", "terminally_rejected"}
             }
-            configured = {
-                g["geometry_id"] for g in state["stage_contract"]["measurement_geometries"]
-            }
-            completed = {r["geometry_id"] for r in state["phase_a_references"]}
             if state["active_stage"] != "A_CONTROL" and (
-                configured != completed or "A_CONTROL" not in closed
+                not state["phase_a_references"] or "A_CONTROL" not in closed
             ):
                 raise StageContractError(
                     "B stages require a complete, closed Phase-A reference line"
@@ -1324,7 +1306,7 @@ def append_journal(path: Path, event: dict[str, Any]) -> None:
         )
     if event["contract_version"] in {JOURNAL_VERSION_V2, JOURNAL_VERSION_V3}:
         expected_keys = _JOURNAL_V2_KEYS | (
-            {"active_stage", "stage_disposition", "geometry_id"}
+            {"active_stage", "stage_disposition"}
             if event["contract_version"] == JOURNAL_VERSION_V3
             else set()
         )
@@ -1351,7 +1333,6 @@ def append_journal(path: Path, event: dict[str, Any]) -> None:
         if event["contract_version"] == JOURNAL_VERSION_V3:
             if event["active_stage"] not in STAGE_PHASES:
                 raise ContractError("journal active_stage is invalid")
-            _require_string(event, "geometry_id")
             try:
                 validate_disposition(event["stage_disposition"], event["active_stage"])
             except StageContractError as exc:
@@ -1629,12 +1610,6 @@ def _journal_event(
         event.update(
             active_stage=state["active_stage"],
             stage_disposition=result["stage_disposition"],
-            geometry_id=load_json(
-                (session_root or session_dir(state["session_id"]))
-                / "iterations"
-                / f"{result['iteration_id']:04d}"
-                / "execution_plan.json"
-            )["stage_context"]["geometry_id"],
         )
     return event
 
@@ -1734,8 +1709,6 @@ def _advance_state(
             / f"{result['iteration_id']:04d}"
             / "execution_plan.json"
         )
-        plan = load_json(plan_path)
-        geometry_id = plan["stage_context"]["geometry_id"]
         if active_stage == "A_CONTROL" and result["experiment"]["kind"] == "batch":
             summary = _verify_batch_artifact(result)
             completed = [item for item in summary.candidates if item.status == "completed"]
@@ -1747,16 +1720,8 @@ def _advance_state(
                     "Phase A reference requires canonical realised_trade_count and win_rate"
                 )
             receipt_path = plan_path.parent / "execution_receipt.json"
-            geometry = next(
-                g
-                for g in state["stage_contract"]["measurement_geometries"]
-                if g["geometry_id"] == geometry_id
-            )
-            phase_a_references = [r for r in phase_a_references if r["geometry_id"] != geometry_id]
-            phase_a_references.append(
+            phase_a_references = [
                 {
-                    "geometry_id": geometry_id,
-                    "distance": geometry["distance"],
                     "experiment_id": summary.experiment_id,
                     "candidate_id": candidate.candidate_id,
                     "run_id": candidate.run_id,
@@ -1766,16 +1731,13 @@ def _advance_state(
                     "realised_trade_count": candidate.realised_trade_count,
                     "win_rate": str(candidate.win_rate) if candidate.win_rate is not None else None,
                 }
-            )
+            ]
         next_stage = active_stage
         if disposition["status"] in {"characterized", "terminally_rejected"}:
             if active_stage == "A_CONTROL":
-                configured = {
-                    g["geometry_id"] for g in state["stage_contract"]["measurement_geometries"]
-                }
-                if {r["geometry_id"] for r in phase_a_references} != configured:
+                if not phase_a_references:
                     raise ContractError(
-                        "Phase A cannot close before every configured geometry is referenced"
+                        "Phase A cannot close before its control reference is recorded"
                     )
                 next_stage = "B1_WIDTH"
             elif active_stage == "B1_WIDTH":
@@ -1800,7 +1762,6 @@ def _advance_state(
                     "iteration_id": result["iteration_id"],
                     "stage": active_stage,
                     "status": disposition["status"],
-                    "geometry_id": geometry_id,
                 },
             ],
         )

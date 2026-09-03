@@ -94,9 +94,6 @@
           }
         ]
       }
-    ],
-    "measurement_geometries": [
-      {"geometry_id": "A-CONTROL", "distance": 3.0}
     ]
   },
   "budgets": {

@@ -14,12 +14,10 @@
     "hard_stop_reason": {"type": ["string", "null"]},
     "stage_context": {
       "type": "object", "additionalProperties": false,
-      "required": ["active_stage", "starting_strategy_sha256", "geometry_id", "reference_strategy_sha256", "allowed_semantic_dimensions", "prerequisite_disposition_refs"],
+      "required": ["active_stage", "starting_strategy_sha256", "allowed_semantic_dimensions", "prerequisite_disposition_refs"],
       "properties": {
         "active_stage": {"enum": ["A_CONTROL", "B1_WIDTH", "B2_LOOKBACK", "B3_WIDTH_X_LOOKBACK"]},
         "starting_strategy_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
-        "geometry_id": {"type": "string", "minLength": 1},
-        "reference_strategy_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
         "allowed_semantic_dimensions": {"type": "array", "uniqueItems": true, "items": {"enum": ["symmetric_measurement_geometry", "anchor_stack_width", "untouched_anchor_lookback"]}},
         "prerequisite_disposition_refs": {"type": "array", "uniqueItems": true, "items": {"type": "integer", "minimum": 1}}
       }

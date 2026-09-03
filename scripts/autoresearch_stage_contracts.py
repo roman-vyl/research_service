@@ -5,7 +5,6 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
-from decimal import Decimal, InvalidOperation
 from typing import Any
 
 from pydantic import ValidationError
@@ -27,7 +26,7 @@ DIMENSIONS = (
     "untouched_anchor_lookback",
 )
 STAGE_DIMENSIONS = {
-    "A_CONTROL": ("symmetric_measurement_geometry",),
+    "A_CONTROL": (),
     "B1_WIDTH": ("anchor_stack_width",),
     "B2_LOOKBACK": ("untouched_anchor_lookback",),
     "B3_WIDTH_X_LOOKBACK": ("anchor_stack_width", "untouched_anchor_lookback"),
@@ -77,8 +76,6 @@ def validate_stage_contract(value: dict[str, Any]) -> dict[str, Any]:
             "programme",
             "starting_strategy",
             "semantic_bindings",
-            "measurement_geometries",
-            "geometry_references",
         },
         "stage contract",
     )
@@ -147,44 +144,6 @@ def validate_stage_contract(value: dict[str, Any]) -> dict[str, Any]:
             identities.append((target["component_id"], target["instance_id"]))
         if len(identities) != len(set(identities)):
             raise StageContractError("semantic target identities must be unique")
-    geometries = value["measurement_geometries"]
-    if not isinstance(geometries, list) or not geometries:
-        raise StageContractError("measurement_geometries must be non-empty")
-    ids: list[str] = []
-    for geometry in geometries:
-        _exact(geometry, {"geometry_id", "distance"}, "measurement geometry")
-        if not isinstance(geometry["geometry_id"], str) or not geometry["geometry_id"]:
-            raise StageContractError("geometry_id is invalid")
-        try:
-            if Decimal(str(geometry["distance"])) <= 0:
-                raise StageContractError("geometry distance must be positive")
-        except (InvalidOperation, TypeError, ValueError) as exc:
-            raise StageContractError("geometry distance must be numeric") from exc
-        ids.append(geometry["geometry_id"])
-    if len(ids) != len(set(ids)):
-        raise StageContractError("measurement geometry IDs must be unique")
-    # Published sanctioned per-geometry reference hashes are never trusted
-    # as-is: the supervisor independently recomputes them here from the same
-    # `reference_strategy()`/`canonical_sha256()` source of truth used to
-    # publish them, so a forged or stale published value is fail-closed
-    # rejected rather than silently trusted.
-    published = value["geometry_references"]
-    if not isinstance(published, list) or [
-        item.get("geometry_id") if isinstance(item, dict) else None for item in published
-    ] != ids:
-        raise StageContractError(
-            "geometry_references must list exactly the configured measurement geometries, "
-            "in order"
-        )
-    expected_references = geometry_references(value)
-    for item, expected in zip(published, expected_references, strict=True):
-        _exact(item, {"geometry_id", "resolved_sha256"}, "geometry reference")
-        _hash(item["resolved_sha256"], "geometry reference resolved_sha256")
-        if item != expected:
-            raise StageContractError(
-                "published geometry_references is inconsistent with the canonical "
-                "reference_strategy computation"
-            )
     return value
 
 
@@ -194,8 +153,6 @@ def validate_stage_context(value: dict[str, Any], state: dict[str, Any]) -> None
         {
             "active_stage",
             "starting_strategy_sha256",
-            "geometry_id",
-            "reference_strategy_sha256",
             "allowed_semantic_dimensions",
             "prerequisite_disposition_refs",
         },
@@ -210,7 +167,6 @@ def validate_stage_context(value: dict[str, Any], state: dict[str, Any]) -> None
     expected_hash = state["stage_contract"]["starting_strategy"]["resolved_sha256"]
     if value["starting_strategy_sha256"] != expected_hash:
         raise StageContractError("starting strategy hash differs from state")
-    _hash(value["reference_strategy_sha256"], "reference strategy hash")
     if not isinstance(value["prerequisite_disposition_refs"], list) or any(
         type(x) is not int or x < 1 for x in value["prerequisite_disposition_refs"]
     ):
@@ -237,14 +193,6 @@ def validate_stage_context(value: dict[str, Any], state: dict[str, Any]) -> None
         raise StageContractError(
             "prerequisite disposition refs differ from durable causal prerequisites"
         )
-    geometry_id = value["geometry_id"]
-    if not isinstance(geometry_id, str) or not geometry_id:
-        raise StageContractError("stage context geometry_id is invalid")
-    if (
-        canonical_sha256(reference_strategy(state, geometry_id))
-        != value["reference_strategy_sha256"]
-    ):
-        raise StageContractError("reference strategy hash is inconsistent")
 
 
 def _binding(contract: dict[str, Any], dimension: str) -> dict[str, Any]:
@@ -319,49 +267,16 @@ def validate_resolved_stage_targets(contract: dict[str, Any]) -> None:
             raise StageContractError(f"{dimension} prototype identity is ambiguous")
 
 
-def geometry_references(contract: dict[str, Any]) -> list[dict[str, Any]]:
-    """Sanctioned public per-geometry reference metadata for the planning
-    worker: for each configured `measurement_geometries` entry, the same
-    `reference_strategy()` + `canonical_sha256()` pair the supervisor
-    independently re-runs during `validate_stage_request()`. Frozen once at
-    session init (`autoresearch_init._load_v3_stage_contract`) into
-    `state.stage_contract.geometry_references` so the worker never needs to
-    execute code to learn what its candidate will be checked against; the
-    supervisor still recomputes and compares on every validation -- this is
-    published expectation, not a trusted substitute."""
-    return [
-        {
-            "geometry_id": geometry["geometry_id"],
-            "resolved_sha256": canonical_sha256(
-                reference_strategy({"stage_contract": contract}, geometry["geometry_id"])
-            ),
-        }
-        for geometry in contract["measurement_geometries"]
-    ]
+def reference_strategy(state: dict[str, Any]) -> dict[str, Any]:
+    """The one frozen naked control strategy every stage measures against.
 
-
-def reference_strategy(state: dict[str, Any], geometry_id: str) -> dict[str, Any]:
-    strategy = copy.deepcopy(state["stage_contract"]["starting_strategy"]["strategy"])
-    geometry = next(
-        (
-            g
-            for g in state["stage_contract"]["measurement_geometries"]
-            if g["geometry_id"] == geometry_id
-        ),
-        None,
-    )
-    if geometry is None:
-        raise StageContractError("geometry is not configured")
-    binding = _binding(state["stage_contract"], "symmetric_measurement_geometry")
-    for target in binding["targets"]:
-        instance = _find_instance(strategy["raw_spec"], target)
-        parameter_name = target["parameter_name"]
-        if parameter_name != "distance.multiplier" or not isinstance(
-            instance.get("distance"), dict
-        ):
-            raise StageContractError("geometry binding must target distance.multiplier")
-        instance["distance"]["multiplier"] = geometry["distance"]
-    return strategy
+    Phase A no longer scans a configured geometry list (see
+    `autoresearch-frozen-control-phased-discovery-v1`): the control value is
+    baked into the frozen `starting_strategy` itself, so this is simply a
+    deep copy of it -- no per-value override. `D_EXIT_GEOMETRY` will
+    reintroduce a distinct, per-shortlisted-region reference mechanism when
+    it is implemented; this function does not anticipate that shape."""
+    return copy.deepcopy(state["stage_contract"]["starting_strategy"]["strategy"])
 
 
 def _strip_allowed(
@@ -454,18 +369,11 @@ def validate_stage_request(
     context = plan["stage_context"]
     validate_stage_context(context, state)
     stage = context["active_stage"]
-    geometry_id = context["geometry_id"]
-    if stage == "A_CONTROL" and geometry_id in {
-        r["geometry_id"] for r in state["phase_a_references"]
-    }:
-        raise StageContractError("Phase-A geometry already has an accepted reference")
-    if stage != "A_CONTROL" and geometry_id not in {
-        r["geometry_id"] for r in state["phase_a_references"]
-    }:
-        raise StageContractError("B stage requires a completed Phase-A geometry reference")
-    reference = reference_strategy(state, geometry_id)
-    if canonical_sha256(reference) != context["reference_strategy_sha256"]:
-        raise StageContractError("reference strategy hash is inconsistent")
+    if stage == "A_CONTROL" and state["phase_a_references"]:
+        raise StageContractError("Phase-A control already has an accepted reference")
+    if stage != "A_CONTROL" and not state["phase_a_references"]:
+        raise StageContractError("B stage requires a completed Phase-A control reference")
+    reference = reference_strategy(state)
     if stage == "A_CONTROL" and len(request.candidates) != 1:
         raise StageContractError("A_CONTROL requires exactly one candidate")
     allowed = list(STAGE_DIMENSIONS[stage])
@@ -473,16 +381,6 @@ def validate_stage_request(
     expected = _strip_allowed(reference, contract, allowed)
     for candidate in request.candidates:
         actual = candidate.strategy.model_dump(mode="json")
-        geometry_binding = _binding(contract, "symmetric_measurement_geometry")
-        for target in geometry_binding["targets"]:
-            actual_exit = _find_instance(actual["raw_spec"], target)
-            reference_exit = _find_instance(reference["raw_spec"], target)
-            if actual_exit.get("distance", {}).get("multiplier") != reference_exit.get(
-                "distance", {}
-            ).get("multiplier"):
-                raise StageContractError(
-                    "candidate geometry differs from configured/reference geometry"
-                )
         if _strip_allowed(actual, contract, allowed) != expected:
             raise StageContractError("candidate changes a field outside active semantic dimensions")
 
