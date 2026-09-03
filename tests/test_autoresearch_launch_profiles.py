@@ -165,7 +165,9 @@ def test_direct_supervisor_cli_profile_is_rejected(monkeypatch: pytest.MonkeyPat
         validate_cli_launch_profile(Settings())
 
     with pytest.raises(SystemExit, match="direct AutoResearch supervisor CLI launch"):
-        supervisor_module.main(["--session", "must-not-start", "--agent-command", "true"])
+        supervisor_module.main(
+            ["--session", "must-not-start", "--worker", "codex-gpt56-sol"]
+        )
 
 
 def _v3_template(tmp_path: Path) -> Path:

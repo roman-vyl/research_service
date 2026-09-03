@@ -410,6 +410,29 @@ def test_non_batch_actions_use_fresh_interpreter_without_executor_or_receipt(
     assert len((root / "journal.jsonl").read_text().splitlines()) == 1
 
 
+def test_worker_identity_is_persisted_without_credentials(tmp_path: Path) -> None:
+    repo, root = _repo(tmp_path)
+    identity = {
+        "worker_profile": "test-worker",
+        "runner": "fake-agent",
+        "model": "deterministic-test-model",
+    }
+
+    assert (
+        run_supervisor(
+            session_id="s1",
+            agent_command=_command(repo, "terminal"),
+            worker_identity=identity,
+            repo_root=repo,
+        )
+        == 0
+    )
+
+    metadata = load_json(root / "iterations/0001/supervisor_metadata.json")
+    assert metadata["worker"] == identity
+    assert set(metadata["worker"]) == {"worker_profile", "runner", "model"}
+
+
 def test_worker_env_preserves_cli_runtime_and_removes_research_namespace(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

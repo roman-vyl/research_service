@@ -9,6 +9,7 @@ import json
 import os
 import re
 import shlex
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -16,7 +17,7 @@ import time
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Sequence
 
 import httpx
 from pydantic import ValidationError
@@ -54,6 +55,7 @@ from autoresearch_stage_contracts import (
     validate_stage_contract,
     validate_stage_request,
 )
+from autoresearch_worker_profiles import resolve_worker_profile
 
 STATE_VERSION = "bbb_autoresearch_state.v1"
 STATE_VERSION_V2 = "bbb_autoresearch_state.v2"
@@ -624,7 +626,7 @@ class AgentRunner:
 
     def __init__(
         self,
-        command: str,
+        command: str | Sequence[str],
         repo_root: Path,
         session_root: Path,
         timeout: int | None,
@@ -1635,9 +1637,10 @@ def render_prompt(
     return render_planning_prompt(state, root, iteration_root, research_service_base_url)
 
 
-def _command_args(template: str, values: dict[str, str]) -> list[str]:
+def _command_args(template: str | Sequence[str], values: dict[str, str]) -> list[str]:
     try:
-        args = [item.format(**values) for item in shlex.split(template)]
+        tokens = shlex.split(template) if isinstance(template, str) else template
+        args = [item.format(**values) for item in tokens]
     except (ValueError, KeyError) as exc:
         raise ContractError(f"invalid agent command template: {exc}") from exc
     if not args:
@@ -1645,13 +1648,18 @@ def _command_args(template: str, values: dict[str, str]) -> list[str]:
     return args
 
 
-def _read_metadata(path: Path) -> dict[str, Any]:
+def _read_metadata(
+    path: Path, worker_identity: dict[str, str] | None = None
+) -> dict[str, Any]:
     if not path.exists():
-        return {
+        metadata: dict[str, Any] = {
             "contract_version": "bbb_autoresearch_supervisor_metadata.v2",
             "planning_attempts": [],
             "interpretation_attempts": [],
         }
+        if worker_identity is not None:
+            metadata["worker"] = worker_identity
+        return metadata
     metadata = load_json(path)
     if "attempts" in metadata:
         if not isinstance(metadata["attempts"], list):
@@ -1660,6 +1668,11 @@ def _read_metadata(path: Path) -> dict[str, Any]:
         for key in ("planning_attempts", "interpretation_attempts"):
             if not isinstance(metadata.get(key), list):
                 raise ContractError(f"supervisor metadata {key} must be an array")
+    if worker_identity is not None:
+        persisted = metadata.get("worker")
+        if persisted is not None and persisted != worker_identity:
+            raise ContractError("worker profile differs from persisted iteration metadata")
+        metadata["worker"] = worker_identity
     return metadata
 
 
@@ -2106,7 +2119,8 @@ def _validate_interpretation_binding(
 def run_supervisor(
     *,
     session_id: str,
-    agent_command: str,
+    agent_command: str | Sequence[str],
+    worker_identity: dict[str, str] | None = None,
     repo_root: Path = REPO_ROOT,
     max_iterations: int | None = None,
     max_agent_failures: int | None = None,
@@ -2178,7 +2192,7 @@ def run_supervisor(
             atomic_write_json(state_path, _advance_state(state, recovered, root))
             continue
         metadata_path = iteration_root / "supervisor_metadata.json"
-        metadata = _read_metadata(metadata_path)
+        metadata = _read_metadata(metadata_path, worker_identity)
         metadata.setdefault("planning_attempts", metadata.pop("attempts", []))
         metadata.setdefault("interpretation_attempts", [])
         failure_limit = (
@@ -2398,7 +2412,7 @@ def run_supervisor(
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--session", required=True)
-    parser.add_argument("--agent-command", default=os.getenv("BBB_AUTORESEARCH_AGENT_COMMAND"))
+    parser.add_argument("--worker", required=True)
     parser.add_argument("--max-iterations", type=int)
     parser.add_argument("--max-agent-failures", type=int)
     parser.add_argument("--agent-timeout-seconds", type=int)
@@ -2407,17 +2421,30 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
+    if os.getenv("BBB_AUTORESEARCH_AGENT_COMMAND"):
+        raise SystemExit(
+            "BBB_AUTORESEARCH_AGENT_COMMAND is not supported for controlled execution; "
+            "select one deterministic profile with --worker"
+        )
+    try:
+        worker = resolve_worker_profile(args.worker)
+    except ValueError as exc:
+        raise SystemExit(str(exc)) from exc
     settings = Settings()
     try:
         profile, research_service_url = validate_cli_launch_profile(settings)
         preflight_launch_services(profile, settings, research_service_url)
     except ContractError as exc:
         raise SystemExit(f"AutoResearch launch preflight failed: {exc}") from exc
-    if not args.agent_command:
-        raise SystemExit("provide --agent-command or BBB_AUTORESEARCH_AGENT_COMMAND")
+    if shutil.which(worker.argv[0]) is None:
+        raise SystemExit(
+            f"AutoResearch worker profile {worker.key!r} requires unavailable executable "
+            f"{worker.argv[0]!r}"
+        )
     return run_supervisor(
         session_id=args.session,
-        agent_command=args.agent_command,
+        agent_command=worker.argv,
+        worker_identity=worker.provenance(),
         max_iterations=args.max_iterations,
         max_agent_failures=args.max_agent_failures,
         agent_timeout_seconds=args.agent_timeout_seconds,

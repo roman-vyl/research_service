@@ -32,10 +32,10 @@ For a controlled host run, use the host wrapper; it owns all service URLs, canon
 repo-local Python path rather than accepting them from operator environment:
 
 ```bash
-export BBB_AUTORESEARCH_AGENT_COMMAND='codex exec -C . -s workspace-write -'
 scripts/autoresearch_run_host.sh \
   run \
   --session ema-anchor-demo \
+  --worker glm52-opencode \
   --max-iterations 100
 ```
 
@@ -43,10 +43,10 @@ For a supervisor running inside the BBB Docker network, use the Docker wrapper. 
 only when that container uses different mounted paths:
 
 ```bash
-export BBB_AUTORESEARCH_AGENT_COMMAND='codex exec -C . -s workspace-write -'
 scripts/autoresearch_run_docker.sh \
   run \
   --session ema-anchor-demo \
+  --worker glm52-opencode \
   --max-iterations 100
 ```
 
@@ -59,7 +59,14 @@ validate the wrapper profile. Before reading an iteration or invoking an LLM, th
 verifies all three canonical `/health` endpoints. Direct controlled v3 init and direct supervisor
 CLI launch are rejected; the wrappers are the execution contract. The Docker wrapper still uses
 `python` from `PATH` inside the container.
-Provider credentials, the agent command, and other ordinary runtime variables remain operator-owned.
+Provider credentials and other ordinary runtime variables remain operator-owned. Worker execution
+identity is selected by one stable key; the operator never assembles its internal CLI command:
+
+| Worker key | Runner | Fixed model |
+| --- | --- | --- |
+| `claude-sonnet46` | Claude Code | `claude-sonnet-4-6` |
+| `codex-gpt56-sol` | Codex | `gpt-5.6-sol` |
+| `glm52-opencode` | OpenCode | `speshu/z-ai/glm-5.2` |
 
 Initialize a controlled session through the same runtime profile that will execute it, then inspect
 it. Do not construct `BBB_AUTORESEARCH_*`, `RESEARCH_*`, service URLs, roots, or Python selection by
@@ -72,22 +79,20 @@ scripts/autoresearch_run_host.sh init \
 .venv/bin/python scripts/autoresearch_status.py --session ema-anchor-demo
 ```
 
-The installed Codex CLI accepts a prompt on stdin via non-interactive `codex exec`. Agent command
-syntax is deliberately operator-supplied and is split with `shlex`; the supervisor never uses
-`shell=True`. One reasonable local example, with permissions chosen explicitly by the operator, is:
+Worker profile commands are held in the deterministic registry and launched as argv without
+`shell=True`. Credentials remain in each runner's normal credential mechanism. For example:
 
 ```bash
-BBB_AUTORESEARCH_AGENT_COMMAND='codex exec -C . -s workspace-write -' \
 scripts/autoresearch_run_host.sh \
   run \
   --session ema-anchor-demo \
+  --worker codex-gpt56-sol \
   --max-iterations 100
 ```
 
-The command may use `{stage}`, `{prompt_file}`, `{result_file}`, `{session_dir}`, `{iteration_dir}`,
-and `{iteration_id}` placeholders. Without placeholders, each rendered stage prompt is delivered on
-stdin. Provider permissions are defense in depth: correctness comes from supervisor-owned execution,
-immutable request/receipt binding, stage output allowlists, and repository guards.
+Each rendered stage prompt is delivered on stdin. Provider permissions are defense in depth:
+correctness comes from supervisor-owned execution, immutable request/receipt binding, stage output
+allowlists, and repository guards.
 
 Planning and interpretation processes inherit the ordinary CLI/runtime environment, including
 provider configuration, credentials, `PATH`, and `VIRTUAL_ENV`, but the supervisor removes the
@@ -139,6 +144,8 @@ trade truth remains under the configured canonical Research artifact root; batch
 IDs are references in the iteration result/journal. Each retry is another fresh process and retains
 separate retry logs. If a process dies before state commit, the same iteration number is resumed and
 its durable attempt metadata bounds retries.
+`supervisor_metadata.json` records only the stable worker-profile key, runner, and fixed model
+identity alongside attempt metadata; credentials and environment values are never persisted there.
 
 New sessions are marked with `bbb_autoresearch_supervisor_execution.v1`; sessions initialized before
 the brokered protocol fail closed and must not be silently migrated. A frozen non-batch plan resumes
