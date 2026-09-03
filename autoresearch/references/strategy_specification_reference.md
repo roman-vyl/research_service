@@ -21,12 +21,10 @@ rather than trusting this file over them.
 ## 1. Where to get the current component list and parameter schemas
 
 Do not guess `component_id`s or parameter names, and do not read Strategy Engine or Market Data
-Service source code to find them. Use the sanctioned Research Service endpoint, which proxies
-Strategy Engine's own Composer catalog (Engine-owned, live, authoritative for this purpose):
-
-```
-GET /api/research/component-catalog?strategy_id=ema_pullback
-```
+Service source code to find them. The supervisor obtains the live catalog through the sanctioned
+Research Service endpoint and gives each planning iteration an immutable, hash-bound snapshot.
+Read the exact snapshot path and SHA256 named by the planning prompt. Do not fetch the catalog over
+HTTP yourself or discover Research Service, Strategy Engine, or Market Data Service topology.
 
 The response lists every currently supported `component_id` per role (`direction`, `setup`,
 `trigger`, `blockers`, `exits`, `risk`, `exit_management`) together with its `params_schema`
@@ -84,14 +82,15 @@ gating, prior evidence references, and duplicate-detection all key off it) even 
 
 ## 4. The authoritative acceptance gate
 
-Before treating any constructed or modified strategy specification as usable, submit it through
-the existing canonical Research validation path:
+Before treating any constructed or modified strategy specification as usable, it must pass the
+existing canonical Research validation path:
 
 ```
 POST /api/research/config/validate
 ```
 
-This delegates strategy-semantic checking to Strategy Engine's authoring-config validation —
+The supervisor-owned execution path performs this submission; the worker does not contact the
+service itself. Research delegates strategy-semantic checking to Strategy Engine's authoring-config validation —
 the single authoritative, fail-closed source of truth for whether a `raw_spec` is valid. A
 `valid=true`/`ok=true` result means the specification is free of static, market-data-independent
 semantic errors (unsupported `component_id`, missing/duplicate `instance_id`, malformed

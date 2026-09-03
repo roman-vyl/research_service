@@ -38,10 +38,8 @@ def main(argv: list[str] | None = None) -> int:
             promotion_history=state["promotion_history"],
         )
     if state["contract_version"] == "bbb_autoresearch_state.v3":
-        configured = [
-            item["geometry_id"] for item in state["stage_contract"]["measurement_geometries"]
-        ]
-        completed = [item["geometry_id"] for item in state["phase_a_references"]]
+        starting = state["stage_contract"]["starting_strategy"]
+        strategy = starting["strategy"]
         closed = {
             item["disposition"]["stage"]
             for item in state["stage_dispositions"]
@@ -52,8 +50,14 @@ def main(argv: list[str] | None = None) -> int:
             available.append("B3_WIDTH_X_LOOKBACK")
         output.update(
             active_stage=state["active_stage"],
-            configured_geometry_ids=configured,
-            completed_geometry_ids=completed,
+            frozen_control={
+                "resolved_sha256": starting["resolved_sha256"],
+                "strategy_id": strategy["strategy_id"],
+                "ticker": strategy["ticker"],
+                "base_timeframe": strategy["base_timeframe"],
+            },
+            phase_a_reference_recorded=bool(state["phase_a_references"]),
+            phase_a_references=state["phase_a_references"],
             stage_dispositions=state["stage_dispositions"],
             available_stages=list(dict.fromkeys(available)),
         )

@@ -353,6 +353,7 @@ def build_executor_env(settings: Settings, source: dict[str, str] | None = None)
 
 
 _RESEARCH_SERVICE_BASE_URL_VAR = "BBB_AUTORESEARCH_RESEARCH_SERVICE_URL"
+_COMPONENT_CATALOG_SNAPSHOT = "component_catalog.json"
 
 
 def resolve_research_service_base_url(source: dict[str, str] | None = None) -> str:
@@ -369,6 +370,71 @@ def resolve_research_service_base_url(source: dict[str, str] | None = None) -> s
             f"{_RESEARCH_SERVICE_BASE_URL_VAR} must be set by the launch profile wrapper"
         )
     return value
+
+
+def _validate_component_catalog(catalog: dict[str, Any], strategy_id: str) -> None:
+    if catalog.get("strategy_id") != strategy_id:
+        raise ContractError("component catalog strategy_id differs from session strategy")
+    if not isinstance(catalog.get("schema_version"), int):
+        raise ContractError("component catalog schema_version must be an integer")
+    if not isinstance(catalog.get("components"), list):
+        raise ContractError("component catalog components must be an array")
+
+
+def _fetch_live_component_catalog(base_url: str, strategy_id: str) -> dict[str, Any]:
+    try:
+        with httpx.Client(base_url=base_url, timeout=30.0, trust_env=False) as client:
+            response = client.get(
+                "/api/research/component-catalog", params={"strategy_id": strategy_id}
+            )
+            response.raise_for_status()
+            catalog = response.json()
+    except (httpx.HTTPError, ValueError) as exc:
+        raise ContractError(f"canonical Research component catalog unavailable: {exc}") from exc
+    if not isinstance(catalog, dict):
+        raise ContractError("component catalog response must be an object")
+    _validate_component_catalog(catalog, strategy_id)
+    return catalog
+
+
+def _prepare_component_catalog_snapshot(
+    iteration_root: Path,
+    state: dict[str, Any],
+    research_service_base_url: str,
+    metadata_path: Path,
+    metadata: dict[str, Any],
+) -> tuple[Path, str]:
+    """Create once or verify the supervisor-owned live catalog snapshot."""
+
+    path = iteration_root / _COMPONENT_CATALOG_SNAPSHOT
+    binding = metadata.get("component_catalog")
+    if path.exists() or binding is not None:
+        if not path.is_file() or not isinstance(binding, dict):
+            raise ContractError("component catalog snapshot/binding is incomplete")
+        catalog = load_json(path)
+        strategy_id = state["strategy_context"]["strategy_id"]
+        _validate_component_catalog(catalog, strategy_id)
+        digest = _sha256(path)
+        expected = {
+            "source": "canonical_research_service",
+            "strategy_id": strategy_id,
+            "sha256": digest,
+        }
+        if binding != expected:
+            raise ContractError("component catalog snapshot differs from its immutable binding")
+        return path, digest
+
+    strategy_id = state["strategy_context"]["strategy_id"]
+    catalog = _fetch_live_component_catalog(research_service_base_url, strategy_id)
+    atomic_write_json(path, catalog)
+    digest = _sha256(path)
+    metadata["component_catalog"] = {
+        "source": "canonical_research_service",
+        "strategy_id": strategy_id,
+        "sha256": digest,
+    }
+    atomic_write_json(metadata_path, metadata)
+    return path, digest
 
 
 def _sha256(path: Path) -> str:
@@ -1530,7 +1596,12 @@ def _stage_authority_context(state: dict[str, Any]) -> str:
 
 
 def render_planning_prompt(
-    state: dict[str, Any], root: Path, iteration_root: Path, research_service_base_url: str
+    state: dict[str, Any],
+    root: Path,
+    iteration_root: Path,
+    research_service_base_url: str,
+    component_catalog_path: Path | None = None,
+    component_catalog_sha256: str | None = None,
 ) -> str:
     return _render_stage_prompt(
         "planning.md",
@@ -1547,7 +1618,9 @@ def render_planning_prompt(
             ),
             "result_path": iteration_root / "execution_plan.json",
             "analysis_dir": iteration_root / "planning_analysis",
-            "research_service_base_url": research_service_base_url,
+            "component_catalog_path": component_catalog_path
+            or iteration_root / _COMPONENT_CATALOG_SNAPSHOT,
+            "component_catalog_sha256": component_catalog_sha256 or "not-prepared",
             "stage_contract_context": (
                 json.dumps(
                     {
@@ -2210,10 +2283,31 @@ def run_supervisor(
             path: _sha256(path) for path in (state_path, journal_path, root / "bootstrap.json")
         }
 
+        catalog_path: Path | None = None
+        catalog_sha256: str | None = None
+        if control["stage"] == "planning_pending":
+            try:
+                catalog_path, catalog_sha256 = _prepare_component_catalog_snapshot(
+                    iteration_root,
+                    state,
+                    research_service_base_url,
+                    metadata_path,
+                    metadata,
+                )
+            except ContractError as exc:
+                _write_hard_stop(state_path, state, str(exc))
+                return 2
+            durable_protected[catalog_path] = catalog_sha256
+
         if control["stage"] == "planning_pending":
             plan_path = iteration_root / "execution_plan.json"
             prompt = render_planning_prompt(
-                state, repo_root, iteration_root, research_service_base_url
+                state,
+                repo_root,
+                iteration_root,
+                research_service_base_url,
+                catalog_path,
+                catalog_sha256,
             )
             attempts = metadata["planning_attempts"]
             while len(attempts) < failure_limit:

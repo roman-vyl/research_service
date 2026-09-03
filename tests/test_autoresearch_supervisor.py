@@ -76,6 +76,8 @@ if mode == "market_db":
     (result_path.parent / "market.sqlite3").write_bytes(b"db")
 if mode == "mutate_state":
     (result_path.parent.parents[1] / "state.json").write_text("{}")
+if mode == "mutate_catalog" and stage == "planning":
+    (result_path.parent / "component_catalog.json").write_text("{}")
 if mode == "env_probe" and stage == "interpretation":
     analysis = result_path.parent / "interpretation_analysis"
     analysis.mkdir(exist_ok=True)
@@ -170,6 +172,15 @@ def _research_service_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
     # from the launch profile wrapper's environment before rendering any
     # worker prompt; the test harness plays that role here.
     monkeypatch.setenv("BBB_AUTORESEARCH_RESEARCH_SERVICE_URL", "http://research-service.test")
+    monkeypatch.setattr(
+        supervisor_module,
+        "_fetch_live_component_catalog",
+        lambda _base_url, strategy_id: {
+            "strategy_id": strategy_id,
+            "schema_version": 1,
+            "components": [],
+        },
+    )
 
 
 def _repo(tmp_path: Path) -> tuple[Path, Path]:
@@ -348,6 +359,103 @@ def test_fresh_invocation_continues_then_completes(tmp_path: Path) -> None:
     assert (root / "iterations/0001/interpretation.stdout.log").is_file()
     assert (root / "iterations/0002/planning.stdout.log").is_file()
     assert len((root / "journal.jsonl").read_text().splitlines()) == 2
+
+
+def test_supervisor_snapshots_and_hash_binds_catalog_before_planning(tmp_path: Path) -> None:
+    repo, root = _repo(tmp_path)
+
+    assert (
+        run_supervisor(
+            session_id="s1",
+            agent_command=_command(repo, "terminal"),
+            repo_root=repo,
+        )
+        == 0
+    )
+
+    iteration = root / "iterations/0001"
+    snapshot = iteration / "component_catalog.json"
+    metadata = load_json(iteration / "supervisor_metadata.json")
+    prompt = (iteration / "planning_prompt.txt").read_text(encoding="utf-8")
+    assert metadata["component_catalog"] == {
+        "source": "canonical_research_service",
+        "strategy_id": "ema_pullback",
+        "sha256": _sha256(snapshot),
+    }
+    assert str(snapshot) in prompt
+    assert _sha256(snapshot) in prompt
+    assert "do not request the component catalog over HTTP" in prompt
+
+
+def test_catalog_fetch_failure_hard_stops_before_worker_invocation(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    repo, root = _repo(tmp_path)
+    monkeypatch.setattr(
+        supervisor_module,
+        "_fetch_live_component_catalog",
+        lambda *_args: (_ for _ in ()).throw(ContractError("catalog unavailable")),
+    )
+
+    assert (
+        run_supervisor(
+            session_id="s1",
+            agent_command="worker-must-not-start",
+            repo_root=repo,
+        )
+        == 2
+    )
+    iteration = root / "iterations/0001"
+    assert load_json(root / "state.json")["stop_reason"] == "catalog unavailable"
+    assert not (iteration / "planning_prompt.txt").exists()
+    assert not (iteration / "planning.stdout.log").exists()
+
+
+def test_worker_cannot_modify_supervisor_catalog_snapshot(tmp_path: Path) -> None:
+    repo, root = _repo(tmp_path)
+
+    assert (
+        run_supervisor(
+            session_id="s1",
+            agent_command=_command(repo, "mutate_catalog"),
+            repo_root=repo,
+        )
+        == 2
+    )
+    assert "component_catalog.json" in load_json(root / "state.json")["stop_reason"]
+
+
+def test_catalog_snapshot_is_reused_and_tampering_fails_closed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _repo_path, root = _repo(tmp_path)
+    state = load_json(root / "state.json")
+    iteration = root / "iterations/0001"
+    iteration.mkdir(parents=True)
+    metadata_path = iteration / "supervisor_metadata.json"
+    metadata = supervisor_module._read_metadata(metadata_path)
+    calls = 0
+
+    def fetch(_base_url: str, strategy_id: str) -> dict[str, object]:
+        nonlocal calls
+        calls += 1
+        return {"strategy_id": strategy_id, "schema_version": 1, "components": []}
+
+    monkeypatch.setattr(supervisor_module, "_fetch_live_component_catalog", fetch)
+    snapshot, digest = supervisor_module._prepare_component_catalog_snapshot(
+        iteration, state, "http://research-service.test", metadata_path, metadata
+    )
+    assert calls == 1
+    assert supervisor_module._prepare_component_catalog_snapshot(
+        iteration, state, "http://research-service.test", metadata_path, metadata
+    ) == (snapshot, digest)
+    assert calls == 1
+
+    snapshot.write_text("{}", encoding="utf-8")
+    with pytest.raises(ContractError, match="component catalog"):
+        supervisor_module._prepare_component_catalog_snapshot(
+            iteration, state, "http://research-service.test", metadata_path, metadata
+        )
 
 
 def test_restart_resumes_at_next_iteration(tmp_path: Path) -> None:

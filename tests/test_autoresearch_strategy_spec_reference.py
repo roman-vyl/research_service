@@ -37,9 +37,10 @@ def test_reference_document_exists_and_is_navigation_not_a_second_contract() -> 
     assert "not a second contract" in text.lower()
 
 
-def test_reference_points_to_sanctioned_component_catalog_not_direct_engine_access() -> None:
+def test_reference_points_to_supervisor_catalog_snapshot_not_direct_service_access() -> None:
     text = REFERENCE_PATH.read_text(encoding="utf-8")
-    assert "GET /api/research/component-catalog" in text
+    assert "immutable, hash-bound snapshot" in text
+    assert "Do not fetch the catalog over" in text
     assert "POST /api/research/config/validate" in text
     # Must not embed a direct Engine/MDS base URL or port -- discovery stays
     # routed through Research Service, never worker -> Engine/MDS directly.
@@ -85,7 +86,7 @@ def test_resolve_research_service_base_url_reads_launch_profile_env_var() -> Non
     )
 
 
-def test_planning_prompt_contains_concrete_sanctioned_component_catalog_url(
+def test_planning_prompt_contains_supervisor_catalog_snapshot_path_and_hash(
     tmp_path: Path,
 ) -> None:
     state = {
@@ -94,22 +95,25 @@ def test_planning_prompt_contains_concrete_sanctioned_component_catalog_url(
         "iteration": 1,
         "contract_version": "bbb_autoresearch_state.v2",
     }
-    prompt = render_planning_prompt(state, REPO_ROOT, tmp_path, _FAKE_BASE_URL)
-
-    assert _FAKE_BASE_URL in prompt
-    assert (
-        f"GET {_FAKE_BASE_URL}/api/research/component-catalog?strategy_id=ema_pullback" in prompt
+    snapshot = tmp_path / "component_catalog.json"
+    prompt = render_planning_prompt(
+        state,
+        REPO_ROOT,
+        tmp_path,
+        _FAKE_BASE_URL,
+        snapshot,
+        "catalog-sha256",
     )
+
+    assert str(snapshot) in prompt
+    assert "catalog-sha256" in prompt
+    assert _FAKE_BASE_URL not in prompt
     normalized = " ".join(prompt.lower().split())
-    assert "do not discover or contact strategy engine or market data service directly" in (
-        normalized
-    )
-    # No placeholder must survive rendering -- an unresolved "{...}" would mean
-    # the worker sees a template artifact instead of an actionable URL.
-    assert "{research_service_base_url}" not in prompt
+    assert "do not request the component catalog over http" in normalized
+    assert "contact research service, strategy engine, or market data service directly" in normalized
 
 
-def test_fresh_iteration_zero_bootstrap_also_gets_concrete_catalog_url(tmp_path: Path) -> None:
+def test_fresh_iteration_zero_bootstrap_also_gets_catalog_snapshot(tmp_path: Path) -> None:
     # iteration == 0 prepends bootstrap.md raw before the rendered planning.md --
     # confirm the bootstrap-stage worker still ends up with the concrete URL in
     # its combined prompt, not just a template placeholder.
@@ -119,10 +123,16 @@ def test_fresh_iteration_zero_bootstrap_also_gets_concrete_catalog_url(tmp_path:
         "iteration": 0,
         "contract_version": "bbb_autoresearch_state.v2",
     }
-    prompt = render_planning_prompt(state, REPO_ROOT, tmp_path, _FAKE_BASE_URL)
-    assert (
-        f"GET {_FAKE_BASE_URL}/api/research/component-catalog?strategy_id=ema_pullback" in prompt
+    prompt = render_planning_prompt(
+        state,
+        REPO_ROOT,
+        tmp_path,
+        _FAKE_BASE_URL,
+        tmp_path / "component_catalog.json",
+        "catalog-sha256",
     )
+    assert str(tmp_path / "component_catalog.json") in prompt
+    assert "catalog-sha256" in prompt
 
 
 def test_interpretation_entry_point_still_points_to_program_md(tmp_path: Path) -> None:

@@ -36,8 +36,8 @@ create/modify any repository file. Contract validation and experiment execution 
 to the supervisor. Use only the evidence and tools already available to you. If something required
 is unavailable, report that fact in the requested artifact instead of fixing the environment.
 
-Sanctioned Research Service base URL for this session: `{research_service_base_url}`. Before
-constructing or modifying a strategy specification, use the Strategy Specification Reference and,
-for the EMA Pullback component catalog it describes, use exactly
-`GET {research_service_base_url}/api/research/component-catalog?strategy_id=ema_pullback`. Do not
-discover or contact Strategy Engine or Market Data Service directly.
+Before constructing or modifying a strategy specification, use the Strategy Specification
+Reference and the supervisor-owned live Research component catalog snapshot at
+`{component_catalog_path}`. Its required SHA256 is `{component_catalog_sha256}`. Read that immutable
+snapshot; do not request the component catalog over HTTP, discover service topology, or contact
+Research Service, Strategy Engine, or Market Data Service directly.

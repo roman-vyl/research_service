@@ -27,10 +27,11 @@ code needed for this iteration. Chat history and remembered context are not sour
 
 Before constructing or modifying any strategy specification, read
 `autoresearch/references/strategy_specification_reference.md` completely. Use the sanctioned
-Research component catalog it describes (`GET /api/research/component-catalog`) for current
-component availability and parameter schemas. Do not infer strategy-specification syntax from
-memory, from a prior iteration's guess, or from reading Strategy Engine/Market Data Service source
-code. Do not discover Strategy Engine or Market Data Service directly.
+supervisor-owned live Research component-catalog snapshot named and hash-bound by the planning
+prompt for current component availability and parameter schemas. Do not fetch it yourself, infer
+strategy-specification syntax from memory or a prior iteration's guess, or read Strategy Engine /
+Market Data Service source code. Do not discover Strategy Engine or Market Data Service directly,
+and do not discover or contact Research Service yourself.
 
 For a `bbb_autoresearch_state.v3` session, the nested
 `bbb_autoresearch_stage_contract.v2` is an immutable execution boundary. Everything in the frozen
