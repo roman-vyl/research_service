@@ -78,6 +78,7 @@ def validate_stage_contract(value: dict[str, Any]) -> dict[str, Any]:
             "starting_strategy",
             "semantic_bindings",
             "measurement_geometries",
+            "geometry_references",
         },
         "stage contract",
     )
@@ -162,6 +163,28 @@ def validate_stage_contract(value: dict[str, Any]) -> dict[str, Any]:
         ids.append(geometry["geometry_id"])
     if len(ids) != len(set(ids)):
         raise StageContractError("measurement geometry IDs must be unique")
+    # Published sanctioned per-geometry reference hashes are never trusted
+    # as-is: the supervisor independently recomputes them here from the same
+    # `reference_strategy()`/`canonical_sha256()` source of truth used to
+    # publish them, so a forged or stale published value is fail-closed
+    # rejected rather than silently trusted.
+    published = value["geometry_references"]
+    if not isinstance(published, list) or [
+        item.get("geometry_id") if isinstance(item, dict) else None for item in published
+    ] != ids:
+        raise StageContractError(
+            "geometry_references must list exactly the configured measurement geometries, "
+            "in order"
+        )
+    expected_references = geometry_references(value)
+    for item, expected in zip(published, expected_references, strict=True):
+        _exact(item, {"geometry_id", "resolved_sha256"}, "geometry reference")
+        _hash(item["resolved_sha256"], "geometry reference resolved_sha256")
+        if item != expected:
+            raise StageContractError(
+                "published geometry_references is inconsistent with the canonical "
+                "reference_strategy computation"
+            )
     return value
 
 
@@ -294,6 +317,27 @@ def validate_resolved_stage_targets(contract: dict[str, Any]) -> None:
         ]
         if len(matches) > 1:
             raise StageContractError(f"{dimension} prototype identity is ambiguous")
+
+
+def geometry_references(contract: dict[str, Any]) -> list[dict[str, Any]]:
+    """Sanctioned public per-geometry reference metadata for the planning
+    worker: for each configured `measurement_geometries` entry, the same
+    `reference_strategy()` + `canonical_sha256()` pair the supervisor
+    independently re-runs during `validate_stage_request()`. Frozen once at
+    session init (`autoresearch_init._load_v3_stage_contract`) into
+    `state.stage_contract.geometry_references` so the worker never needs to
+    execute code to learn what its candidate will be checked against; the
+    supervisor still recomputes and compares on every validation -- this is
+    published expectation, not a trusted substitute."""
+    return [
+        {
+            "geometry_id": geometry["geometry_id"],
+            "resolved_sha256": canonical_sha256(
+                reference_strategy({"stage_contract": contract}, geometry["geometry_id"])
+            ),
+        }
+        for geometry in contract["measurement_geometries"]
+    ]
 
 
 def reference_strategy(state: dict[str, Any], geometry_id: str) -> dict[str, Any]:

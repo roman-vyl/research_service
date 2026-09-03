@@ -27,6 +27,7 @@ from autoresearch_quality_contracts import phase_binding, validate_policy
 from autoresearch_stage_contracts import (
     STATE_VERSION_V3,
     canonical_sha256,
+    geometry_references,
     validate_resolved_stage_targets,
     validate_stage_contract,
 )
@@ -149,6 +150,7 @@ def _load_v3_stage_contract(
         "semantic_bindings": bindings,
         "measurement_geometries": config.get("measurement_geometries"),
     }
+    contract["geometry_references"] = geometry_references(contract)
     validate_stage_contract(contract)
     validate_resolved_stage_targets(contract)
     return contract

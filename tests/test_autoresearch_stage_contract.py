@@ -14,6 +14,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 from autoresearch_stage_contracts import (
     StageContractError,
     canonical_sha256,
+    geometry_references,
     reference_strategy,
     validate_disposition,
     validate_stage_contract,
@@ -78,7 +79,7 @@ def _strategy() -> dict:
 
 def _contract() -> dict:
     strategy = _strategy()
-    return {
+    contract = {
         "contract_version": "bbb_autoresearch_stage_contract.v1",
         "programme": "EMA_ANCHOR_A_TO_B",
         "starting_strategy": {
@@ -144,8 +145,11 @@ def _contract() -> dict:
         "measurement_geometries": [
             {"geometry_id": "A-2", "distance": 2},
             {"geometry_id": "A-3", "distance": 3},
+            {"geometry_id": "A-4", "distance": 4},
         ],
     }
+    contract["geometry_references"] = geometry_references(contract)
+    return contract
 
 
 def _state(stage: str = "A_BASELINE") -> dict:
@@ -659,3 +663,75 @@ def test_v3_prompts_receive_compact_exact_stage_controls(tmp_path: Path) -> None
         assert '"geometry_id": "A-2"' in prompt
     assert "does not optimize exits" in planning
     assert "B3 is optional" in planning
+
+
+def test_geometry_references_published_for_every_sanctioned_a_baseline_geometry() -> None:
+    # Harness contract fix: the planning worker must be able to read its
+    # A_BASELINE geometry's canonical reference hash straight from state,
+    # never compute it, so state.stage_contract must publish one entry per
+    # configured geometry (A-2/A-3/A-4 for the approved template).
+    contract = _contract()
+    published = {item["geometry_id"]: item["resolved_sha256"] for item in contract["geometry_references"]}
+    assert set(published) == {"A-2", "A-3", "A-4"}
+    for geometry_id, resolved_sha256 in published.items():
+        assert resolved_sha256 == canonical_sha256(
+            reference_strategy({"stage_contract": contract}, geometry_id)
+        )
+
+
+def test_geometry_references_matches_canonical_reference_strategy_computation() -> None:
+    # No second independent implementation: geometry_references() must be
+    # produced by the exact same reference_strategy()/canonical_sha256()
+    # pair the supervisor re-runs during validate_stage_request().
+    contract = _contract()
+    for geometry_id in ("A-2", "A-3", "A-4"):
+        expected = canonical_sha256(reference_strategy({"stage_contract": contract}, geometry_id))
+        published = next(
+            item["resolved_sha256"]
+            for item in contract["geometry_references"]
+            if item["geometry_id"] == geometry_id
+        )
+        assert published == expected
+
+
+def test_planner_can_build_candidate_using_only_published_state_metadata() -> None:
+    # The worker never needs to execute reference_strategy()/canonical_sha256()
+    # itself: state.stage_contract.geometry_references already carries the
+    # exact hash it must echo into stage_context.reference_strategy_sha256,
+    # and a canonical candidate built from public state alone is accepted.
+    state = _state()
+    geometry_id = "A-3"
+    published_hash = next(
+        item["resolved_sha256"]
+        for item in state["stage_contract"]["geometry_references"]
+        if item["geometry_id"] == geometry_id
+    )
+    plan = _plan(state, geometry_id)
+    assert plan["stage_context"]["reference_strategy_sha256"] == published_hash
+    strategy = reference_strategy(state, geometry_id)
+    validate_stage_request(_request(strategy), plan, state)
+
+
+def test_forged_geometry_reference_hash_is_rejected_by_stage_contract_validation() -> None:
+    # Publishing the expected hash never replaces independent supervisor
+    # verification: a tampered geometry_references entry fails closed at
+    # freeze time.
+    contract = _contract()
+    contract["geometry_references"][0]["resolved_sha256"] = "0" * 64
+    with pytest.raises(StageContractError, match="inconsistent"):
+        validate_stage_contract(contract)
+
+
+def test_forged_candidate_hash_is_rejected_despite_correct_published_reference() -> None:
+    # A candidate that doesn't actually match the published/canonical
+    # reference is still rejected at request-validation time, independent of
+    # what geometry_references claims.
+    state = _state()
+    strategy = reference_strategy(state, "A-2")
+    tampered = copy.deepcopy(strategy)
+    tampered["raw_spec"]["trade_management"]["exit_policy"]["always_on"]["exits"][0]["distance"][
+        "multiplier"
+    ] = 999
+    plan = _plan(state, "A-2")
+    with pytest.raises(StageContractError, match="differs from configured/reference geometry"):
+        validate_stage_request(_request(tampered), plan, state)

@@ -64,6 +64,10 @@ if mode == "uv_lock":
     (result_path.parent / "uv.lock").write_text("lock")
 if mode == "shim":
     (result_path.parent / "sitecustomize.py").write_text("# shim")
+if mode == "py_scratch" and stage == "planning":
+    analysis = result_path.parent / "planning_analysis"
+    analysis.mkdir(exist_ok=True)
+    (analysis / "compute_hash.py").write_text("print('scratch')")
 if mode == "market_db":
     (result_path.parent / "market.sqlite3").write_bytes(b"db")
 if mode == "mutate_state":
@@ -601,6 +605,29 @@ def test_stage_output_boundary_rejects_dependency_shim_and_raw_db(
     )
     assert (root / "iterations/0001" / filename).exists()
     assert "output boundary violation" in load_json(root / "state.json")["stop_reason"]
+
+
+def test_planning_output_boundary_still_rejects_python_scratch_files(tmp_path: Path) -> None:
+    # Regression guard for the geometry_references fix: the harness contract
+    # bug is fixed by publishing sanctioned per-geometry hashes into state,
+    # not by loosening what a planning worker is allowed to write. A worker
+    # that still writes a .py scratch file under planning_analysis/ (e.g. to
+    # try computing a hash itself) must still be hard-stopped exactly as
+    # before.
+    repo, root = _repo(tmp_path)
+    assert (
+        run_supervisor(
+            session_id="s1",
+            agent_command=_command(repo, "py_scratch"),
+            repo_root=repo,
+            max_agent_failures=1,
+        )
+        == 2
+    )
+    assert (root / "iterations/0001/planning_analysis/compute_hash.py").exists()
+    stop_reason = load_json(root / "state.json")["stop_reason"]
+    assert "output boundary violation" in stop_reason
+    assert "planning_analysis/compute_hash.py" in stop_reason
 
 
 def test_worker_cannot_modify_durable_session_state(tmp_path: Path) -> None:
