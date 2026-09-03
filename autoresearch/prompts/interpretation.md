@@ -17,6 +17,8 @@ For non-batch actions those three values are `NONE`; use only permitted existing
 referenced by the frozen plan. Write the existing iteration contract at `{result_path}`, conforming
 to `{result_schema_path}`. You may write declared textual/JSON analysis only under `{analysis_dir}`.
 
+{experiment_id_authority_note}
+
 Before writing `bbb_research_quality_assessment.v1`, apply this exact `EvidenceRef` cheat-sheet. All
 six object keys (`kind`, `claim_id`, `candidate_id`, `metric_path`, `iteration_id`, `analysis_path`)
 remain required by the schema; a field described as forbidden must be `null`, not omitted:

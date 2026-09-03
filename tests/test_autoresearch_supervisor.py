@@ -242,6 +242,35 @@ def test_interpretation_prompt_allowlist_uses_contract_layer(
     assert "`contract.probe`" in prompt
 
 
+def test_interpretation_prompt_names_execution_receipt_as_experiment_id_authority(
+    tmp_path: Path,
+) -> None:
+    # Regression for the double-prefix contract defect: after freeze,
+    # execution_plan.json is no longer authoritative for the executed
+    # experiment_id, only the execution receipt is. The worker must be told
+    # this explicitly, not left to infer it.
+    state = {
+        "session_id": "s1",
+        "skill_path": ".claude/skills/ema-anchor-edge-research/SKILL.md",
+        "iteration": 1,
+        "contract_version": "bbb_autoresearch_state.v2",
+    }
+    iteration_root = tmp_path
+    receipt_path = iteration_root / "execution_receipt.json"
+
+    prompt = render_interpretation_prompt(state, Path(__file__).parents[1], iteration_root, "batch")
+
+    assert "experiment.experiment_id" in prompt
+    assert str(receipt_path) in prompt
+    assert "no longer authoritative" in prompt
+    assert "Never compute, reconstruct, or otherwise derive this value yourself." in prompt
+
+    non_batch_prompt = render_interpretation_prompt(
+        state, Path(__file__).parents[1], iteration_root, "artifact_diagnostic"
+    )
+    assert "must be copied verbatim from" not in non_batch_prompt
+
+
 def test_fresh_invocation_continues_then_completes(tmp_path: Path) -> None:
     repo, root = _repo(tmp_path)
     code = run_supervisor(
@@ -868,6 +897,44 @@ def test_session_scoped_experiment_id_is_deterministic_within_a_session() -> Non
     first = _session_scoped_experiment_id("session-one", "a-baseline-geometry-a2")
     second = _session_scoped_experiment_id("session-one", "a-baseline-geometry-a2")
     assert first == second
+
+
+def test_session_scoped_experiment_id_is_idempotent_for_a_self_namespaced_logical_id() -> None:
+    # Regression for the double-prefix contract defect observed in a
+    # controlled HOST smoke: a planning worker that independently decided
+    # to include the session_id in its own "logical" experiment_id (e.g.
+    # "smoke-v3-2026-09-03f-i0001-a-baseline-a2") must not be scoped again
+    # on top -- scoping the already-scoped result must be a no-op.
+    session_id = "smoke-v3-2026-09-03f"
+    self_namespaced_logical_id = f"{session_id}-i0001-a-baseline-a2"
+    once = _session_scoped_experiment_id(session_id, self_namespaced_logical_id)
+    assert once == self_namespaced_logical_id
+    twice = _session_scoped_experiment_id(session_id, once)
+    assert twice == once
+
+
+def test_session_scoped_experiment_id_idempotency_does_not_weaken_cross_session_uniqueness() -> None:
+    # Idempotency must not come at the cost of collision protection: a
+    # logical id that happens to already start with a *different* session's
+    # prefix is still scoped normally under the current session.
+    logical_id = "session-a-a-baseline-a2"
+    scoped_under_a = _session_scoped_experiment_id("session-a", logical_id)
+    scoped_under_b = _session_scoped_experiment_id("session-b", logical_id)
+    assert scoped_under_a == logical_id
+    assert scoped_under_b == "session-b-session-a-a-baseline-a2"
+    assert scoped_under_a != scoped_under_b
+
+
+def test_with_canonical_experiment_id_is_idempotent() -> None:
+    plan = _batch_plan(
+        {"trade_management": {"exit_management": {}}}, worker_managed_policy_enabled=False
+    )
+    plan["canonical_request"]["experiment_id"] = "s1-exp-1"
+    request = BatchExperimentRequest.model_validate(plan["canonical_request"])
+    scoped_once = _with_canonical_experiment_id(request, "s1")
+    scoped_twice = _with_canonical_experiment_id(scoped_once, "s1")
+    assert scoped_once.experiment_id == "s1-exp-1"
+    assert scoped_twice.experiment_id == "s1-exp-1"
 
 
 def test_with_canonical_experiment_id_scopes_request_without_dropping_logical_label() -> None:

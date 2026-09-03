@@ -333,8 +333,21 @@ def _session_scoped_experiment_id(session_id: str, logical_experiment_id: str) -
     the same way (e.g. "a-baseline-geometry-a2") must not collide with an
     unrelated session's artifacts. The logical label is preserved verbatim
     as a suffix, never discarded -- only namespacing is added; a worker can
-    still recover it by stripping the known `{session_id}-` prefix."""
-    return f"{session_id}-{logical_experiment_id}"
+    still recover it by stripping the known `{session_id}-` prefix.
+
+    Idempotent: a planning worker that already self-namespaced its logical
+    id with this exact session's id (e.g. it independently decided to
+    include `session_id` in a "unique-sounding" label) must not be double-
+    prefixed -- that observably happened in a controlled HOST smoke and
+    produced a canonical id the interpretation worker's own copy of the
+    logical id no longer matched. Same session + same logical id (already
+    scoped or not) always yields the same canonical id; different sessions
+    with the same logical id still yield different canonical ids, since the
+    prefix check is anchored to *this* session_id specifically."""
+    prefix = f"{session_id}-"
+    if logical_experiment_id.startswith(prefix):
+        return logical_experiment_id
+    return f"{prefix}{logical_experiment_id}"
 
 
 def _with_canonical_experiment_id(
@@ -1483,6 +1496,18 @@ def render_interpretation_prompt(
             )
             if state["contract_version"] == STATE_VERSION_V3
             else "Legacy session: no typed stage contract."
+        ),
+        "experiment_id_authority_note": (
+            "For a `batch` action, `experiment.experiment_id` in your result MUST be copied "
+            "verbatim from `{receipt_path}`'s own `experiment_id` field -- the supervisor may "
+            "have namespaced it beyond what `{plan_path}` shows, so the frozen plan is no "
+            "longer authoritative for this one field after freeze. Never compute, reconstruct, "
+            "or otherwise derive this value yourself.".format(
+                receipt_path=iteration_root / "execution_receipt.json",
+                plan_path=iteration_root / "execution_plan.json",
+            )
+            if batch
+            else ""
         ),
     }
     return _render_stage_prompt("interpretation.md", state, root, iteration_root, values)
