@@ -26,10 +26,12 @@ import autoresearch_supervisor as supervisor_module  # noqa: E402
 from autoresearch_supervisor import (  # noqa: E402
     ContractError,
     _advance_state,
+    _candidate_requires_managed_replay,
     _command_args,
     _freeze_plan,
     _journal_event,
     _sha256,
+    _with_derived_managed_policy_enabled,
     append_journal,
     atomic_write_json,
     load_json,
@@ -708,6 +710,136 @@ def _canonical_batch_artifact(tmp_path: Path, hashes: tuple[str, ...] = ("market
     return Path(persisted.artifact_path)
 
 
+def _batch_plan(strategy_raw_spec: dict[str, object], *, worker_managed_policy_enabled: bool) -> dict[str, object]:
+    return {
+        "contract_version": "bbb_autoresearch_execution_plan.v1",
+        "session_id": "s1",
+        "iteration_id": 1,
+        "phase": "baseline",
+        "hypothesis": "test hypothesis",
+        "question": "what next?",
+        "market_property_proxy": "test proxy",
+        "competing_explanation": "alternative",
+        "action": "batch",
+        "canonical_request": {
+            "experiment_id": "exp-1",
+            "strategy_id": "ema_pullback",
+            "range_policy": "explicit_range",
+            "range": {"from_ms": 0, "to_ms": 300000},
+            "description": None,
+            "candidates": [
+                {
+                    "candidate_id": "c1",
+                    "strategy": {
+                        "enabled": True,
+                        "strategy_id": "ema_pullback",
+                        "ticker": "BTCUSDT.P",
+                        "base_timeframe": "5m",
+                        "raw_spec": strategy_raw_spec,
+                    },
+                    "managed_policy_enabled": worker_managed_policy_enabled,
+                    "execution": {
+                        "entry_price_source": "signal_bar_close",
+                        "entry_slippage_rate": "0",
+                        "protection_anchor": "signal_bar_close",
+                    },
+                    "accounting": {
+                        "initial_equity": "10000",
+                        "entry_fee_rate": "0",
+                        "exit_fee_rate": "0",
+                    },
+                    "metadata": {},
+                }
+            ],
+        },
+        "explanatory_metadata": {},
+        "hard_stop_reason": None,
+    }
+
+
+def test_candidate_requires_managed_replay_is_false_for_naked_exit_management() -> None:
+    plan = _batch_plan(
+        {"trade_management": {"exit_management": {}}}, worker_managed_policy_enabled=True
+    )
+    request = BatchExperimentRequest.model_validate(plan["canonical_request"])
+    assert _candidate_requires_managed_replay(request.candidates[0]) is False
+
+
+def test_candidate_requires_managed_replay_is_true_for_explicit_managed_mode() -> None:
+    plan = _batch_plan(
+        {"trade_management": {"exit_management": {"mode": "managed"}}},
+        worker_managed_policy_enabled=False,
+    )
+    request = BatchExperimentRequest.model_validate(plan["canonical_request"])
+    assert _candidate_requires_managed_replay(request.candidates[0]) is True
+
+
+def test_with_derived_managed_policy_enabled_overrides_worker_value() -> None:
+    # Worker wrote managed_policy_enabled=True for a naked (non-managed)
+    # candidate -- the derived value must win regardless.
+    plan = _batch_plan(
+        {"trade_management": {"exit_management": {}}}, worker_managed_policy_enabled=True
+    )
+    request = BatchExperimentRequest.model_validate(plan["canonical_request"])
+    derived = _with_derived_managed_policy_enabled(request)
+    assert derived.candidates[0].managed_policy_enabled is False
+
+    # And the reverse: worker wrote False for a genuinely managed candidate.
+    plan = _batch_plan(
+        {"trade_management": {"exit_management": {"mode": "managed"}}},
+        worker_managed_policy_enabled=False,
+    )
+    request = BatchExperimentRequest.model_validate(plan["canonical_request"])
+    derived = _with_derived_managed_policy_enabled(request)
+    assert derived.candidates[0].managed_policy_enabled is True
+
+
+def test_freeze_plan_writes_explicit_managed_policy_enabled_for_naked_candidate(
+    tmp_path: Path,
+) -> None:
+    repo, root = _repo(tmp_path)
+    state = load_json(root / "state.json")
+    iteration = root / "iterations/0001"
+    iteration.mkdir(parents=True)
+    # The worker plan omits exit_management.mode (naked baseline fixture
+    # shape) and leaves managed_policy_enabled unset in its own JSON --
+    # Pydantic's bare `BatchCandidateRequest.managed_policy_enabled` default
+    # is True, so an unmodified freeze would silently inherit that default.
+    plan = _batch_plan(
+        {
+            "anchor_stack": {"anchor": {"period": 200}},
+            "trade_management": {"exit_management": {}},
+        },
+        worker_managed_policy_enabled=True,
+    )
+    _freeze_plan(
+        iteration / "execution_plan.json", iteration / "iteration_control.json", plan, state
+    )
+    frozen = load_json(iteration / "canonical_request.json")
+    assert frozen["candidates"][0]["managed_policy_enabled"] is False
+
+
+def test_freeze_plan_writes_explicit_managed_policy_enabled_for_managed_candidate(
+    tmp_path: Path,
+) -> None:
+    repo, root = _repo(tmp_path)
+    state = load_json(root / "state.json")
+    iteration = root / "iterations/0001"
+    iteration.mkdir(parents=True)
+    plan = _batch_plan(
+        {
+            "anchor_stack": {"anchor": {"period": 200}},
+            "trade_management": {"exit_management": {"mode": "managed"}},
+        },
+        worker_managed_policy_enabled=False,
+    )
+    _freeze_plan(
+        iteration / "execution_plan.json", iteration / "iteration_control.json", plan, state
+    )
+    frozen = load_json(iteration / "canonical_request.json")
+    assert frozen["candidates"][0]["managed_policy_enabled"] is True
+
+
 def _batch_iteration(artifact: Path) -> dict[str, object]:
     result = _valid_worker_result_for_test()
     result["experiment"] = {
@@ -787,6 +919,92 @@ def test_valid_canonical_batch_artifact_is_accepted(
     artifact = _canonical_batch_artifact(tmp_path)
     monkeypatch.setenv("RESEARCH_ARTIFACTS_ROOT", str(tmp_path / "artifacts"))
     validate_iteration_result(_batch_iteration(artifact), _session_state(tmp_path / "repo"))
+
+
+_EXPERIMENT_SCHEMA_FILES = (
+    "iteration_result.schema.json",
+    "iteration_result.v2.schema.json",
+    "iteration_result.v3.schema.json",
+)
+
+
+def _experiment_schema_shape(schema_filename: str) -> dict[str, object]:
+    schema_path = Path(__file__).parents[1] / "autoresearch/schemas" / schema_filename
+    schema = json.loads(schema_path.read_text())
+    experiment = schema["properties"]["experiment"]
+    if "$ref" in experiment:
+        ref = experiment["$ref"].removeprefix("#/$defs/")
+        experiment = schema["$defs"][ref]
+    return experiment
+
+
+def test_experiment_schema_required_keys_match_supervisor_exact_keys() -> None:
+    # Anti-divergence guard for the harness contract bug: the schema each
+    # interpretation worker is told to conform to, and the supervisor's own
+    # runtime `_require_exact_keys(experiment, _EXPERIMENT_KEYS, ...)` check,
+    # must declare the exact same `experiment` field set. If either changes
+    # without the other, this test catches it before a worker does.
+    for schema_filename in _EXPERIMENT_SCHEMA_FILES:
+        experiment = _experiment_schema_shape(schema_filename)
+        assert experiment.get("additionalProperties") is False, schema_filename
+        assert set(experiment["required"]) == supervisor_module._EXPERIMENT_KEYS, schema_filename
+        assert set(experiment["properties"]) == supervisor_module._EXPERIMENT_KEYS, schema_filename
+
+
+def test_canonical_experiment_shape_is_accepted(tmp_path: Path) -> None:
+    result = _valid_worker_result_for_test()
+    result["experiment"] = {
+        "kind": "none",
+        "experiment_id": None,
+        "axes": [],
+        "candidate_ids": [],
+        "candidate_count": 0,
+        "window_policy": None,
+        "strategy_context": {"strategy_id": "ema_pullback"},
+        "execution_accounting_assumptions": None,
+    }
+    result["execution_result"] = {
+        "batch_artifact_path": None,
+        "run_ids": [],
+        "market_data_hash": None,
+        "completed_candidates": 0,
+        "failed_candidates": 0,
+        "analysis_path": None,
+    }
+    validate_iteration_result(result, _session_state(tmp_path / "repo"))
+
+
+def test_experiment_missing_required_field_is_rejected(tmp_path: Path) -> None:
+    result = _valid_worker_result_for_test()
+    result["experiment"] = {
+        "kind": "none",
+        "experiment_id": None,
+        "axes": [],
+        "candidate_ids": [],
+        "candidate_count": 0,
+        "window_policy": None,
+        "strategy_context": {"strategy_id": "ema_pullback"},
+        # execution_accounting_assumptions omitted
+    }
+    with pytest.raises(ContractError, match="experiment fields differ"):
+        validate_iteration_result(result, _session_state(tmp_path / "repo"))
+
+
+def test_experiment_extra_field_is_rejected(tmp_path: Path) -> None:
+    result = _valid_worker_result_for_test()
+    result["experiment"] = {
+        "kind": "none",
+        "experiment_id": None,
+        "axes": [],
+        "candidate_ids": [],
+        "candidate_count": 0,
+        "window_policy": None,
+        "strategy_context": {"strategy_id": "ema_pullback"},
+        "execution_accounting_assumptions": None,
+        "geometry_id": "A-2",
+    }
+    with pytest.raises(ContractError, match="experiment fields differ"):
+        validate_iteration_result(result, _session_state(tmp_path / "repo"))
 
 
 def test_valid_looking_session_bundle_is_rejected(tmp_path: Path) -> None:

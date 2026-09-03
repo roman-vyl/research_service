@@ -295,6 +295,34 @@ def _sha256(path: Path) -> str:
         raise ContractError(f"cannot hash {path}: {exc}") from exc
 
 
+def _candidate_requires_managed_replay(candidate: Any) -> bool:
+    """Mirror Strategy Engine's own managed-replay gate
+    (`exit_management.mode == "managed"`, `strategy_engine/.../managed.py`
+    `_evaluate_managed_replay_core`): a candidate only needs the managed-
+    replay path when its own strategy spec declares managed exit-management
+    logic. AutoResearch never leaves this to the Research Service
+    `managed_policy_enabled` Pydantic default (`True`); it is always
+    computed here, deterministically, from the frozen candidate strategy."""
+    raw_spec = candidate.strategy.raw_spec
+    trade_management = raw_spec.get("trade_management")
+    if not isinstance(trade_management, dict):
+        return False
+    exit_management = trade_management.get("exit_management")
+    if not isinstance(exit_management, dict):
+        return False
+    return exit_management.get("mode") == "managed"
+
+
+def _with_derived_managed_policy_enabled(request: BatchExperimentRequest) -> BatchExperimentRequest:
+    candidates = tuple(
+        candidate.model_copy(
+            update={"managed_policy_enabled": _candidate_requires_managed_replay(candidate)}
+        )
+        for candidate in request.candidates
+    )
+    return request.model_copy(update={"candidates": candidates})
+
+
 def validate_execution_plan(
     plan: dict[str, Any], state: dict[str, Any]
 ) -> BatchExperimentRequest | None:
@@ -343,6 +371,7 @@ def validate_execution_plan(
         request = BatchExperimentRequest.model_validate(plan["canonical_request"])
     except ValidationError as exc:
         raise ContractError(f"invalid canonical batch request: {exc}") from exc
+    request = _with_derived_managed_policy_enabled(request)
     budget = state["budgets"].get("max_candidates_per_iteration")
     if budget is not None and len(request.candidates) > budget:
         raise ContractError("canonical request candidate count exceeds session budget")
