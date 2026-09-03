@@ -323,6 +323,38 @@ def _with_derived_managed_policy_enabled(request: BatchExperimentRequest) -> Bat
     return request.model_copy(update={"candidates": candidates})
 
 
+def _session_scoped_experiment_id(session_id: str, logical_experiment_id: str) -> str:
+    """Canonical execution/storage experiment identity: the worker-chosen
+    logical `experiment_id`, namespaced by `session_id`. Batch artifact
+    storage (`FilesystemArtifactStore.write_batch_bundle`, keyed on
+    `BatchExperimentRequest.experiment_id`) is a global, session-agnostic
+    directory keyed on this one field, so a readable scientific label an
+    independent planning worker in a different session happens to choose
+    the same way (e.g. "a-baseline-geometry-a2") must not collide with an
+    unrelated session's artifacts. The logical label is preserved verbatim
+    as a suffix, never discarded -- only namespacing is added; a worker can
+    still recover it by stripping the known `{session_id}-` prefix."""
+    return f"{session_id}-{logical_experiment_id}"
+
+
+def _with_canonical_experiment_id(
+    request: BatchExperimentRequest, session_id: str
+) -> BatchExperimentRequest:
+    scoped = request.model_copy(
+        update={
+            "experiment_id": _session_scoped_experiment_id(session_id, request.experiment_id)
+        }
+    )
+    try:
+        # model_copy does not revalidate; round-trip through model_validate
+        # so a scoped id that violates BatchExperimentRequest's own
+        # experiment_id pattern/length constraint fails closed here, rather
+        # than silently freezing a request the executor would reject later.
+        return BatchExperimentRequest.model_validate(scoped.model_dump(mode="json"))
+    except ValidationError as exc:
+        raise ContractError(f"session-scoped experiment_id is invalid: {exc}") from exc
+
+
 def validate_execution_plan(
     plan: dict[str, Any], state: dict[str, Any]
 ) -> BatchExperimentRequest | None:
@@ -372,6 +404,7 @@ def validate_execution_plan(
     except ValidationError as exc:
         raise ContractError(f"invalid canonical batch request: {exc}") from exc
     request = _with_derived_managed_policy_enabled(request)
+    request = _with_canonical_experiment_id(request, state["session_id"])
     budget = state["budgets"].get("max_candidates_per_iteration")
     if budget is not None and len(request.candidates) > budget:
         raise ContractError("canonical request candidate count exceeds session budget")

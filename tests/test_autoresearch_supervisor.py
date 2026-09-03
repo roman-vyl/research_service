@@ -30,7 +30,9 @@ from autoresearch_supervisor import (  # noqa: E402
     _command_args,
     _freeze_plan,
     _journal_event,
+    _session_scoped_experiment_id,
     _sha256,
+    _with_canonical_experiment_id,
     _with_derived_managed_policy_enabled,
     append_journal,
     atomic_write_json,
@@ -144,7 +146,7 @@ result = {
 if mode in {"terminal", "hard_stop"}:
     result["experiment"]["kind"] = "none"
 if mode == "batch":
-    result["experiment"].update(kind="batch", experiment_id="exp-1", candidate_ids=["c1"], candidate_count=1,
+    result["experiment"].update(kind="batch", experiment_id=receipt["experiment_id"], candidate_ids=["c1"], candidate_count=1,
       window_policy={"range_policy": "explicit_range"}, execution_accounting_assumptions={})
     result["execution_result"].update(batch_artifact_path=receipt["batch_artifact_path"], run_ids=["run_1"],
       market_data_hash="market-hash", completed_candidates=1)
@@ -356,9 +358,10 @@ def test_supervisor_owned_batch_flow_creates_and_binds_receipt(
 ) -> None:
     repo, root = _repo(tmp_path / "repo")
     artifacts_root = tmp_path / "artifacts"
-    artifact = _canonical_batch_artifact(tmp_path)
-    # Helper persists at <tmp>/artifacts/batches/exp-1.
-    assert artifact == artifacts_root / "batches/exp-1"
+    # FAKE_AGENT's plan uses logical experiment_id "exp-1" for session "s1";
+    # the supervisor session-scopes it to "s1-exp-1" before freezing.
+    artifact = _canonical_batch_artifact(tmp_path, experiment_id="s1-exp-1")
+    assert artifact == artifacts_root / "batches/s1-exp-1"
     monkeypatch.setenv("RESEARCH_ARTIFACTS_ROOT", str(artifacts_root))
     monkeypatch.setenv("RESEARCH_CONFIGS_ROOT", str(tmp_path / "configs"))
     monkeypatch.setenv("RESEARCH_STRATEGY_ENGINE_URL", "http://canonical-engine")
@@ -396,7 +399,7 @@ def test_supervisor_owned_batch_flow_creates_and_binds_receipt(
     )
     iteration = root / "iterations/0001"
     receipt = load_json(iteration / "execution_receipt.json")
-    assert receipt["experiment_id"] == "exp-1"
+    assert receipt["experiment_id"] == "s1-exp-1"
     assert receipt["candidate_ids"] == ["c1"]
     assert receipt["batch_artifact_path"] == str(artifact)
     assert observed_executor_env["RESEARCH_STRATEGY_ENGINE_URL"] == "http://canonical-engine"
@@ -514,7 +517,9 @@ def test_recover_completed_batch_output_does_not_rerun_executor(
 ) -> None:
     repo, root = _repo(tmp_path / "repo")
     state = load_json(root / "state.json")
-    artifact = _canonical_batch_artifact(tmp_path)
+    # FAKE_AGENT's plan uses logical experiment_id "exp-1" for session "s1";
+    # the supervisor session-scopes it to "s1-exp-1" before freezing.
+    artifact = _canonical_batch_artifact(tmp_path, experiment_id="s1-exp-1")
     monkeypatch.setenv("RESEARCH_ARTIFACTS_ROOT", str(tmp_path / "artifacts"))
     iteration = root / "iterations/0001"
     iteration.mkdir(parents=True)
@@ -682,9 +687,11 @@ def test_cancellation_and_budget_launch_no_worker(tmp_path: Path) -> None:
     assert not any((root / "iterations").iterdir())
 
 
-def _canonical_batch_artifact(tmp_path: Path, hashes: tuple[str, ...] = ("market-hash",)) -> Path:
+def _canonical_batch_artifact(
+    tmp_path: Path, hashes: tuple[str, ...] = ("market-hash",), *, experiment_id: str = "exp-1"
+) -> Path:
     request = BatchExperimentRequest(
-        experiment_id="exp-1",
+        experiment_id=experiment_id,
         strategy_id="ema_pullback",
         range=ExplicitRange(from_ms=0, to_ms=300_000),
         candidates=tuple(
@@ -724,7 +731,7 @@ def _canonical_batch_artifact(tmp_path: Path, hashes: tuple[str, ...] = ("market
         for index, market_hash in enumerate(hashes, start=1)
     )
     result = BatchExperimentResult(
-        experiment_id="exp-1",
+        experiment_id=experiment_id,
         status="completed",
         candidate_count=len(candidates),
         completed_count=len(candidates),
@@ -844,6 +851,83 @@ def test_freeze_plan_writes_explicit_managed_policy_enabled_for_naked_candidate(
     )
     frozen = load_json(iteration / "canonical_request.json")
     assert frozen["candidates"][0]["managed_policy_enabled"] is False
+
+
+def test_session_scoped_experiment_id_differs_across_sessions_for_same_logical_id() -> None:
+    # The harness contract bug: two independent sessions whose planning
+    # workers both pick the same readable logical experiment_id must never
+    # collide on canonical batch storage.
+    first = _session_scoped_experiment_id("session-one", "a-baseline-geometry-a2")
+    second = _session_scoped_experiment_id("session-two", "a-baseline-geometry-a2")
+    assert first != second
+    assert first == "session-one-a-baseline-geometry-a2"
+    assert second == "session-two-a-baseline-geometry-a2"
+
+
+def test_session_scoped_experiment_id_is_deterministic_within_a_session() -> None:
+    first = _session_scoped_experiment_id("session-one", "a-baseline-geometry-a2")
+    second = _session_scoped_experiment_id("session-one", "a-baseline-geometry-a2")
+    assert first == second
+
+
+def test_with_canonical_experiment_id_scopes_request_without_dropping_logical_label() -> None:
+    plan = _batch_plan(
+        {"trade_management": {"exit_management": {}}}, worker_managed_policy_enabled=False
+    )
+    request = BatchExperimentRequest.model_validate(plan["canonical_request"])
+    assert request.experiment_id == "exp-1"
+    scoped = _with_canonical_experiment_id(request, "s1")
+    assert scoped.experiment_id == "s1-exp-1"
+    # The worker's logical label is preserved verbatim, recoverable by
+    # stripping the known session_id prefix -- never silently discarded.
+    assert scoped.experiment_id.removeprefix("s1-") == request.experiment_id
+
+
+def test_freeze_plan_writes_session_scoped_canonical_experiment_id(tmp_path: Path) -> None:
+    repo, root = _repo(tmp_path)
+    state = load_json(root / "state.json")
+    assert state["session_id"] == "s1"
+    iteration = root / "iterations/0001"
+    iteration.mkdir(parents=True)
+    plan = _batch_plan(
+        {"trade_management": {"exit_management": {}}}, worker_managed_policy_enabled=False
+    )
+    assert plan["canonical_request"]["experiment_id"] == "exp-1"
+    _freeze_plan(
+        iteration / "execution_plan.json", iteration / "iteration_control.json", plan, state
+    )
+    frozen = load_json(iteration / "canonical_request.json")
+    assert frozen["experiment_id"] == "s1-exp-1"
+
+
+def test_same_logical_experiment_id_in_different_sessions_produces_coexisting_artifacts(
+    tmp_path: Path,
+) -> None:
+    # Both artifact paths must coexist; neither write may overwrite the
+    # other, and nothing is deleted to make room.
+    first = _canonical_batch_artifact(
+        tmp_path / "one", experiment_id=_session_scoped_experiment_id("session-one", "exp-1")
+    )
+    second = _canonical_batch_artifact(
+        tmp_path / "one", experiment_id=_session_scoped_experiment_id("session-two", "exp-1")
+    )
+    assert first != second
+    assert first.is_dir()
+    assert second.is_dir()
+    assert (first / "summary.json").is_file()
+    assert (second / "summary.json").is_file()
+
+
+def test_same_session_and_logical_experiment_id_collision_still_fails_closed(
+    tmp_path: Path,
+) -> None:
+    # Collision protection within one session must not be bypassed by the
+    # session-scoping fix: reusing the same canonical (session + logical)
+    # experiment_id still raises rather than overwriting.
+    canonical_id = _session_scoped_experiment_id("s1", "exp-1")
+    _canonical_batch_artifact(tmp_path, experiment_id=canonical_id)
+    with pytest.raises(FileExistsError, match=canonical_id):
+        _canonical_batch_artifact(tmp_path, experiment_id=canonical_id)
 
 
 def test_freeze_plan_writes_explicit_managed_policy_enabled_for_managed_candidate(
