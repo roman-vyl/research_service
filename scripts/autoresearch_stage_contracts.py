@@ -55,6 +55,18 @@ STAGE_PHASES = {
 # defines them, no plan may target either stage: validate_stage_context
 # fails closed rather than silently accepting an undefined contract.
 PROVISIONAL_STAGES = ("C_ENTRY_REGION_SELECTION", "D_EXIT_GEOMETRY")
+# B1_WIDTH and B2_LOOKBACK are independent branches off A_CONTROL (neither is
+# a prerequisite of the other); only B3 -- the interaction stage -- requires
+# both durably closed. This is the single source of truth for causal
+# prerequisites: both validate_stage_context() and the planning prompt
+# (expected_prerequisite_disposition_refs()) read it, so the worker-facing
+# explanation and the mechanical check can never drift apart.
+REQUIRED_STAGES = {
+    "A_CONTROL": set(),
+    "B1_WIDTH": {"A_CONTROL"},
+    "B2_LOOKBACK": {"A_CONTROL"},
+    "B3_WIDTH_X_LOOKBACK": {"A_CONTROL", "B1_WIDTH", "B2_LOOKBACK"},
+}
 DISPOSITIONS = ("in_progress", "characterized", "terminally_rejected")
 
 
@@ -165,6 +177,23 @@ def validate_stage_contract(value: dict[str, Any]) -> dict[str, Any]:
     return value
 
 
+def expected_prerequisite_disposition_refs(stage: str, state: dict[str, Any]) -> list[int]:
+    """The exact `prerequisite_disposition_refs` a plan for `stage` must
+    declare: the durably closed (`characterized`/`terminally_rejected`)
+    disposition iteration_ids whose stage is one of `stage`'s
+    `REQUIRED_STAGES`. Deterministic and side-effect-free so both the
+    validator and the planning prompt can compute the identical value from
+    the same durable state -- the worker is told the exact expected answer,
+    never asked to infer it from schema shape or trial-and-error."""
+    required = REQUIRED_STAGES[stage]
+    accepted = {
+        entry["iteration_id"]: entry["disposition"]["stage"]
+        for entry in state["stage_dispositions"]
+        if entry["disposition"]["status"] in {"characterized", "terminally_rejected"}
+    }
+    return sorted(iteration for iteration, prior_stage in accepted.items() if prior_stage in required)
+
+
 def validate_stage_context(value: dict[str, Any], state: dict[str, Any]) -> None:
     _exact(
         value,
@@ -197,25 +226,8 @@ def validate_stage_context(value: dict[str, Any], state: dict[str, Any]) -> None
         set(value["prerequisite_disposition_refs"])
     ):
         raise StageContractError("prerequisite disposition refs must be unique")
-    required_stages = {
-        "A_CONTROL": set(),
-        "B1_WIDTH": {"A_CONTROL"},
-        # B2_LOOKBACK depends only on A_CONTROL, not on B1_WIDTH: width and
-        # lookback are two independent structural discovery branches, both
-        # starting fresh from the naked control. Running B1 before B2 is
-        # just process serialization, not a causal dependency.
-        "B2_LOOKBACK": {"A_CONTROL"},
-        "B3_WIDTH_X_LOOKBACK": {"A_CONTROL", "B1_WIDTH", "B2_LOOKBACK"},
-    }[stage]
-    accepted = {
-        entry["iteration_id"]: entry["disposition"]["stage"]
-        for entry in state["stage_dispositions"]
-        if entry["disposition"]["status"] in {"characterized", "terminally_rejected"}
-    }
     refs = value["prerequisite_disposition_refs"]
-    if set(refs) != {
-        iteration for iteration, prior_stage in accepted.items() if prior_stage in required_stages
-    }:
+    if set(refs) != set(expected_prerequisite_disposition_refs(stage, state)):
         raise StageContractError(
             "prerequisite disposition refs differ from durable causal prerequisites"
         )

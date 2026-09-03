@@ -52,9 +52,14 @@ the follow-up change that defines those stages' execution semantics (see section
 - [x] 3.1 Update `autoresearch/prompts/planning.md`: new stage names, frozen-control framing
       (Phase A measures once, does not scan or optimize exit geometry; B1/B2/B3 hold that same
       frozen exit fixed).
-- [ ] 3.2 Explain `prerequisite_disposition_refs` semantics explicitly in `planning.md` (closes the
-      gap found in the smoke that motivated this change) -- **not yet done**; the field is
-      non-trivial (non-empty) starting at B1 and the prompt still only renders the raw JSON.
+- [x] 3.2 Explain `prerequisite_disposition_refs` semantics explicitly in `planning.md` (closes the
+      gap found in the smoke that motivated this change) -- done via `_stage_authority_context()`
+      (`scripts/autoresearch_supervisor.py`), which prints the exact stage, mutable/frozen
+      dimensions, and `expected_prerequisite_disposition_refs()` value directly into
+      `{stage_authority_context}` in `planning.md`; B1/B2 additionally get explicit
+      independent-baseline framing, B3 gets explicit evidence-guided joint-search framing. Both the
+      validator and the prompt read the same `REQUIRED_STAGES`/`expected_prerequisite_disposition_refs`
+      source, so they cannot drift.
 - [x] 3.3 Update `autoresearch/program.md`: causal-sequence description corrected to "A control ->
       B1/B2 independent branches -> B3 interaction (requires both)", frozen-control framing,
       version-string fix (`bbb_autoresearch_stage_contract.v2`). The EMA-anchor domain skill

@@ -38,13 +38,16 @@ from autoresearch_quality_contracts import (
     verify_evidence_integrity,
 )
 from autoresearch_stage_contracts import (
+    DIMENSIONS,
     ITERATION_VERSION_V3,
     JOURNAL_VERSION_V3,
     PLAN_VERSION_V2,
     PROVISIONAL_STAGES,
+    STAGE_DIMENSIONS,
     STAGE_PHASES,
     STATE_VERSION_V3,
     StageContractError,
+    expected_prerequisite_disposition_refs,
     validate_disposition,
     validate_stage_context,
     validate_stage_contract,
@@ -1409,6 +1412,45 @@ def _render_stage_prompt(
     return rendered
 
 
+def _stage_authority_context(state: dict[str, Any]) -> str:
+    """Explicit, worker-facing mutable/frozen-dimension and
+    prerequisite-refs authority for the active stage -- computed from the
+    exact same `STAGE_DIMENSIONS`/`expected_prerequisite_disposition_refs`
+    the supervisor validates against, so the worker is told the answer
+    directly rather than left to infer it from schema shape or a rejected
+    attempt."""
+    stage = state["active_stage"]
+    mutable = list(STAGE_DIMENSIONS[stage])
+    frozen = [dimension for dimension in DIMENSIONS if dimension not in mutable]
+    refs = expected_prerequisite_disposition_refs(stage, state)
+    lines = [
+        f"Active stage: {stage}",
+        f"Mutable semantic dimensions for this stage (the only fields you may vary): "
+        f"{mutable if mutable else '(none)'}",
+        f"Frozen semantic dimensions (must stay identical to the frozen control): {frozen}",
+        f"Exact prerequisite_disposition_refs your stage_context MUST declare: {refs}",
+    ]
+    if stage in {"B1_WIDTH", "B2_LOOKBACK"}:
+        lines.append(
+            "B1_WIDTH and B2_LOOKBACK are independent baselines off the frozen A_CONTROL "
+            "strategy: this candidate starts from the naked control and varies only its own "
+            "dimension. B1 does not inherit any lookback choice from B2, and B2 does not "
+            "inherit any width choice from B1 -- the other branch's dispositions/evidence are "
+            "not a prerequisite here."
+        )
+    if stage == "B3_WIDTH_X_LOOKBACK":
+        lines.append(
+            "B3_WIDTH_X_LOOKBACK varies anchor_stack_width and untouched_anchor_lookback "
+            "jointly. Choose the joint search region from the durable evidence already "
+            "recorded for the closed B1_WIDTH and B2_LOOKBACK dispositions (state.stage_dispositions "
+            "above) -- do not simply carry forward one 'winner point' from each unless that "
+            "evidence actually supports doing so. State in your plan how the proposed "
+            "width/lookback ranges follow from the B1 and B2 evidence. Do not modify any field "
+            "outside these two dimensions; exit geometry stays frozen at the A_CONTROL value."
+        )
+    return "\n".join(lines)
+
+
 def render_planning_prompt(
     state: dict[str, Any], root: Path, iteration_root: Path, research_service_base_url: str
 ) -> str:
@@ -1441,6 +1483,11 @@ def render_planning_prompt(
                 )
                 if state["contract_version"] == STATE_VERSION_V3
                 else "Legacy session: no typed stage contract."
+            ),
+            "stage_authority_context": (
+                _stage_authority_context(state)
+                if state["contract_version"] == STATE_VERSION_V3
+                else "Legacy session: no typed stage authority."
             ),
         },
     )

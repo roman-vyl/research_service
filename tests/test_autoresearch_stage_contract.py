@@ -15,6 +15,7 @@ from autoresearch_stage_contracts import (
     STAGE_PHASES,
     StageContractError,
     canonical_sha256,
+    expected_prerequisite_disposition_refs,
     reference_strategy,
     validate_disposition,
     validate_stage_contract,
@@ -694,6 +695,58 @@ def test_v3_prompts_receive_compact_exact_stage_controls(tmp_path: Path) -> None
         assert '"symmetric_measurement_geometry"' in prompt
     assert "not scan or optimize exit geometry" in planning
     assert "B3 is optional" in planning
+    assert "Active stage: A_CONTROL" in planning
+    assert "Mutable semantic dimensions for this stage (the only fields you may vary): (none)" in (
+        planning
+    )
+    assert "Exact prerequisite_disposition_refs your stage_context MUST declare: []" in planning
+
+
+def test_planning_prompt_states_b1_and_b2_independent_baseline_authority(tmp_path: Path) -> None:
+    repository = Path(__file__).resolve().parents[1]
+    for stage, expected_mutable in (("B1_WIDTH", "anchor_stack_width"), ("B2_LOOKBACK", "untouched_anchor_lookback")):
+        state = _state(stage)
+        state.update(
+            contract_version="bbb_autoresearch_state.v3",
+            session_id="prompt-v3",
+            iteration=1,
+            skill_path=".claude/skills/ema-anchor-edge-research/SKILL.md",
+        )
+        planning = render_planning_prompt(state, repository, tmp_path / stage, "http://research")
+        assert f"Active stage: {stage}" in planning
+        assert f"you may vary): ['{expected_mutable}']" in planning
+        assert "independent baselines off the frozen A_CONTROL strategy" in planning
+        assert "B1 does not inherit any lookback choice from B2" in planning
+        expected_refs = expected_prerequisite_disposition_refs(stage, state)
+        assert (
+            f"Exact prerequisite_disposition_refs your stage_context MUST declare: {expected_refs}"
+            in planning
+        )
+
+
+def test_planning_prompt_states_b3_evidence_guided_joint_search_authority(tmp_path: Path) -> None:
+    state = _state("B3_WIDTH_X_LOOKBACK")
+    state.update(
+        contract_version="bbb_autoresearch_state.v3",
+        session_id="prompt-v3",
+        iteration=1,
+        skill_path=".claude/skills/ema-anchor-edge-research/SKILL.md",
+    )
+    repository = Path(__file__).resolve().parents[1]
+    planning = render_planning_prompt(state, repository, tmp_path, "http://research")
+    assert "Active stage: B3_WIDTH_X_LOOKBACK" in planning
+    assert (
+        "you may vary): ['anchor_stack_width', 'untouched_anchor_lookback']" in planning
+    )
+    assert "Choose the joint search region from the durable evidence" in planning
+    assert "do not simply carry forward one 'winner point'" in planning
+    assert "how the proposed width/lookback ranges follow from the B1 and B2 evidence" in planning
+    expected_refs = expected_prerequisite_disposition_refs("B3_WIDTH_X_LOOKBACK", state)
+    assert expected_refs == [1, 2, 3]
+    assert (
+        f"Exact prerequisite_disposition_refs your stage_context MUST declare: {expected_refs}"
+        in planning
+    )
 
 
 def test_forged_candidate_is_rejected_despite_matching_starting_strategy_hash() -> None:
