@@ -921,21 +921,33 @@ def test_valid_canonical_batch_artifact_is_accepted(
     validate_iteration_result(_batch_iteration(artifact), _session_state(tmp_path / "repo"))
 
 
-_EXPERIMENT_SCHEMA_FILES = (
+_ITERATION_RESULT_SCHEMA_FILES = (
     "iteration_result.schema.json",
     "iteration_result.v2.schema.json",
     "iteration_result.v3.schema.json",
 )
 
+# (top-level `iteration_result` property name, matching supervisor exact-keys
+# constant) for every nested object the supervisor validates with
+# `_require_exact_keys` -- kept in one place so the parity guard below covers
+# every one of them, not just `experiment`.
+_NESTED_OBJECT_FIELDS = (
+    ("experiment", "_EXPERIMENT_KEYS"),
+    ("execution_result", "_EXECUTION_RESULT_KEYS"),
+    ("observed_response", "_OBSERVED_RESPONSE_KEYS"),
+    ("side_interpretation", "_SIDE_INTERPRETATION_KEYS"),
+    ("risk_assessment", "_RISK_ASSESSMENT_KEYS"),
+)
 
-def _experiment_schema_shape(schema_filename: str) -> dict[str, object]:
+
+def _nested_object_schema_shape(schema_filename: str, field_name: str) -> dict[str, object]:
     schema_path = Path(__file__).parents[1] / "autoresearch/schemas" / schema_filename
     schema = json.loads(schema_path.read_text())
-    experiment = schema["properties"]["experiment"]
-    if "$ref" in experiment:
-        ref = experiment["$ref"].removeprefix("#/$defs/")
-        experiment = schema["$defs"][ref]
-    return experiment
+    shape = schema["properties"][field_name]
+    if "$ref" in shape:
+        ref = shape["$ref"].removeprefix("#/$defs/")
+        shape = schema["$defs"][ref]
+    return shape
 
 
 def test_experiment_schema_required_keys_match_supervisor_exact_keys() -> None:
@@ -944,11 +956,26 @@ def test_experiment_schema_required_keys_match_supervisor_exact_keys() -> None:
     # runtime `_require_exact_keys(experiment, _EXPERIMENT_KEYS, ...)` check,
     # must declare the exact same `experiment` field set. If either changes
     # without the other, this test catches it before a worker does.
-    for schema_filename in _EXPERIMENT_SCHEMA_FILES:
-        experiment = _experiment_schema_shape(schema_filename)
+    for schema_filename in _ITERATION_RESULT_SCHEMA_FILES:
+        experiment = _nested_object_schema_shape(schema_filename, "experiment")
         assert experiment.get("additionalProperties") is False, schema_filename
         assert set(experiment["required"]) == supervisor_module._EXPERIMENT_KEYS, schema_filename
         assert set(experiment["properties"]) == supervisor_module._EXPERIMENT_KEYS, schema_filename
+
+
+def test_all_nested_result_objects_schema_matches_supervisor_exact_keys() -> None:
+    # Same guard as above, generalized to every other iteration_result nested
+    # object the supervisor enforces exact keys on -- execution_result,
+    # observed_response, side_interpretation, risk_assessment previously had
+    # the same bare-{"type": "object"} regression in the v3 schema as
+    # experiment did.
+    for field_name, keys_attr in _NESTED_OBJECT_FIELDS:
+        expected = getattr(supervisor_module, keys_attr)
+        for schema_filename in _ITERATION_RESULT_SCHEMA_FILES:
+            shape = _nested_object_schema_shape(schema_filename, field_name)
+            assert shape.get("additionalProperties") is False, (schema_filename, field_name)
+            assert set(shape["required"]) == expected, (schema_filename, field_name)
+            assert set(shape["properties"]) == expected, (schema_filename, field_name)
 
 
 def test_canonical_experiment_shape_is_accepted(tmp_path: Path) -> None:
