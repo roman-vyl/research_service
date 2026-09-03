@@ -9,7 +9,7 @@
     "research_program": {"const": "ema-anchor-edge-research"},
     "skill_path": {"type": "string", "minLength": 1},
     "phase": {"const": "baseline"},
-    "active_stage": {"const": "A_BASELINE"},
+    "active_stage": {"const": "A_CONTROL"},
     "research_quality_policy": {"$ref": "research_quality_policy.schema.json"},
     "stage_contract": {
       "type": "object", "additionalProperties": false,

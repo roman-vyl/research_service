@@ -962,8 +962,8 @@ def validate_state(state: dict[str, Any]) -> None:
                 g["geometry_id"] for g in state["stage_contract"]["measurement_geometries"]
             }
             completed = {r["geometry_id"] for r in state["phase_a_references"]}
-            if state["active_stage"] != "A_BASELINE" and (
-                configured != completed or "A_BASELINE" not in closed
+            if state["active_stage"] != "A_CONTROL" and (
+                configured != completed or "A_CONTROL" not in closed
             ):
                 raise StageContractError(
                     "B stages require a complete, closed Phase-A reference line"
@@ -1736,7 +1736,7 @@ def _advance_state(
         )
         plan = load_json(plan_path)
         geometry_id = plan["stage_context"]["geometry_id"]
-        if active_stage == "A_BASELINE" and result["experiment"]["kind"] == "batch":
+        if active_stage == "A_CONTROL" and result["experiment"]["kind"] == "batch":
             summary = _verify_batch_artifact(result)
             completed = [item for item in summary.candidates if item.status == "completed"]
             if len(completed) != 1:
@@ -1769,7 +1769,7 @@ def _advance_state(
             )
         next_stage = active_stage
         if disposition["status"] in {"characterized", "terminally_rejected"}:
-            if active_stage == "A_BASELINE":
+            if active_stage == "A_CONTROL":
                 configured = {
                     g["geometry_id"] for g in state["stage_contract"]["measurement_geometries"]
                 }

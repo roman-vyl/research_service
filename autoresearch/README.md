@@ -163,7 +163,7 @@ The checked-in controlled input is
 operator-approved naked EMA100/EMA200/EMA500 fixture at
 `autoresearch/fixtures/ema_anchor_100_200_500_naked.json`. The initialized state freezes the
 normalized strategy and hashes. The supervisor enforces
-`A_BASELINE` (one configured geometry/candidate per experiment), matched-geometry width-only B1,
+`A_CONTROL` (one configured geometry/candidate per experiment), matched-geometry width-only B1,
 naked-reset lookback-only B2, and optional width×lookback B3 only after independently closed B1/B2.
 Everything outside the active typed dimensions, including all identities, is immutable. The
 supervisor does not select values, rank results, judge uplift, or force B3. Existing v1/v2 sessions

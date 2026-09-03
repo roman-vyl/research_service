@@ -36,7 +36,7 @@ For a `bbb_autoresearch_state.v3` session, the nested
 `bbb_autoresearch_stage_contract.v1` is an immutable execution boundary. Everything in the frozen
 starting strategy is immutable by default. A planning worker may vary only the typed semantic
 dimensions listed for the active stage and must use the configured `geometry_id`; it must never
-invent a raw path, geometry, component identity, or stage. `A_BASELINE` measures configured
+invent a raw path, geometry, component identity, or stage. `A_CONTROL` measures configured
 symmetric geometries one at a time and does not optimize exits. B1 tests width only, B2 starts
 again from the naked strategy and tests lookback only, and B3 is unavailable until B1 and B2 are
 independently closed. B3 is optional, never an automatic next step.

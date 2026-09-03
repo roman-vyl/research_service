@@ -14,26 +14,26 @@ from research_service.application.experiments import BatchExperimentRequest
 from research_service.domain.strategy_instance import DeployableStrategyInstance
 from autoresearch_quality_contracts import EvidenceRef
 
-STAGE_CONTRACT_VERSION = "bbb_autoresearch_stage_contract.v1"
+STAGE_CONTRACT_VERSION = "bbb_autoresearch_stage_contract.v2"
 STATE_VERSION_V3 = "bbb_autoresearch_state.v3"
 PLAN_VERSION_V2 = "bbb_autoresearch_execution_plan.v2"
 ITERATION_VERSION_V3 = "bbb_autoresearch_iteration.v3"
 JOURNAL_VERSION_V3 = "bbb_autoresearch_journal.v3"
 
-STAGES = ("A_BASELINE", "B1_WIDTH", "B2_LOOKBACK", "B3_WIDTH_X_LOOKBACK")
+STAGES = ("A_CONTROL", "B1_WIDTH", "B2_LOOKBACK", "B3_WIDTH_X_LOOKBACK")
 DIMENSIONS = (
     "symmetric_measurement_geometry",
     "anchor_stack_width",
     "untouched_anchor_lookback",
 )
 STAGE_DIMENSIONS = {
-    "A_BASELINE": ("symmetric_measurement_geometry",),
+    "A_CONTROL": ("symmetric_measurement_geometry",),
     "B1_WIDTH": ("anchor_stack_width",),
     "B2_LOOKBACK": ("untouched_anchor_lookback",),
     "B3_WIDTH_X_LOOKBACK": ("anchor_stack_width", "untouched_anchor_lookback"),
 }
 STAGE_PHASES = {
-    "A_BASELINE": "baseline",
+    "A_CONTROL": "baseline",
     "B1_WIDTH": "structural_1d",
     "B2_LOOKBACK": "structural_1d",
     "B3_WIDTH_X_LOOKBACK": "structural_interaction",
@@ -220,10 +220,10 @@ def validate_stage_context(value: dict[str, Any], state: dict[str, Any]) -> None
     ):
         raise StageContractError("prerequisite disposition refs must be unique")
     required_stages = {
-        "A_BASELINE": set(),
-        "B1_WIDTH": {"A_BASELINE"},
-        "B2_LOOKBACK": {"A_BASELINE", "B1_WIDTH"},
-        "B3_WIDTH_X_LOOKBACK": {"A_BASELINE", "B1_WIDTH", "B2_LOOKBACK"},
+        "A_CONTROL": set(),
+        "B1_WIDTH": {"A_CONTROL"},
+        "B2_LOOKBACK": {"A_CONTROL", "B1_WIDTH"},
+        "B3_WIDTH_X_LOOKBACK": {"A_CONTROL", "B1_WIDTH", "B2_LOOKBACK"},
     }[stage]
     accepted = {
         entry["iteration_id"]: entry["disposition"]["stage"]
@@ -455,19 +455,19 @@ def validate_stage_request(
     validate_stage_context(context, state)
     stage = context["active_stage"]
     geometry_id = context["geometry_id"]
-    if stage == "A_BASELINE" and geometry_id in {
+    if stage == "A_CONTROL" and geometry_id in {
         r["geometry_id"] for r in state["phase_a_references"]
     }:
         raise StageContractError("Phase-A geometry already has an accepted reference")
-    if stage != "A_BASELINE" and geometry_id not in {
+    if stage != "A_CONTROL" and geometry_id not in {
         r["geometry_id"] for r in state["phase_a_references"]
     }:
         raise StageContractError("B stage requires a completed Phase-A geometry reference")
     reference = reference_strategy(state, geometry_id)
     if canonical_sha256(reference) != context["reference_strategy_sha256"]:
         raise StageContractError("reference strategy hash is inconsistent")
-    if stage == "A_BASELINE" and len(request.candidates) != 1:
-        raise StageContractError("A_BASELINE requires exactly one candidate")
+    if stage == "A_CONTROL" and len(request.candidates) != 1:
+        raise StageContractError("A_CONTROL requires exactly one candidate")
     allowed = list(STAGE_DIMENSIONS[stage])
     contract = state["stage_contract"]
     expected = _strip_allowed(reference, contract, allowed)

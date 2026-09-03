@@ -4,7 +4,7 @@
   "skill_path": ".claude/skills/ema-anchor-edge-research/SKILL.md",
   "strategy_context": {"strategy_id": "ema_pullback"},
   "phase": "baseline",
-  "active_stage": "A_BASELINE",
+  "active_stage": "A_CONTROL",
   "research_quality_policy": {
     "contract_version": "bbb_research_quality_policy.v1",
     "policy_id": "ema-anchor-stage-aware-v1",

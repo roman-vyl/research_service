@@ -285,7 +285,7 @@ def test_interpretation_prompt_renders_stage_metric_role_contract_for_v3_session
         "skill_path": ".claude/skills/ema-anchor-edge-research/SKILL.md",
         "iteration": 1,
         "contract_version": "bbb_autoresearch_state.v3",
-        "active_stage": "A_BASELINE",
+        "active_stage": "A_CONTROL",
         "active_stage_binding": {"phase": "baseline", "stage_kind": "descriptive_baseline"},
         "stage_contract": None,
         "phase_a_references": [],

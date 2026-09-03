@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "bbb_autoresearch_stage_contract.v1",
+  "$id": "bbb_autoresearch_stage_contract.v2",
   "type": "object",
   "additionalProperties": false,
   "required": ["contract_version", "programme", "starting_strategy", "semantic_bindings", "measurement_geometries", "geometry_references"],
   "properties": {
-    "contract_version": {"const": "bbb_autoresearch_stage_contract.v1"},
+    "contract_version": {"const": "bbb_autoresearch_stage_contract.v2"},
     "programme": {"const": "EMA_ANCHOR_A_TO_B"},
     "starting_strategy": {
       "type": "object", "additionalProperties": false,

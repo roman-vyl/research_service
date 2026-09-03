@@ -81,7 +81,7 @@ def _strategy() -> dict:
 def _contract() -> dict:
     strategy = _strategy()
     contract = {
-        "contract_version": "bbb_autoresearch_stage_contract.v1",
+        "contract_version": "bbb_autoresearch_stage_contract.v2",
         "programme": "EMA_ANCHOR_A_TO_B",
         "starting_strategy": {
             "source_path": "operator.json",
@@ -153,22 +153,22 @@ def _contract() -> dict:
     return contract
 
 
-def _state(stage: str = "A_BASELINE") -> dict:
-    refs = [] if stage == "A_BASELINE" else [{"geometry_id": "A-2"}]
+def _state(stage: str = "A_CONTROL") -> dict:
+    refs = [] if stage == "A_CONTROL" else [{"geometry_id": "A-2"}]
     dispositions = []
-    if stage != "A_BASELINE":
+    if stage != "A_CONTROL":
         dispositions.append(
             {
                 "iteration_id": 1,
                 "disposition": {
-                    "stage": "A_BASELINE",
+                    "stage": "A_CONTROL",
                     "status": "characterized",
                     "evidence": [_evidence(1)],
                 },
             }
         )
     stage_kind = {
-        "A_BASELINE": "descriptive_baseline",
+        "A_CONTROL": "descriptive_baseline",
         "B1_WIDTH": "structural_entry",
         "B2_LOOKBACK": "structural_entry",
         "B3_WIDTH_X_LOOKBACK": "structural_interaction",
@@ -190,7 +190,7 @@ def _plan(state: dict, geometry_id: str = "A-2") -> dict:
         if entry["disposition"]["status"] != "in_progress"
     ]
     dimensions = {
-        "A_BASELINE": ["symmetric_measurement_geometry"],
+        "A_CONTROL": ["symmetric_measurement_geometry"],
         "B1_WIDTH": ["anchor_stack_width"],
         "B2_LOOKBACK": ["untouched_anchor_lookback"],
         "B3_WIDTH_X_LOOKBACK": ["anchor_stack_width", "untouched_anchor_lookback"],
@@ -477,7 +477,7 @@ def test_v3_init_without_operator_fixture_fails_before_partial_session(tmp_path:
     )
     repository_template.update(
         contract_version="bbb_autoresearch_state.v3",
-        active_stage="A_BASELINE",
+        active_stage="A_CONTROL",
         stage_contract={
             "starting_strategy_fixture": "operator-input/missing.json",
             "semantic_bindings": [],
@@ -504,7 +504,7 @@ def test_v3_init_validates_and_freezes_operator_fixture(
     )
     template.update(
         contract_version="bbb_autoresearch_state.v3",
-        active_stage="A_BASELINE",
+        active_stage="A_CONTROL",
         skill_path="skill.md",
         stage_contract={
             "starting_strategy_fixture": str(fixture_path),
@@ -619,7 +619,7 @@ def test_v3_init_validates_and_freezes_operator_fixture(
     fixture["ticker"] = "ETHUSDT.P"
     fixture_path.write_text(json.dumps(fixture))
     assert state["contract_version"] == "bbb_autoresearch_state.v3"
-    assert state["active_stage"] == "A_BASELINE"
+    assert state["active_stage"] == "A_CONTROL"
     assert state["stage_contract"]["starting_strategy"]["strategy"] == frozen
     bindings = {item["dimension"]: item for item in state["stage_contract"]["semantic_bindings"]}
     assert bindings["anchor_stack_width"]["targets"][0]["fixed_parameters"] == {"atr_period": 14}
@@ -666,7 +666,7 @@ def test_v3_prompts_receive_compact_exact_stage_controls(tmp_path: Path) -> None
     planning = render_planning_prompt(state, repository, iteration, "http://research")
     interpretation = render_interpretation_prompt(state, repository, iteration, "batch")
     for prompt in (planning, interpretation):
-        assert '"active_stage": "A_BASELINE"' in prompt
+        assert '"active_stage": "A_CONTROL"' in prompt
         assert '"symmetric_measurement_geometry"' in prompt
         assert '"geometry_id": "A-2"' in prompt
     assert "does not optimize exits" in planning
@@ -675,7 +675,7 @@ def test_v3_prompts_receive_compact_exact_stage_controls(tmp_path: Path) -> None
 
 def test_geometry_references_published_for_every_sanctioned_a_baseline_geometry() -> None:
     # Harness contract fix: the planning worker must be able to read its
-    # A_BASELINE geometry's canonical reference hash straight from state,
+    # A_CONTROL geometry's canonical reference hash straight from state,
     # never compute it, so state.stage_contract must publish one entry per
     # configured geometry (A-2/A-3/A-4 for the approved template).
     contract = _contract()

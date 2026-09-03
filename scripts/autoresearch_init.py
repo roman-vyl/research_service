@@ -139,7 +139,7 @@ def _load_v3_stage_contract(
                 target["params_storage"] = component.get("params_storage")
     normalized = fixture
     contract = {
-        "contract_version": "bbb_autoresearch_stage_contract.v1",
+        "contract_version": "bbb_autoresearch_stage_contract.v2",
         "programme": "EMA_ANCHOR_A_TO_B",
         "starting_strategy": {
             "source_path": str(fixture_path.resolve()),
@@ -234,9 +234,9 @@ def initialize_session(session_id: str, template_path: Path, repo_root: Path = R
             promotion_history=[],
         )
     if stage_contract is not None:
-        active_stage = template.get("active_stage", "A_BASELINE")
-        if active_stage != "A_BASELINE":
-            raise ValueError("a new v3 session must start at A_BASELINE")
+        active_stage = template.get("active_stage", "A_CONTROL")
+        if active_stage != "A_CONTROL":
+            raise ValueError("a new v3 session must start at A_CONTROL")
         state.update(
             stage_contract=stage_contract,
             active_stage=active_stage,
