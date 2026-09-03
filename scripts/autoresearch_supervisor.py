@@ -1935,6 +1935,31 @@ def _execute_canonical_batch(
     return _complete_execution_receipt(iteration_root, state, plan, control)
 
 
+_FROZEN_PLAN_IDENTITY_KEYS = ("phase", "hypothesis", "market_property_proxy")
+
+
+def _materialize_interpretation_identity(
+    result: dict[str, Any], plan: dict[str, Any]
+) -> dict[str, Any]:
+    """Force `phase`/`hypothesis`/`market_property_proxy` to be an immutable echo of the
+    frozen plan, not a worker-authored restatement.
+
+    These three fields are the scientific question and framing fixed by the planning
+    worker (program.md step 1: "State the hypothesis ... before choosing compute");
+    interpretation answers evidence questions about that already-fixed hypothesis, it does
+    not get to re-derive or reword it (program.md: interpretation writes "the existing
+    iteration result", not a new one). An interpretation worker retyping this text from
+    memory will paraphrase -- punctuation and dropped clauses observed in a controlled HOST
+    smoke, 3/3 identical attempts -- so the supervisor materializes the plan's own values
+    here, once, before the result is hashed and frozen, rather than depend on an LLM
+    reproducing a string byte-for-byte. `_validate_interpretation_binding`'s equality check
+    is kept as a fail-closed invariant, not the correction mechanism."""
+    return {
+        **result,
+        **{key: plan[key] for key in _FROZEN_PLAN_IDENTITY_KEYS},
+    }
+
+
 def _validate_interpretation_binding(
     result: dict[str, Any], plan: dict[str, Any], state: dict[str, Any], iteration_root: Path
 ) -> None:
@@ -2227,6 +2252,10 @@ def run_supervisor(
                 if failure is None:
                     try:
                         result = load_json(result_path)
+                        materialized = _materialize_interpretation_identity(result, plan)
+                        if materialized != result:
+                            atomic_write_json(result_path, materialized)
+                        result = materialized
                         validate_iteration_result(result, state, iteration_root=iteration_root)
                         _validate_interpretation_binding(result, plan, state, iteration_root)
                         control.update(

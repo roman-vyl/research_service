@@ -30,8 +30,10 @@ from autoresearch_supervisor import (  # noqa: E402
     _command_args,
     _freeze_plan,
     _journal_event,
+    _materialize_interpretation_identity,
     _session_scoped_experiment_id,
     _sha256,
+    _validate_interpretation_binding,
     _with_canonical_experiment_id,
     _with_derived_managed_policy_enabled,
     append_journal,
@@ -120,11 +122,17 @@ if mode == "hard_stop":
     hard_reason = "contract ambiguity"
 if mode == "batch":
     receipt = json.loads((result_path.parent / "execution_receipt.json").read_text())
+interp_phase = "baseline"
+interp_hypothesis = "test hypothesis"
+interp_market_property_proxy = "test proxy"
+if mode == "paraphrase":
+    interp_hypothesis = "test hypothesis, reworded"
+    interp_market_property_proxy = "test proxy restated"
 result = {
   "contract_version": "bbb_autoresearch_iteration.v1",
   "session_id": "s1", "iteration_id": iteration_id, "status": status,
-  "phase": "baseline", "hypothesis": "test hypothesis",
-  "market_property_proxy": "test proxy",
+  "phase": interp_phase, "hypothesis": interp_hypothesis,
+  "market_property_proxy": interp_market_property_proxy,
   "experiment": {"kind": "artifact_diagnostic", "experiment_id": None, "axes": [],
     "candidate_ids": [], "candidate_count": 0, "window_policy": None,
     "strategy_context": {"strategy_id": "ema_pullback"},
@@ -997,6 +1005,86 @@ def test_with_canonical_experiment_id_scopes_request_without_dropping_logical_la
     # The worker's logical label is preserved verbatim, recoverable by
     # stripping the known session_id prefix -- never silently discarded.
     assert scoped.experiment_id.removeprefix("s1-") == request.experiment_id
+
+
+def _identity_plan(**overrides: object) -> dict[str, object]:
+    plan = {
+        "phase": "baseline",
+        "hypothesis": "test hypothesis",
+        "market_property_proxy": "test proxy",
+    }
+    plan.update(overrides)
+    return plan
+
+
+def _identity_result(**overrides: object) -> dict[str, object]:
+    result = {
+        "phase": "baseline",
+        "hypothesis": "test hypothesis",
+        "market_property_proxy": "test proxy",
+        "conclusion": "worker's own conclusion",
+        "next_discriminating_question": "worker's own next question",
+    }
+    result.update(overrides)
+    return result
+
+
+def test_materialize_interpretation_identity_overrides_worker_paraphrase() -> None:
+    # Regression for the interpretation-binding contract defect: a worker
+    # that retypes the frozen hypothesis/market_property_proxy from memory
+    # (punctuation/wording drift, not a scientific disagreement) must be
+    # healed deterministically rather than rejected for typing infidelity.
+    plan = _identity_plan(
+        hypothesis="target, and every later structural claim must be explained relative to it.",
+        market_property_proxy="No structural market-state proxy is being tested yet.",
+    )
+    result = _identity_result(
+        hypothesis="target; every later structural claim must be explained relative to it.",
+        market_property_proxy="No structural market-state proxy tested.",
+    )
+    materialized = _materialize_interpretation_identity(result, plan)
+    assert materialized["hypothesis"] == plan["hypothesis"]
+    assert materialized["market_property_proxy"] == plan["market_property_proxy"]
+    assert materialized["phase"] == plan["phase"]
+
+
+def test_materialize_interpretation_identity_leaves_worker_owned_fields_untouched() -> None:
+    plan = _identity_plan()
+    result = _identity_result(
+        conclusion="a specific worker conclusion",
+        next_discriminating_question="a specific worker question",
+    )
+    materialized = _materialize_interpretation_identity(result, plan)
+    assert materialized["conclusion"] == "a specific worker conclusion"
+    assert materialized["next_discriminating_question"] == "a specific worker question"
+
+
+def test_validate_interpretation_binding_still_rejects_true_identity_mismatch() -> None:
+    # The equality check stays a fail-closed invariant: something that
+    # bypasses materialization (or a future code path that forgets to call
+    # it) must still be caught, not silently accepted.
+    plan = _identity_plan()
+    result = _identity_result(hypothesis="a genuinely different scientific hypothesis")
+    with pytest.raises(ContractError, match="differs from frozen plan identity"):
+        _validate_interpretation_binding(result, plan, {}, Path("."))
+
+
+def test_interpretation_paraphrase_is_healed_end_to_end(tmp_path: Path) -> None:
+    # A worker that paraphrases phase/hypothesis/market_property_proxy must
+    # no longer hard-stop the session -- materialization heals it before
+    # the result is validated and frozen.
+    repo, root = _repo(tmp_path)
+    assert (
+        run_supervisor(
+            session_id="s1", agent_command=_command(repo, "paraphrase"), repo_root=repo
+        )
+        == 0
+    )
+    iteration = root / "iterations/0001"
+    frozen = load_json(iteration / "iteration_result.json")
+    assert frozen["hypothesis"] == "test hypothesis"
+    assert frozen["market_property_proxy"] == "test proxy"
+    assert load_json(root / "state.json")["iteration"] == 1
 
 
 def test_freeze_plan_writes_session_scoped_canonical_experiment_id(tmp_path: Path) -> None:
