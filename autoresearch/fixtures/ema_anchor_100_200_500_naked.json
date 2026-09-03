@@ -26,13 +26,13 @@
               "instance_id": "sl-measurement",
               "component_id": "atr_stop_loss",
               "exit_kind": "stop_loss",
-              "distance": {"timeframe": "base", "period": 14, "multiplier": 2.0}
+              "distance": {"timeframe": "base", "period": 14, "multiplier": 3.0}
             },
             {
               "instance_id": "tp-measurement",
               "component_id": "atr_take_profit",
               "exit_kind": "take_profit",
-              "distance": {"timeframe": "base", "period": 14, "multiplier": 2.0}
+              "distance": {"timeframe": "base", "period": 14, "multiplier": 3.0}
             }
           ]
         },

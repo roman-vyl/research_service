@@ -96,9 +96,7 @@
       }
     ],
     "measurement_geometries": [
-      {"geometry_id": "A-2", "distance": 2.0},
-      {"geometry_id": "A-3", "distance": 3.0},
-      {"geometry_id": "A-4", "distance": 4.0}
+      {"geometry_id": "A-CONTROL", "distance": 3.0}
     ]
   },
   "budgets": {

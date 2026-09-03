@@ -54,11 +54,13 @@ trying to close (cf. the branch-mismatch/lost-fix incident earlier in this sessi
 stage forces every touch point (schemas, prompts, fixtures, tests) to be updated deliberately
 instead of silently reinterpreted.
 
-`STAGES` becomes a 6-tuple; `STAGE_PHASES` maps `A_CONTROL -> "control"`,
-`C_ENTRY_REGION_SELECTION -> "entry_region_selection"`, `D_EXIT_GEOMETRY -> "exit_geometry"`
+`STAGES` becomes a 6-tuple; `STAGE_PHASES` maps `A_CONTROL -> "baseline"` (unchanged from today --
+the template's `research_quality_policy.phase_bindings` already binds `"baseline"` to
+`descriptive_baseline`, so the phase string does not need to change, only the stage's dimension
+set), `C_ENTRY_REGION_SELECTION -> "entry_region_selection"`, `D_EXIT_GEOMETRY -> "exit_geometry"`
 (matching the `StageKind` string exactly, unlike the existing `B1_WIDTH`/`B2_LOOKBACK ->
 "structural_1d"` indirection, since these two new stages have no B1/B2-style siblings sharing one
-phase).
+phase). Both new phase strings already exist in the template's `phase_bindings` today.
 
 ### 2. Phase A control value lives in the stage contract's `starting_strategy`, not a new field
 
