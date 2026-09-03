@@ -1,11 +1,11 @@
 # BBB AutoResearch planning stage {iteration_id}
 
 Read completely: `{program_path}`, `{skill_path}`, `{state_path}`, and the relevant tail of
-`{journal_path}`. Formulate exactly one highest-information action. Do not execute an experiment or
-contact Engine/MDS. For `batch`, construct the complete canonical `BatchExperimentRequest` only.
-Write one `bbb_autoresearch_execution_plan.v1` conforming to `{plan_schema_path}` at `{result_path}`.
-For v3 sessions, use the version required by that schema and obey this immutable typed stage
-context exactly; do not invent stages, dimensions, paths, geometries, or prerequisite evidence:
+`{journal_path}`. Formulate exactly one highest-information action. For `batch`, construct the
+complete canonical `BatchExperimentRequest` only. Write one `bbb_autoresearch_execution_plan.v1`
+conforming to `{plan_schema_path}` at `{result_path}`. For v3 sessions, use the version required by
+that schema and obey this immutable typed stage context exactly; do not invent stages, dimensions,
+paths, geometries, or prerequisite evidence:
 
 `{stage_contract_context}`
 
@@ -15,6 +15,12 @@ lists the sanctioned `resolved_sha256` for every configured geometry; copy the e
 chosen `geometry_id` verbatim into `stage_context.reference_strategy_sha256` -- never compute,
 execute code, or approximate this value.
 You may write declared textual/JSON analysis only under `{analysis_dir}`. Exit after planning.
+
+Your job is only to produce the requested planning artifact. Do not install, repair, extend,
+validate, or modify the execution environment. Do not execute an experiment, contact Engine/MDS, or
+create/modify any repository file. Contract validation and experiment execution belong exclusively
+to the supervisor. Use only the evidence and tools already available to you. If something required
+is unavailable, report that fact in the requested artifact instead of fixing the environment.
 
 Sanctioned Research Service base URL for this session: `{research_service_base_url}`. Before
 constructing or modifying a strategy specification, use the Strategy Specification Reference and,

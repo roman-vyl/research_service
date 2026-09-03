@@ -6,8 +6,17 @@ Immutable typed stage context (legacy sessions explicitly say none):
 
 Read completely: `{program_path}`, `{skill_path}`, `{state_path}`, frozen plan `{plan_path}`, and the
 applicable supervisor-owned evidence named below. This is a fresh process representing the same
-logical researcher. Do not execute an experiment, contact Engine/MDS, install dependencies, create
-runtime substitutes, or modify supervisor-owned inputs.
+logical researcher.
+
+Your job is only to produce the requested interpretation artifact. Do not install, repair, extend,
+validate, or modify the execution environment. Do not execute an experiment, contact Engine/MDS, or
+create/modify any repository file, including supervisor-owned inputs. Contract validation and
+experiment execution belong exclusively to the supervisor. Use only the evidence and tools already
+available to you. If something required is unavailable, report that fact in the requested artifact
+instead of fixing the environment.
+
+Do not self-validate the output with external tools or dependencies. Write the result directly
+according to the supplied contract. The supervisor performs authoritative validation after you exit.
 
 Canonical request: `{request_path}`
 Canonical adapter output: `{execution_output_path}`
