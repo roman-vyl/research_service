@@ -145,29 +145,41 @@ def _contract() -> dict:
     }
 
 
+_STAGE_ORDER = (
+    "A_CONTROL",
+    "B1_WIDTH",
+    "B2_LOOKBACK",
+    "B3_WIDTH_X_LOOKBACK",
+    "C_ENTRY_REGION_SELECTION",
+    "D_EXIT_GEOMETRY",
+)
+_STAGE_KINDS = {
+    "A_CONTROL": "descriptive_baseline",
+    "B1_WIDTH": "structural_entry",
+    "B2_LOOKBACK": "structural_entry",
+    "B3_WIDTH_X_LOOKBACK": "structural_interaction",
+    "C_ENTRY_REGION_SELECTION": "entry_region_selection",
+    "D_EXIT_GEOMETRY": "exit_geometry",
+}
+
+
 def _state(stage: str = "A_CONTROL") -> dict:
     refs = [] if stage == "A_CONTROL" else [{"experiment_id": "control-reference"}]
-    dispositions = []
-    if stage != "A_CONTROL":
-        dispositions.append(
-            {
-                "iteration_id": 1,
-                "disposition": {
-                    "stage": "A_CONTROL",
-                    "status": "characterized",
-                    "evidence": [_evidence(1)],
-                },
-            }
-        )
-    stage_kind = {
-        "A_CONTROL": "descriptive_baseline",
-        "B1_WIDTH": "structural_entry",
-        "B2_LOOKBACK": "structural_entry",
-        "B3_WIDTH_X_LOOKBACK": "structural_interaction",
-    }[stage]
+    prior_stages = _STAGE_ORDER[: _STAGE_ORDER.index(stage)]
+    dispositions = [
+        {
+            "iteration_id": index,
+            "disposition": {
+                "stage": prior_stage,
+                "status": "characterized",
+                "evidence": [_evidence(index)],
+            },
+        }
+        for index, prior_stage in enumerate(prior_stages, start=1)
+    ]
     return {
         "active_stage": stage,
-        "active_stage_binding": {"phase": STAGE_PHASES[stage], "stage_kind": stage_kind},
+        "active_stage_binding": {"phase": STAGE_PHASES[stage], "stage_kind": _STAGE_KINDS[stage]},
         "stage_contract": _contract(),
         "phase_a_references": refs,
         "stage_dispositions": dispositions,
@@ -185,6 +197,8 @@ def _plan(state: dict) -> dict:
         "B1_WIDTH": ["anchor_stack_width"],
         "B2_LOOKBACK": ["untouched_anchor_lookback"],
         "B3_WIDTH_X_LOOKBACK": ["anchor_stack_width", "untouched_anchor_lookback"],
+        "C_ENTRY_REGION_SELECTION": [],
+        "D_EXIT_GEOMETRY": [],
     }[state["active_stage"]]
     return {
         "stage_context": {
@@ -320,17 +334,9 @@ def test_component_array_reordering_is_not_a_semantic_mutation() -> None:
 
 
 def test_b2_rejects_width_leak_and_b3_requires_durable_prerequisites() -> None:
+    # _state("B2_LOOKBACK") already durably closes A_CONTROL (iteration 1)
+    # and B1_WIDTH (iteration 2) as prerequisites.
     state = _state("B2_LOOKBACK")
-    state["stage_dispositions"].append(
-        {
-            "iteration_id": 2,
-            "disposition": {
-                "stage": "B1_WIDTH",
-                "status": "terminally_rejected",
-                "evidence": [_evidence(2)],
-            },
-        }
-    )
     candidate = reference_strategy(state)
     candidate["raw_spec"]["setups"].append(
         {
@@ -690,3 +696,34 @@ def test_forged_candidate_is_rejected_despite_matching_starting_strategy_hash() 
     plan = _plan(state)
     with pytest.raises(StageContractError, match="outside active semantic dimensions"):
         validate_stage_request(_request(tampered), plan, state)
+
+
+def test_c_and_d_are_reachable_once_b3_is_durably_closed() -> None:
+    # C_ENTRY_REGION_SELECTION and D_EXIT_GEOMETRY exist as real, causally
+    # ordered stages: once A_CONTROL/B1_WIDTH/B2_LOOKBACK/B3_WIDTH_X_LOOKBACK
+    # are all durably closed, their frozen-control candidate is accepted the
+    # same way any other stage's is.
+    for stage in ("C_ENTRY_REGION_SELECTION", "D_EXIT_GEOMETRY"):
+        state = _state(stage)
+        candidate = reference_strategy(state)
+        validate_stage_request(_request(candidate), _plan(state), state)
+
+
+def test_c_prerequisite_disposition_refs_require_all_of_a_through_b3() -> None:
+    state = _state("C_ENTRY_REGION_SELECTION")
+    plan = _plan(state)
+    assert set(plan["stage_context"]["prerequisite_disposition_refs"]) == {1, 2, 3, 4}
+    validate_stage_context(plan["stage_context"], state)
+    plan["stage_context"]["prerequisite_disposition_refs"] = [1, 2, 3]
+    with pytest.raises(StageContractError, match="prerequisite"):
+        validate_stage_context(plan["stage_context"], state)
+
+
+def test_d_prerequisite_disposition_refs_additionally_require_c() -> None:
+    state = _state("D_EXIT_GEOMETRY")
+    plan = _plan(state)
+    assert set(plan["stage_context"]["prerequisite_disposition_refs"]) == {1, 2, 3, 4, 5}
+    validate_stage_context(plan["stage_context"], state)
+    plan["stage_context"]["prerequisite_disposition_refs"] = [1, 2, 3, 4]
+    with pytest.raises(StageContractError, match="prerequisite"):
+        validate_stage_context(plan["stage_context"], state)

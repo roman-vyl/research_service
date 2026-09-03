@@ -19,7 +19,14 @@ PLAN_VERSION_V2 = "bbb_autoresearch_execution_plan.v2"
 ITERATION_VERSION_V3 = "bbb_autoresearch_iteration.v3"
 JOURNAL_VERSION_V3 = "bbb_autoresearch_journal.v3"
 
-STAGES = ("A_CONTROL", "B1_WIDTH", "B2_LOOKBACK", "B3_WIDTH_X_LOOKBACK")
+STAGES = (
+    "A_CONTROL",
+    "B1_WIDTH",
+    "B2_LOOKBACK",
+    "B3_WIDTH_X_LOOKBACK",
+    "C_ENTRY_REGION_SELECTION",
+    "D_EXIT_GEOMETRY",
+)
 DIMENSIONS = (
     "symmetric_measurement_geometry",
     "anchor_stack_width",
@@ -30,12 +37,22 @@ STAGE_DIMENSIONS = {
     "B1_WIDTH": ("anchor_stack_width",),
     "B2_LOOKBACK": ("untouched_anchor_lookback",),
     "B3_WIDTH_X_LOOKBACK": ("anchor_stack_width", "untouched_anchor_lookback"),
+    # C shortlists from B3's already-collected evidence; it has no batch
+    # dimension of its own. D's per-shortlisted-region symmetric-distance
+    # sweep (`autoresearch-frozen-control-phased-discovery-v1` design.md
+    # Decision 3) is a later part -- until it lands, D stays empty like C,
+    # so a `batch` action here can only resubmit the unchanged frozen
+    # control, never scan anything ungoverned.
+    "C_ENTRY_REGION_SELECTION": (),
+    "D_EXIT_GEOMETRY": (),
 }
 STAGE_PHASES = {
     "A_CONTROL": "baseline",
     "B1_WIDTH": "structural_1d",
     "B2_LOOKBACK": "structural_1d",
     "B3_WIDTH_X_LOOKBACK": "structural_interaction",
+    "C_ENTRY_REGION_SELECTION": "entry_region_selection",
+    "D_EXIT_GEOMETRY": "exit_geometry",
 }
 DISPOSITIONS = ("in_progress", "characterized", "terminally_rejected")
 
@@ -180,6 +197,14 @@ def validate_stage_context(value: dict[str, Any], state: dict[str, Any]) -> None
         "B1_WIDTH": {"A_CONTROL"},
         "B2_LOOKBACK": {"A_CONTROL", "B1_WIDTH"},
         "B3_WIDTH_X_LOOKBACK": {"A_CONTROL", "B1_WIDTH", "B2_LOOKBACK"},
+        "C_ENTRY_REGION_SELECTION": {"A_CONTROL", "B1_WIDTH", "B2_LOOKBACK", "B3_WIDTH_X_LOOKBACK"},
+        "D_EXIT_GEOMETRY": {
+            "A_CONTROL",
+            "B1_WIDTH",
+            "B2_LOOKBACK",
+            "B3_WIDTH_X_LOOKBACK",
+            "C_ENTRY_REGION_SELECTION",
+        },
     }[stage]
     accepted = {
         entry["iteration_id"]: entry["disposition"]["stage"]

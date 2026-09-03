@@ -951,12 +951,27 @@ def validate_state(state: dict[str, Any]) -> None:
                     "B stages require a complete, closed Phase-A reference line"
                 )
             if (
-                state["active_stage"] in {"B2_LOOKBACK", "B3_WIDTH_X_LOOKBACK"}
+                state["active_stage"]
+                in {"B2_LOOKBACK", "B3_WIDTH_X_LOOKBACK", "C_ENTRY_REGION_SELECTION", "D_EXIT_GEOMETRY"}
                 and "B1_WIDTH" not in closed
             ):
-                raise StageContractError("B2/B3 require independently closed B1")
-            if state["active_stage"] == "B3_WIDTH_X_LOOKBACK" and "B2_LOOKBACK" not in closed:
-                raise StageContractError("B3 requires independently closed B2")
+                raise StageContractError("B2/B3/C/D require independently closed B1")
+            if (
+                state["active_stage"]
+                in {"B3_WIDTH_X_LOOKBACK", "C_ENTRY_REGION_SELECTION", "D_EXIT_GEOMETRY"}
+                and "B2_LOOKBACK" not in closed
+            ):
+                raise StageContractError("B3/C/D require independently closed B2")
+            if (
+                state["active_stage"] in {"C_ENTRY_REGION_SELECTION", "D_EXIT_GEOMETRY"}
+                and "B3_WIDTH_X_LOOKBACK" not in closed
+            ):
+                raise StageContractError("C/D require closed B3")
+            if (
+                state["active_stage"] == "D_EXIT_GEOMETRY"
+                and "C_ENTRY_REGION_SELECTION" not in closed
+            ):
+                raise StageContractError("D requires closed C")
         except (StageContractError, KeyError) as exc:
             raise ContractError(f"invalid v3 stage state: {exc}") from exc
 
@@ -1748,6 +1763,10 @@ def _advance_state(
                 and proposed.get("stage") == "B3_WIDTH_X_LOOKBACK"
             ):
                 next_stage = "B3_WIDTH_X_LOOKBACK"
+            elif active_stage == "B3_WIDTH_X_LOOKBACK":
+                next_stage = "C_ENTRY_REGION_SELECTION"
+            elif active_stage == "C_ENTRY_REGION_SELECTION":
+                next_stage = "D_EXIT_GEOMETRY"
         updated.update(
             active_stage=next_stage,
             phase=STAGE_PHASES[next_stage],
