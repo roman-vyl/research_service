@@ -38,8 +38,13 @@ remain required by the schema; a field described as forbidden must be `null`, no
 - `prior_assessment`: `claim_id` and positive `iteration_id` are required; `candidate_id`,
   `metric_path`, and `analysis_path` are forbidden.
 - `analysis_artifact`: `claim_id` and non-empty `analysis_path` are required; `candidate_id`,
-  `metric_path`, and `iteration_id` are forbidden. Use this kind for a file or supplementary
-  analysis; never disguise file evidence as `canonical_metric`.
+  `metric_path`, and `iteration_id` are forbidden. Use this kind only for a file you yourself wrote
+  under `{analysis_dir}` and declared as this iteration's `execution_result.analysis_path` -- its
+  `analysis_path` must equal that declared value exactly, or be `null` if you declared none; never
+  disguise file evidence as `canonical_metric`, and never cite a supervisor-owned canonical file
+  (`{request_path}`, `{execution_output_path}`, `{receipt_path}`) as `analysis_artifact` either -- a
+  claim about their contents is `canonical_metric` evidence (candidate_id + metric_path), not a file
+  you produced.
 
 Allowed canonical metric paths (rendered from the current contract layer):
 {canonical_metric_paths}
