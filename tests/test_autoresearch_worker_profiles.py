@@ -53,6 +53,12 @@ from autoresearch_worker_profiles import resolve_worker_profile  # noqa: E402
             "speshu/z-ai/glm-5.2",
             ("opencode", "run", "--auto", "-m", "speshu/z-ai/glm-5.2"),
         ),
+        (
+            "qwen35-local",
+            "opencode",
+            "ollama/qwen3.5:9b",
+            ("opencode", "run", "--auto", "-m", "ollama/qwen3.5:9b"),
+        ),
     ),
 )
 def test_required_worker_profiles_resolve_exact_argv(
@@ -75,7 +81,7 @@ def test_unknown_worker_profile_fails_closed_with_allowed_keys() -> None:
         resolve_worker_profile("invented-runner")
 
     message = str(error.value)
-    for key in ("claude-sonnet46", "codex-gpt56-sol", "glm52-opencode"):
+    for key in ("claude-sonnet46", "codex-gpt56-sol", "glm52-opencode", "qwen35-local"):
         assert key in message
 
 
@@ -105,6 +111,37 @@ def test_controlled_cli_uses_resolved_worker_profile(
         == 0
     )
     profile = resolve_worker_profile("glm52-opencode")
+    assert captured["agent_command"] == profile.argv
+    assert captured["worker_identity"] == profile.provenance()
+    assert captured["max_iterations"] == 4
+
+
+def test_controlled_cli_uses_resolved_qwen_local_worker_profile(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    captured: dict[str, object] = {}
+    monkeypatch.delenv("BBB_AUTORESEARCH_AGENT_COMMAND", raising=False)
+    monkeypatch.setattr(
+        supervisor_module,
+        "validate_cli_launch_profile",
+        lambda _settings: ("controlled-host-v1", "http://127.0.0.1:8000"),
+    )
+    monkeypatch.setattr(supervisor_module, "preflight_launch_services", lambda *_args: None)
+    monkeypatch.setattr(supervisor_module.shutil, "which", lambda _executable: "/bin/fake")
+
+    def fake_run_supervisor(**kwargs: object) -> int:
+        captured.update(kwargs)
+        return 0
+
+    monkeypatch.setattr(supervisor_module, "run_supervisor", fake_run_supervisor)
+
+    assert (
+        supervisor_module.main(
+            ["--session", "s1", "--worker", "qwen35-local", "--max-iterations", "4"]
+        )
+        == 0
+    )
+    profile = resolve_worker_profile("qwen35-local")
     assert captured["agent_command"] == profile.argv
     assert captured["worker_identity"] == profile.provenance()
     assert captured["max_iterations"] == 4

@@ -60,6 +60,12 @@ _WORKER_PROFILES = MappingProxyType(
             model="speshu/z-ai/glm-5.2",
             argv=("opencode", "run", "--auto", "-m", "speshu/z-ai/glm-5.2"),
         ),
+        "qwen35-local": WorkerProfile(
+            key="qwen35-local",
+            runner="opencode",
+            model="ollama/qwen3.5:9b",
+            argv=("opencode", "run", "--auto", "-m", "ollama/qwen3.5:9b"),
+        ),
     }
 )
 
