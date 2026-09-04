@@ -1616,6 +1616,8 @@ def render_planning_prompt(
                 if state["contract_version"] == STATE_VERSION_V3
                 else "execution_plan.schema.json"
             ),
+            "batch_request_schema_path": root
+            / "autoresearch/schemas/batch_experiment_request.schema.json",
             "result_path": iteration_root / "execution_plan.json",
             "analysis_dir": iteration_root / "planning_analysis",
             "component_catalog_path": component_catalog_path

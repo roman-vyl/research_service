@@ -1,0 +1,260 @@
+{
+  "$defs": {
+    "AccountingPolicy": {
+      "description": "Research-owned accounting assumptions.",
+      "properties": {
+        "entry_fee_rate": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "0",
+          "title": "Entry Fee Rate"
+        },
+        "exit_fee_rate": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "0",
+          "title": "Exit Fee Rate"
+        },
+        "initial_equity": {
+          "anyOf": [
+            {
+              "exclusiveMinimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "10000",
+          "title": "Initial Equity"
+        }
+      },
+      "title": "AccountingPolicy",
+      "type": "object"
+    },
+    "BatchCandidateRequest": {
+      "additionalProperties": false,
+      "properties": {
+        "accounting": {
+          "$ref": "#/$defs/AccountingPolicy",
+          "default": {
+            "entry_fee_rate": "0",
+            "exit_fee_rate": "0",
+            "initial_equity": "10000"
+          }
+        },
+        "candidate_id": {
+          "minLength": 1,
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+          "title": "Candidate Id",
+          "type": "string"
+        },
+        "execution": {
+          "$ref": "#/$defs/ExecutionPolicy",
+          "default": {
+            "entry_price_source": "signal_bar_close",
+            "entry_slippage_rate": "0",
+            "protection_anchor": "signal_bar_close"
+          }
+        },
+        "managed_policy_enabled": {
+          "default": true,
+          "title": "Managed Policy Enabled",
+          "type": "boolean"
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        },
+        "strategy": {
+          "$ref": "#/$defs/DeployableStrategyInstance"
+        }
+      },
+      "required": [
+        "candidate_id",
+        "strategy"
+      ],
+      "title": "BatchCandidateRequest",
+      "type": "object"
+    },
+    "DeployableStrategyInstance": {
+      "additionalProperties": false,
+      "description": "Flat deployable document: identity subset + sibling `enabled`.\n\nStructurally identical to Strategy Runtime's deployment-file shape —\nno nested identity/deployment structure. Composer stores and edits\nthis; Research config persistence stores collections of it; a future\nRuntime-deployment boundary (not part of this change) consumes it\nunchanged.",
+      "properties": {
+        "base_timeframe": {
+          "title": "Base Timeframe",
+          "type": "string"
+        },
+        "enabled": {
+          "title": "Enabled",
+          "type": "boolean"
+        },
+        "raw_spec": {
+          "additionalProperties": true,
+          "title": "Raw Spec",
+          "type": "object"
+        },
+        "strategy_id": {
+          "minLength": 1,
+          "title": "Strategy Id",
+          "type": "string"
+        },
+        "ticker": {
+          "pattern": "^[A-Z0-9]+\\.P$",
+          "title": "Ticker",
+          "type": "string"
+        }
+      },
+      "required": [
+        "enabled",
+        "strategy_id",
+        "ticker",
+        "base_timeframe",
+        "raw_spec"
+      ],
+      "title": "DeployableStrategyInstance",
+      "type": "object"
+    },
+    "ExecutionPolicy": {
+      "additionalProperties": false,
+      "description": "Execution assumptions owned by Research Service.\n\nEntry fills support explicit adverse slippage. Initial stop/take levels\nare always anchored to the signal-bar close -- the original BBB v1\nengine's VectorBT/managed-loop anchor, not a caller-selectable profile;\nthere is no other supported anchor. Canonical quantity is derived by the\nResearch application lifecycle, not supplied as an execution assumption.",
+      "properties": {
+        "entry_price_source": {
+          "const": "signal_bar_close",
+          "default": "signal_bar_close",
+          "title": "Entry Price Source",
+          "type": "string"
+        },
+        "entry_slippage_rate": {
+          "anyOf": [
+            {
+              "exclusiveMaximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "pattern": "^(?!^[-+.]*$)[+-]?0*\\d*\\.?\\d*$",
+              "type": "string"
+            }
+          ],
+          "default": "0",
+          "title": "Entry Slippage Rate"
+        },
+        "protection_anchor": {
+          "const": "signal_bar_close",
+          "default": "signal_bar_close",
+          "title": "Protection Anchor",
+          "type": "string"
+        }
+      },
+      "title": "ExecutionPolicy",
+      "type": "object"
+    },
+    "ExplicitRange": {
+      "additionalProperties": false,
+      "description": "A caller-supplied `from_ms`/`to_ms` pair, without ticker/timeframe.\n\nUsed only for `range_policy=explicit_range` requests — the strategy\nidentity subset already carries `ticker`/`base_timeframe`, so this type\nintentionally does not repeat them. `range_policy=full_available`\nrequests carry no range at all, not an instance of this type.",
+      "properties": {
+        "from_ms": {
+          "minimum": 0,
+          "title": "From Ms",
+          "type": "integer"
+        },
+        "to_ms": {
+          "exclusiveMinimum": 0,
+          "title": "To Ms",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "from_ms",
+        "to_ms"
+      ],
+      "title": "ExplicitRange",
+      "type": "object"
+    }
+  },
+  "$id": "bbb_autoresearch_batch_experiment_request.v1",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "additionalProperties": false,
+  "description": "One experiment: one strategy_id, one ticker, one base_timeframe, one\ncomparison window, shared by every candidate -- never a per-candidate\nconcern (`research-batch-experiments-v1`, \"Experiment owns one range\npolicy/window\").",
+  "properties": {
+    "candidates": {
+      "items": {
+        "$ref": "#/$defs/BatchCandidateRequest"
+      },
+      "minItems": 1,
+      "title": "Candidates",
+      "type": "array"
+    },
+    "description": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Description"
+    },
+    "experiment_id": {
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+      "title": "Experiment Id",
+      "type": "string"
+    },
+    "range": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/ExplicitRange"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
+    "range_policy": {
+      "default": "explicit_range",
+      "enum": [
+        "explicit_range",
+        "full_available"
+      ],
+      "title": "Range Policy",
+      "type": "string"
+    },
+    "strategy_id": {
+      "minLength": 1,
+      "title": "Strategy Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "experiment_id",
+    "strategy_id",
+    "candidates"
+  ],
+  "title": "BBB AutoResearch canonical BatchExperimentRequest",
+  "type": "object"
+}

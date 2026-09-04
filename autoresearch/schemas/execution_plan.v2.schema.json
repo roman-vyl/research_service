@@ -10,7 +10,7 @@
     "question": {"type": "string", "minLength": 1}, "market_property_proxy": {"type": "string", "minLength": 1},
     "competing_explanation": {"type": "string", "minLength": 1},
     "action": {"enum": ["batch", "artifact_diagnostic", "terminal", "hard_stop"]},
-    "canonical_request": {"type": ["object", "null"]}, "explanatory_metadata": {"type": "object"},
+    "canonical_request": {"anyOf": [{"type": "null"}, {"$ref": "batch_experiment_request.schema.json"}]}, "explanatory_metadata": {"type": "object"},
     "hard_stop_reason": {"type": ["string", "null"]},
     "stage_context": {
       "type": "object", "additionalProperties": false,

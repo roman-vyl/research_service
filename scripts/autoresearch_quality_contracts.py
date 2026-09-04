@@ -10,6 +10,8 @@ from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, BeforeValidator, ConfigDict, Field, WithJsonSchema, model_validator
 
+from research_service.application.experiments.contracts import BatchExperimentRequest
+
 QUALITY_POLICY_VERSION = "bbb_research_quality_policy.v1"
 QUALITY_ASSESSMENT_VERSION = "bbb_research_quality_assessment.v1"
 
@@ -1102,6 +1104,15 @@ def write_contract_schemas(schema_dir: Path) -> None:
             json.dumps(schema, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
             encoding="utf-8",
         )
+
+    batch_request = BatchExperimentRequest.model_json_schema()
+    batch_request["$schema"] = "https://json-schema.org/draft/2020-12/schema"
+    batch_request["$id"] = "bbb_autoresearch_batch_experiment_request.v1"
+    batch_request["title"] = "BBB AutoResearch canonical BatchExperimentRequest"
+    (schema_dir / "batch_experiment_request.schema.json").write_text(
+        json.dumps(batch_request, ensure_ascii=False, sort_keys=True, indent=2) + "\n",
+        encoding="utf-8",
+    )
 
     iteration = json.loads((schema_dir / "iteration_result.schema.json").read_text())
     iteration["$id"] = "bbb_autoresearch_iteration.v2"

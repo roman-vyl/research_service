@@ -2,7 +2,12 @@
 
 Read completely: `{program_path}`, `{skill_path}`, `{state_path}`, and the relevant tail of
 `{journal_path}`. Formulate exactly one highest-information action. For `batch`, construct the
-complete canonical `BatchExperimentRequest` only. Write one `bbb_autoresearch_execution_plan.v1`
+complete canonical `BatchExperimentRequest` only -- its exact field names and shape are defined by
+`{batch_request_schema_path}`; read that schema file completely and match it exactly (top-level
+`experiment_id`/`strategy_id`/`range_policy`/`range`/`candidates`/`description`, each candidate's
+`candidate_id`/`strategy`/`execution`/`accounting`/`managed_policy_enabled`/`metadata`). Do not
+invent, rename, nest, or drop any field from memory or a prior iteration's guess -- this schema,
+not convention or recollection, is authoritative. Write one `bbb_autoresearch_execution_plan.v1`
 conforming to `{plan_schema_path}` at `{result_path}`. For v3 sessions, use the version required by
 that schema and obey this immutable typed stage context exactly; do not invent stages, dimensions,
 paths, geometries, or prerequisite evidence:

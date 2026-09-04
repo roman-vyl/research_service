@@ -705,6 +705,8 @@ def test_v3_prompts_receive_compact_exact_stage_controls(tmp_path: Path) -> None
         planning
     )
     assert "Exact prerequisite_disposition_refs your stage_context MUST declare: []" in planning
+    assert "batch_experiment_request.schema.json" in planning
+    assert "read that schema file completely and match it exactly" in planning
 
 
 def test_planning_prompt_states_b1_and_b2_independent_baseline_authority(tmp_path: Path) -> None:
