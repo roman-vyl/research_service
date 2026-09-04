@@ -53,6 +53,7 @@ from autoresearch_stage_contracts import (
     STATE_VERSION_V3,
     StageContractError,
     expected_prerequisite_disposition_refs,
+    reference_strategy,
     validate_disposition,
     validate_stage_context,
     validate_stage_contract,
@@ -2128,6 +2129,60 @@ def _initial_control(state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _materialize_a_control_plan(state: dict[str, Any]) -> dict[str, Any]:
+    """Deterministically build the one valid `A_CONTROL` execution plan from
+    frozen session/stage-contract state -- no worker involved. `A_CONTROL`
+    allows zero mutable semantic dimensions (`STAGE_DIMENSIONS["A_CONTROL"]
+    == ()`) and `validate_stage_request` requires exactly one candidate
+    matching the frozen `reference_strategy()` verbatim, so every field this
+    plan needs is already a pure function of state -- there is no scientific
+    choice for a worker to make before this stage executes."""
+    session_id = state["session_id"]
+    strategy_id = state["strategy_context"]["strategy_id"]
+    starting_strategy_sha256 = state["stage_contract"]["starting_strategy"]["resolved_sha256"]
+    stage_context = {
+        "active_stage": "A_CONTROL",
+        "starting_strategy_sha256": starting_strategy_sha256,
+        "allowed_semantic_dimensions": list(STAGE_DIMENSIONS["A_CONTROL"]),
+        "prerequisite_disposition_refs": expected_prerequisite_disposition_refs(
+            "A_CONTROL", state
+        ),
+    }
+    return {
+        "contract_version": PLAN_VERSION_V2,
+        "session_id": session_id,
+        "iteration_id": state["iteration"] + 1,
+        "phase": state["phase"],
+        "hypothesis": (
+            "The frozen naked control strategy establishes the baseline comparison point "
+            "every later stage's evidence is read against; it is not itself a hypothesis test."
+        ),
+        "question": (
+            "What is the frozen naked strategy's own performance, measured once, before any "
+            "structural dimension is varied?"
+        ),
+        "market_property_proxy": "none (control measurement, not a structural dimension test)",
+        "competing_explanation": (
+            "N/A -- a single frozen control candidate has no competing explanation to "
+            "discriminate against."
+        ),
+        "action": "batch",
+        "canonical_request": {
+            "experiment_id": "a-control",
+            "strategy_id": strategy_id,
+            "candidates": [
+                {
+                    "candidate_id": "a-control",
+                    "strategy": reference_strategy(state),
+                }
+            ],
+        },
+        "explanatory_metadata": {"materialized_by": "supervisor", "worker": None},
+        "hard_stop_reason": None,
+        "stage_context": stage_context,
+    }
+
+
 def _freeze_plan(
     plan_path: Path, control_path: Path, plan: dict[str, Any], state: dict[str, Any]
 ) -> dict[str, Any]:
@@ -2408,7 +2463,7 @@ def run_supervisor(
 
         catalog_path: Path | None = None
         catalog_sha256: str | None = None
-        if control["stage"] == "planning_pending":
+        if control["stage"] == "planning_pending" and state.get("active_stage") != "A_CONTROL":
             try:
                 catalog_path, catalog_sha256 = _prepare_component_catalog_snapshot(
                     iteration_root,
@@ -2421,6 +2476,24 @@ def run_supervisor(
                 _write_hard_stop(state_path, state, str(exc))
                 return 2
             durable_protected[catalog_path] = catalog_sha256
+
+        if control["stage"] == "planning_pending" and state.get("active_stage") == "A_CONTROL":
+            # No allowed semantic dimensions and exactly one enforced candidate --
+            # the only valid plan is a pure function of frozen session/stage-
+            # contract state, so no planning worker is launched for this stage
+            # (see _materialize_a_control_plan and
+            # docs/AUTORESEARCH_SCIENTIFIC_WORKER_INTERFACE_MASTER_PLAN.md).
+            plan_path = iteration_root / "execution_plan.json"
+            plan = _materialize_a_control_plan(state)
+            atomic_write_json(plan_path, plan)
+            metadata["planning_materialized"] = True
+            atomic_write_json(metadata_path, metadata)
+            try:
+                validate_execution_plan(plan, state)
+                control = _freeze_plan(plan_path, control_path, plan, state)
+            except ContractError as exc:
+                _write_hard_stop(state_path, state, f"invalid materialized A_CONTROL plan: {exc}")
+                return 2
 
         if control["stage"] == "planning_pending":
             plan_path = iteration_root / "execution_plan.json"

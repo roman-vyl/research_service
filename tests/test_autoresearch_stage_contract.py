@@ -264,6 +264,60 @@ def test_stage_contract_rejects_unknown_dimension() -> None:
         validate_stage_contract(contract)
 
 
+def _full_state(stage: str = "A_CONTROL") -> dict:
+    """`_state()` above is a minimal stub for `autoresearch_stage_contracts`
+    functions only; the deterministic A_CONTROL materializer runs through
+    `autoresearch_supervisor.validate_execution_plan`, which additionally
+    needs `contract_version`/`session_id`/`iteration`/`phase`/`strategy_context`/
+    `research_horizon`."""
+    state = _state(stage)
+    state.update(
+        contract_version="bbb_autoresearch_state.v3",
+        session_id="s-a-control-test",
+        iteration=0,
+        phase=STAGE_PHASES[stage],
+        strategy_context={"strategy_id": "ema_pullback"},
+        research_horizon={
+            "ticker": "BTCUSDT.P",
+            "timeframe": "5m",
+            "from_ms": 0,
+            "to_ms": 1,
+            "market_data_hash": "0" * 64,
+        },
+        budgets={"max_candidates_per_iteration": None},
+    )
+    return state
+
+
+def test_materialized_a_control_plan_matches_hand_constructed_plan() -> None:
+    from autoresearch_supervisor import _materialize_a_control_plan
+
+    state = _full_state()
+    materialized = _materialize_a_control_plan(state)
+    request = validate_execution_plan(materialized, state)
+    assert request is not None
+    validate_stage_request(request, materialized, state)
+    assert len(request.candidates) == 1
+    assert request.candidates[0].strategy.model_dump(mode="json") == reference_strategy(state)
+    assert materialized["stage_context"] == {
+        "active_stage": "A_CONTROL",
+        "starting_strategy_sha256": state["stage_contract"]["starting_strategy"]["resolved_sha256"],
+        "allowed_semantic_dimensions": [],
+        "prerequisite_disposition_refs": [],
+    }
+    assert materialized["hard_stop_reason"] is None
+    assert materialized["action"] == "batch"
+
+
+def test_materialize_a_control_plan_is_pure_function_of_state() -> None:
+    from autoresearch_supervisor import _materialize_a_control_plan
+
+    state = _full_state()
+    first = _materialize_a_control_plan(state)
+    second = _materialize_a_control_plan(copy.deepcopy(state))
+    assert first == second
+
+
 def test_phase_a_control_accepts_exactly_one_frozen_candidate() -> None:
     state = _state()
     strategy = reference_strategy(state)

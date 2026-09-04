@@ -21,6 +21,7 @@ from research_service.domain.strategy_instance import DeployableStrategyInstance
 
 sys.path.insert(0, str(Path(__file__).parents[1] / "scripts"))
 
+import autoresearch_init  # noqa: E402
 from autoresearch_init import initialize_session  # noqa: E402
 import autoresearch_supervisor as supervisor_module  # noqa: E402
 from autoresearch_supervisor import (  # noqa: E402
@@ -219,6 +220,255 @@ def _repo(tmp_path: Path) -> tuple[Path, Path]:
 
 def _command(repo: Path, mode: str) -> str:
     return f"{sys.executable} {repo / 'fake_agent.py'} {{result_file}} {{stage}} {mode}"
+
+
+def _repo_v3(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Path]:
+    """A v3 (stage-contract) session repo -- `_repo()` above only builds a
+    legacy v1/v2 template. Used to exercise the A_CONTROL deterministic
+    materialization path, which only exists for v3 sessions."""
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "autoresearch/prompts").mkdir(parents=True)
+    source_root = Path(__file__).parents[1]
+    for name in ("iteration.md", "planning.md", "interpretation.md"):
+        prompt = (source_root / "autoresearch/prompts" / name).read_text()
+        (tmp_path / "autoresearch/prompts" / name).write_text(prompt)
+    bootstrap = (source_root / "autoresearch/prompts/bootstrap.md").read_text()
+    (tmp_path / "autoresearch/prompts/bootstrap.md").write_text(bootstrap)
+    (tmp_path / "autoresearch/program.md").write_text("program")
+    (tmp_path / ".claude/skills/ema-anchor-edge-research").mkdir(parents=True)
+    (tmp_path / ".claude/skills/ema-anchor-edge-research/SKILL.md").write_text("skill")
+    (tmp_path / ".gitignore").write_text("var/\n")
+    (tmp_path / "tracked.txt").write_text("fixed\n")
+    (tmp_path / "fake_agent.py").write_text(FAKE_AGENT)
+    fixture = {
+        "enabled": True,
+        "strategy_id": "ema_pullback",
+        "ticker": "BTCUSDT.P",
+        "base_timeframe": "5m",
+        "raw_spec": {
+            "anchor_stack": {
+                "fast": {"period": 100, "source": "close", "timeframe": "base"},
+                "anchor": {"period": 200, "source": "close", "timeframe": "base"},
+                "slow": {"period": 500, "source": "close", "timeframe": "base"},
+            },
+            "components": {
+                "direction": "ema_anchor_stack_trend",
+                "trigger": {"component_id": "touch_anchor"},
+                "blockers": [],
+            },
+            "setups": [],
+            "contexts": {},
+            "trade_sides": ["long", "short"],
+            "trade_management": {
+                "exit_policy": {
+                    "always_on": {
+                        "exits": [
+                            {
+                                "component_id": "atr_stop_loss",
+                                "instance_id": "sl",
+                                "exit_kind": "stop_loss",
+                                "distance": {"period": 14, "timeframe": "base", "multiplier": 3},
+                            },
+                            {
+                                "component_id": "atr_take_profit",
+                                "instance_id": "tp",
+                                "exit_kind": "take_profit",
+                                "distance": {"period": 14, "timeframe": "base", "multiplier": 3},
+                            },
+                        ]
+                    },
+                    "profiles": {
+                        "aligned": {"exits": []},
+                        "countertrend": {"exits": []},
+                        "neutral": {"exits": []},
+                    },
+                },
+                "exit_management": {},
+            },
+        },
+    }
+    fixture_path = tmp_path / "operator.json"
+    fixture_path.write_text(json.dumps(fixture))
+    template = json.loads(
+        (source_root / "autoresearch/templates/ema_anchor_session.json").read_text()
+    )
+    template.update(
+        contract_version="bbb_autoresearch_state.v3",
+        active_stage="A_CONTROL",
+        stage_contract={
+            "starting_strategy_fixture": str(fixture_path),
+            "semantic_bindings": [
+                {
+                    "dimension": "symmetric_measurement_geometry",
+                    "targets": [
+                        {
+                            "component_role": "exits",
+                            "component_id": "atr_stop_loss",
+                            "instance_id": "sl",
+                            "parameter_name": "distance.multiplier",
+                            "fixed_parameters": {},
+                        },
+                        {
+                            "component_role": "exits",
+                            "component_id": "atr_take_profit",
+                            "instance_id": "tp",
+                            "parameter_name": "distance.multiplier",
+                            "fixed_parameters": {},
+                        },
+                    ],
+                },
+                {
+                    "dimension": "anchor_stack_width",
+                    "targets": [
+                        {
+                            "component_role": "setup",
+                            "component_id": "anchor_stack_width_setup",
+                            "instance_id": "stage-width",
+                            "parameter_name": "min_current_width_atr",
+                            "fixed_parameters": {"atr_period": 14},
+                        }
+                    ],
+                },
+                {
+                    "dimension": "untouched_anchor_lookback",
+                    "targets": [
+                        {
+                            "component_role": "setup",
+                            "component_id": "untouched_anchor_setup",
+                            "instance_id": "stage-lookback",
+                            "parameter_name": "lookback",
+                            "fixed_parameters": {"active_bars": 3},
+                        }
+                    ],
+                },
+            ],
+        },
+    )
+    template_path = tmp_path / "template.json"
+    template_path.write_text(json.dumps(template))
+    subprocess.run(["git", "init", "-q"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.email", "test@example.com"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "config", "user.name", "Test"], cwd=tmp_path, check=True)
+    subprocess.run(["git", "add", "."], cwd=tmp_path, check=True)
+    subprocess.run(["git", "commit", "-qm", "baseline"], cwd=tmp_path, check=True)
+
+    monkeypatch.setattr(
+        autoresearch_init,
+        "resolve_frozen_research_horizon",
+        lambda **_kwargs: {
+            "ticker": "BTCUSDT.P",
+            "timeframe": "5m",
+            "from_ms": 0,
+            "to_ms": 300000,
+            "market_data_hash": "a" * 64,
+        },
+    )
+    catalog = {
+        "components": [
+            {"component_id": "atr_stop_loss", "params_schema": {}, "params_storage": "nested"},
+            {"component_id": "atr_take_profit", "params_schema": {}, "params_storage": "nested"},
+            {
+                "component_id": "anchor_stack_width_setup",
+                "params_storage": "nested",
+                "params_schema": {
+                    "min_current_width_atr": {"default": 2.0},
+                    "atr_period": {"type": "integer", "default": 99},
+                },
+            },
+            {
+                "component_id": "untouched_anchor_setup",
+                "params_storage": "flat",
+                "params_schema": {
+                    "lookback": {"type": "integer", "default": 50},
+                    "active_bars": {"type": "integer", "default": 99},
+                },
+            },
+        ]
+    }
+
+    class _Response:
+        def __init__(self, value: dict) -> None:
+            self.value = value
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return self.value
+
+    class _Client:
+        def __init__(self, **_kwargs: object) -> None:
+            pass
+
+        def __enter__(self) -> "_Client":
+            return self
+
+        def __exit__(self, *_args: object) -> None:
+            return None
+
+        def get(self, *_args: object, **_kwargs: object) -> _Response:
+            return _Response(catalog)
+
+        def post(self, *_args: object, **_kwargs: object) -> _Response:
+            return _Response({"ok": True, "errors": []})
+
+    monkeypatch.setattr(autoresearch_init.httpx, "Client", _Client)
+    monkeypatch.setattr(
+        autoresearch_init, "resolve_research_service_base_url", lambda: "http://research"
+    )
+    root = initialize_session("s1", template_path, tmp_path)
+    return tmp_path, root
+
+
+def test_a_control_dispatch_never_renders_planning_prompt_or_launches_worker(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The dispatch guard added for the A_CONTROL deterministic materializer
+    (`_materialize_a_control_plan`) must keep the planning worker unlaunched:
+    no planning prompt render, no component-catalog fetch. This is checked
+    independent of whatever happens later in the iteration (interpretation of
+    a real batch result needs more infrastructure than this unit test wires
+    up) -- the guarantee under test is narrowly "the worker-facing planning
+    path is never entered for A_CONTROL", not "the whole iteration completes
+    end to end" (that end-to-end guarantee is the controlled HOST smoke)."""
+    repo, root = _repo_v3(tmp_path / "repo", monkeypatch)
+    render_calls: list[object] = []
+    catalog_calls: list[object] = []
+    monkeypatch.setattr(
+        supervisor_module,
+        "render_planning_prompt",
+        lambda *args, **kwargs: render_calls.append((args, kwargs))
+        or (_ for _ in ()).throw(AssertionError("render_planning_prompt must not be called")),
+    )
+    monkeypatch.setattr(
+        supervisor_module,
+        "_prepare_component_catalog_snapshot",
+        lambda *args, **kwargs: catalog_calls.append((args, kwargs))
+        or (_ for _ in ()).throw(
+            AssertionError("_prepare_component_catalog_snapshot must not be called")
+        ),
+    )
+    # Stop the iteration right after freeze (no real subprocess/network
+    # execution) -- what happens past planning is irrelevant to this test;
+    # only the planning worker path itself is under test.
+    monkeypatch.setattr(
+        supervisor_module,
+        "_execute_canonical_batch",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ContractError("stopped before execution")),
+    )
+    run_supervisor(
+        session_id="s1", agent_command="definitely-missing-agent", repo_root=repo, max_iterations=1
+    )
+    assert render_calls == []
+    assert catalog_calls == []
+    plan = load_json(root / "iterations/0001/execution_plan.json")
+    assert plan["stage_context"]["active_stage"] == "A_CONTROL"
+    assert plan["contract_version"] == "bbb_autoresearch_execution_plan.v2"
+    control = load_json(root / "iterations/0001/iteration_control.json")
+    assert control["stage"] in {"request_prepared", "non_batch_plan_prepared"}
+    metadata = load_json(root / "iterations/0001/supervisor_metadata.json")
+    assert metadata.get("planning_materialized") is True
+    assert metadata["planning_attempts"] == []
 
 
 def test_interpretation_prompt_renders_evidence_ref_contract_allowlist(tmp_path: Path) -> None:

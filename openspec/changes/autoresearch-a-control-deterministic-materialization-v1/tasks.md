@@ -1,52 +1,79 @@
 ## 1. Pre-implementation checks
 
-- [ ] 1.1 Grep `scripts/autoresearch_supervisor.py` for every code path that assumes iteration 1 (or
+- [x] 1.1 Grep `scripts/autoresearch_supervisor.py` for every code path that assumes iteration 1 (or
       the `A_CONTROL` stage specifically) has a worker-authored `execution_plan.json` -- provenance
       fields, worker-identity logging, retry/attempt bookkeeping keyed on `planning_attempts`. Record
       findings; if any assume a non-null worker record for planning, note the required change here
       before writing code.
-- [ ] 1.2 Confirm resume/recovery behavior for an iteration whose `execution_plan.json` already exists
+      Finding: `metadata["worker"]` (from `worker_identity`) records the session-level worker
+      profile configured for the whole run, not "a worker process ran this iteration" -- set
+      unconditionally regardless of whether planning launches a process. No code assumes a non-null
+      per-iteration planning worker record. No change required.
+- [x] 1.2 Confirm resume/recovery behavior for an iteration whose `execution_plan.json` already exists
       on disk (materialized, not worker-authored) matches existing resume semantics for a
       frozen/already-written plan -- no special-casing needed, or document why one is needed.
+      Confirmed: resume reads `execution_plan.json` + `iteration_control.json` purely from disk
+      shape/hash (`validate_execution_plan`, `control["plan_sha256"]`), with no field distinguishing
+      worker-authored from materialized origin. No special-casing needed.
 
 ## 2. Deterministic materialization path
 
-- [ ] 2.1 Add a function that builds an `A_CONTROL` `execution_plan.json` payload from
+- [x] 2.1 Add a function that builds an `A_CONTROL` `execution_plan.json` payload from
       `reference_strategy()` and `validate_stage_context()`'s computed `stage_context`
       (`scripts/autoresearch_stage_contracts.py:308-317`, `:197-234`), with fixed
       `hypothesis`/`question`/`competing_explanation`/`market_property_proxy` strings describing the
       control measurement itself, `action: "batch"`, a single-candidate `canonical_request` matching
       the frozen strategy verbatim, and `hard_stop_reason: null`.
-- [ ] 2.2 Run the materialized payload through the unchanged `validate_stage_request`/
+      Implemented as `_materialize_a_control_plan` in `scripts/autoresearch_supervisor.py`.
+- [x] 2.2 Run the materialized payload through the unchanged `validate_stage_request`/
       `validate_stage_context` path before treating it as frozen -- same enforcement every
       worker-authored plan goes through today.
-- [ ] 2.3 Write the validated payload to the same `execution_plan.json` path every stage uses; no new
+      Reuses `_freeze_plan`, which calls `validate_execution_plan` (which itself calls
+      `validate_stage_request`/`validate_stage_context`) -- identical to the worker-authored path.
+- [x] 2.3 Write the validated payload to the same `execution_plan.json` path every stage uses; no new
       artifact filename.
+      Confirmed: no new filename introduced.
 
 ## 3. Supervisor dispatch
 
-- [ ] 3.1 Branch planning-stage dispatch on `active_stage == "A_CONTROL"` before any worker process is
+- [x] 3.1 Branch planning-stage dispatch on `active_stage == "A_CONTROL"` before any worker process is
       spawned: call the materialization path (2.1-2.3) instead of `render_planning_prompt` + worker
       launch.
-- [ ] 3.2 Confirm the `A_CONTROL` iteration's interpretation call is unaffected -- fresh worker
+      Implemented: dispatch guarded on `state.get("active_stage") == "A_CONTROL"` before the
+      component-catalog fetch and before the worker-launch loop.
+- [x] 3.2 Confirm the `A_CONTROL` iteration's interpretation call is unaffected -- fresh worker
       process, same prompt/schema as today, reads the materialized plan exactly as it would read a
       worker-authored one.
-- [ ] 3.3 Confirm `planning_attempts` metadata bookkeeping (`supervisor_metadata.json`) reflects
+      Confirmed by inspection: the dispatch branch only guards the `planning_pending` control stage;
+      interpretation dispatch code is untouched by this change.
+- [x] 3.3 Confirm `planning_attempts` metadata bookkeeping (`supervisor_metadata.json`) reflects
       "materialized, no attempts" rather than recording a phantom zero-duration worker attempt.
+      `metadata["planning_attempts"]` stays `[]`; a new `metadata["planning_materialized"] = True`
+      marker records provenance instead.
 
 ## 4. Tests
 
-- [ ] 4.1 New unit test: materialized `A_CONTROL` plan is byte-identical in effect (same
+- [x] 4.1 New unit test: materialized `A_CONTROL` plan is byte-identical in effect (same
       `canonical_request`, same `stage_context`) to a correct hand-constructed `A_CONTROL` plan already
       used as a fixture in `tests/test_autoresearch_stage_contract.py`.
-- [ ] 4.2 New unit test: planning dispatch does not invoke the worker-launch code path when
+      Added `test_materialized_a_control_plan_matches_hand_constructed_plan` and
+      `test_materialize_a_control_plan_is_pure_function_of_state` in
+      `tests/test_autoresearch_stage_contract.py`.
+- [x] 4.2 New unit test: planning dispatch does not invoke the worker-launch code path when
       `active_stage == "A_CONTROL"` (mock/spy on the launch function, assert not called).
-- [ ] 4.3 Existing test: interpretation for `A_CONTROL` still runs as a fresh worker process and still
+      Added `test_a_control_dispatch_never_renders_planning_prompt_or_launches_worker` in
+      `tests/test_autoresearch_supervisor.py` (spies on `render_planning_prompt` and
+      `_prepare_component_catalog_snapshot`, asserting neither is called; a real v3 session runs
+      through `run_supervisor` up to freeze).
+- [x] 4.3 Existing test: interpretation for `A_CONTROL` still runs as a fresh worker process and still
       requires the same semantic fields -- confirm no existing `tests/test_autoresearch_supervisor.py`
       coverage regresses.
-- [ ] 4.4 Full targeted AutoResearch test suite (`tests/test_autoresearch_stage_contract.py`,
+      Confirmed: full existing suite still green (see 4.4); no interpretation-path test needed
+      changes.
+- [x] 4.4 Full targeted AutoResearch test suite (`tests/test_autoresearch_stage_contract.py`,
       `tests/test_autoresearch_supervisor.py`, `tests/test_autoresearch_worker_profiles.py`) passes
       after this change.
+      97 passed (up from 94 baseline; +3 new tests), 0 failed.
 
 ## 5. Verification
 
