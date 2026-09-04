@@ -1675,6 +1675,8 @@ def render_interpretation_prompt(
             if state["contract_version"] == STATE_VERSION_V2
             else "iteration_result.schema.json"
         ),
+        "quality_assessment_schema_path": root
+        / "autoresearch/schemas/research_quality_assessment.schema.json",
         "stage_contract_context": (
             json.dumps(
                 {

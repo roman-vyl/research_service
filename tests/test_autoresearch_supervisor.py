@@ -237,6 +237,9 @@ def test_interpretation_prompt_renders_evidence_ref_contract_allowlist(tmp_path:
     assert "`iteration_id` and `analysis_path` are forbidden" in prompt
     assert "disguise file evidence as `canonical_metric`" in prompt
     assert "analysis_path` must equal that declared value exactly" in prompt
+    assert "research_quality_assessment.schema.json" in prompt
+    assert "sole authoritative output contract for" in prompt
+    assert "the schema wins" in prompt
     rendered_allowlist = prompt.split(
         "Allowed canonical metric paths (rendered from the current contract layer):\n", 1
     )[1].split("\n\n", 1)[0]

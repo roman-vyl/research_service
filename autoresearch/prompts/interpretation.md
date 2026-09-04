@@ -28,6 +28,14 @@ to `{result_schema_path}`. You may write declared textual/JSON analysis only und
 
 {experiment_id_authority_note}
 
+`{quality_assessment_schema_path}` is the sole authoritative output contract for
+`research_quality_assessment`, including every field name, nested object shape, and enum value (for
+example `information_value.outcomes`, `structural_promise.status`, `tradeoff_summary.comparisons`,
+`promotion.blockers`). Read that schema file completely and check your `research_quality_assessment`
+against it exactly before writing the result -- never invent, rename, or guess a field or enum value
+from memory, convention, or a prior iteration's guess. If the schema and any other text in this
+prompt or your own recollection disagree, the schema wins.
+
 Before writing `bbb_research_quality_assessment.v1`, apply this exact `EvidenceRef` cheat-sheet. All
 six object keys (`kind`, `claim_id`, `candidate_id`, `metric_path`, `iteration_id`, `analysis_path`)
 remain required by the schema; a field described as forbidden must be `null`, not omitted:
