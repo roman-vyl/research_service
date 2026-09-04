@@ -464,7 +464,6 @@ def test_pareto_tradeoff_does_not_choose_winner() -> None:
             "left_subject_ref": "c1",
             "right_subject_ref": "c2",
             "stage_kind": "structural_entry",
-            "same_market_universe": True,
             "dimensions": [
                 {"dimension": "profitability", "assessment": "left_better", "evidence_refs": []},
                 {"dimension": "sample_size", "assessment": "right_better", "evidence_refs": []},
@@ -485,7 +484,6 @@ def test_lower_pf_broad_region_remains_investigable() -> None:
             "left_subject_ref": "c1",
             "right_subject_ref": "c2",
             "stage_kind": "structural_entry",
-            "same_market_universe": True,
             "dimensions": [
                 {"dimension": "profitability", "assessment": "right_better", "evidence_refs": []},
                 {"dimension": "sample_size", "assessment": "left_better", "evidence_refs": []},

@@ -19,6 +19,7 @@ from autoresearch_supervisor import (
     STATE_VERSION_V2,
     atomic_write_json,
     git_sha,
+    resolve_frozen_research_horizon,
     session_dir,
     utc_now,
     validate_state,
@@ -156,7 +157,12 @@ def _load_v3_stage_contract(
     return contract
 
 
-def initialize_session(session_id: str, template_path: Path, repo_root: Path = REPO_ROOT) -> Path:
+def initialize_session(
+    session_id: str,
+    template_path: Path,
+    repo_root: Path = REPO_ROOT,
+    settings: Settings | None = None,
+) -> Path:
     root = session_dir(session_id, repo_root)
     if root.exists():
         raise FileExistsError(f"session already exists: {root}")
@@ -173,6 +179,14 @@ def initialize_session(session_id: str, template_path: Path, repo_root: Path = R
     stage_contract = (
         _load_v3_stage_contract(template, template_path, repo_root) if wants_v3 else None
     )
+    research_horizon = None
+    if stage_contract is not None:
+        starting_strategy = stage_contract["starting_strategy"]["strategy"]
+        research_horizon = resolve_frozen_research_horizon(
+            ticker=starting_strategy["ticker"],
+            timeframe=starting_strategy["base_timeframe"],
+            settings=settings if settings is not None else Settings(),
+        )
     state_version = (
         STATE_VERSION_V3
         if wants_v3
@@ -243,6 +257,7 @@ def initialize_session(session_id: str, template_path: Path, repo_root: Path = R
             phase_a_references=[],
             stage_dispositions=[],
             stage_history=[],
+            research_horizon=research_horizon,
         )
     validate_state(state)
     skill = repo_root / state["skill_path"]

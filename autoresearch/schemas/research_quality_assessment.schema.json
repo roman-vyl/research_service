@@ -764,6 +764,7 @@
     },
     "TradeoffComparison": {
       "additionalProperties": false,
+      "description": "Compares two subjects the interpretation worker itself chose to compare.\n\nTechnical market-universe identity (same frozen session research horizon,\nmatching `market_data_hash`) is a harness-owned invariant, not a worker\njudgment call: the supervisor freezes one research horizon for the whole\nsession and fail-closed hard-stops before interpretation if any candidate's\nevidence does not match it (see `research_horizon` in session state). A\ncomparison the worker is asked to interpret has therefore already passed\ndeterministic comparability checks; this model carries only the scientific\ntradeoff judgment (profitability/risk/sample-size/etc), never a\nprovenance/universe declaration.",
       "properties": {
         "dimensions": {
           "items": {
@@ -794,10 +795,6 @@
           "title": "Right Subject Ref",
           "type": "string"
         },
-        "same_market_universe": {
-          "title": "Same Market Universe",
-          "type": "boolean"
-        },
         "stage_kind": {
           "enum": [
             "descriptive_baseline",
@@ -815,7 +812,6 @@
         "left_subject_ref",
         "right_subject_ref",
         "stage_kind",
-        "same_market_universe",
         "dimensions",
         "relation"
       ],

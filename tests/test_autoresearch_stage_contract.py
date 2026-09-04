@@ -24,7 +24,13 @@ from autoresearch_stage_contracts import (
 )
 import autoresearch_init
 from autoresearch_init import initialize_session
-from autoresearch_supervisor import render_interpretation_prompt, render_planning_prompt
+from autoresearch_supervisor import (
+    ContractError,
+    render_interpretation_prompt,
+    render_planning_prompt,
+    validate_execution_plan,
+    validate_execution_receipt,
+)
 from autoresearch_quality_contracts import EvidenceRef, verify_evidence_integrity
 
 
@@ -638,6 +644,17 @@ def test_v3_init_validates_and_freezes_operator_fixture(
         autoresearch_init, "resolve_research_service_base_url", lambda: "http://research"
     )
     monkeypatch.setattr(autoresearch_init, "git_sha", lambda _root: "a" * 40)
+    monkeypatch.setattr(
+        autoresearch_init,
+        "resolve_frozen_research_horizon",
+        lambda **_kwargs: {
+            "ticker": "BTCUSDT.P",
+            "timeframe": "5m",
+            "from_ms": 0,
+            "to_ms": 300000,
+            "market_data_hash": "a" * 64,
+        },
+    )
     root = initialize_session("v3-valid", template_path, tmp_path)
     state = json.loads((root / "state.json").read_text())
     frozen = copy.deepcopy(state["stage_contract"]["starting_strategy"]["strategy"])
@@ -707,6 +724,11 @@ def test_v3_prompts_receive_compact_exact_stage_controls(tmp_path: Path) -> None
     assert "Exact prerequisite_disposition_refs your stage_context MUST declare: []" in planning
     assert "batch_experiment_request.schema.json" in planning
     assert "read that schema file completely and match it exactly" in planning
+    assert "you must NOT include either key in your canonical_request" in planning
+    assert "harness-owned, session-frozen invariant, not a planning decision" in planning
+    assert "already passed deterministic market-universe comparability checks" in interpretation
+    assert "one frozen research horizon, enforced by the supervisor" in interpretation
+    assert "Do not reason about, question, or declare market-data comparability" in interpretation
 
 
 def test_planning_prompt_states_b1_and_b2_independent_baseline_authority(tmp_path: Path) -> None:
@@ -814,3 +836,164 @@ def test_b2_lookback_does_not_require_b1_width_closed() -> None:
         }
     )
     validate_stage_request(_request(candidate), plan, state)
+
+
+def _full_v3_state(*, market_data_hash: str = "b" * 64) -> dict:
+    state = _state("A_CONTROL")
+    state.update(
+        contract_version="bbb_autoresearch_state.v3",
+        session_id="horizon-test",
+        iteration=0,
+        phase=STAGE_PHASES["A_CONTROL"],
+        budgets={"max_candidates_per_iteration": None},
+        research_horizon={
+            "ticker": "BTCUSDT.P",
+            "timeframe": "5m",
+            "from_ms": 0,
+            "to_ms": 300000,
+            "market_data_hash": market_data_hash,
+        },
+    )
+    return state
+
+
+def _full_v3_plan(state: dict, canonical_request: dict) -> dict:
+    return {
+        "contract_version": "bbb_autoresearch_execution_plan.v2",
+        "session_id": state["session_id"],
+        "iteration_id": state["iteration"] + 1,
+        "phase": state["phase"],
+        "hypothesis": "h",
+        "question": "q",
+        "market_property_proxy": "m",
+        "competing_explanation": "c",
+        "action": "batch",
+        "canonical_request": canonical_request,
+        "explanatory_metadata": {},
+        "hard_stop_reason": None,
+        "stage_context": _plan(state)["stage_context"],
+    }
+
+
+def test_v3_canonical_request_must_not_declare_range_fields() -> None:
+    state = _full_v3_state()
+    candidate = reference_strategy(state)
+    canonical_request = {
+        "experiment_id": "exp",
+        "strategy_id": "ema_pullback",
+        "range_policy": "full_available",
+        "candidates": [{"candidate_id": "c1", "strategy": candidate}],
+    }
+    plan = _full_v3_plan(state, canonical_request)
+    with pytest.raises(ContractError, match="must not include range_policy/range"):
+        validate_execution_plan(plan, state)
+
+
+def test_v3_execution_plan_materializes_frozen_research_horizon() -> None:
+    state = _full_v3_state()
+    candidate = reference_strategy(state)
+    canonical_request = {
+        "experiment_id": "exp",
+        "strategy_id": "ema_pullback",
+        "candidates": [{"candidate_id": "c1", "strategy": candidate}],
+    }
+    plan = _full_v3_plan(state, canonical_request)
+    request = validate_execution_plan(plan, state)
+    assert request is not None
+    assert request.range_policy == "explicit_range"
+    assert request.range.from_ms == state["research_horizon"]["from_ms"]
+    assert request.range.to_ms == state["research_horizon"]["to_ms"]
+
+
+def test_v3_execution_receipt_hard_stops_on_universe_integrity_violation(
+    tmp_path: Path,
+) -> None:
+    state = _full_v3_state(market_data_hash="b" * 64)
+    candidate = reference_strategy(state)
+    canonical_request = {
+        "experiment_id": "exp",
+        "strategy_id": "ema_pullback",
+        "candidates": [{"candidate_id": "c1", "strategy": candidate}],
+    }
+    plan = _full_v3_plan(state, canonical_request)
+    request = validate_execution_plan(plan, state)
+    assert request is not None
+    request_path = tmp_path / "canonical_request.json"
+    request_path.write_text(json.dumps(request.model_dump(mode="json")))
+    output_path = tmp_path / "execution_output.json"
+    output_path.write_text(
+        json.dumps(
+            {
+                "result": {
+                    "contract_version": "research_batch_experiment.v1",
+                    "experiment_id": request.experiment_id,
+                    "status": "completed",
+                    "candidate_count": 1,
+                    "completed_count": 1,
+                    "failed_count": 0,
+                    "candidates": [
+                        {
+                            "candidate_id": "c1",
+                            "status": "completed",
+                            "run_id": "run_1",
+                            "artifact_path": "/tmp/run_1",
+                            "instance_id": "ema_pullback:abc",
+                            "market_data_hash": "c" * 64,
+                            "realised_trade_count": 1,
+                            "open_position_count": 0,
+                            "final_equity": "10000",
+                            "net_pnl": "0",
+                            "gross_pnl": "0",
+                            "fees_paid": "0",
+                            "return_pct": "0",
+                            "max_drawdown": "0",
+                            "profit_factor": None,
+                            "win_rate": "0",
+                            "long": {
+                                "net_pnl": "0",
+                                "return_pct": "0",
+                                "trades": 0,
+                                "win_rate": None,
+                                "profit_factor": None,
+                            },
+                            "short": {
+                                "net_pnl": "0",
+                                "return_pct": "0",
+                                "trades": 0,
+                                "win_rate": None,
+                                "profit_factor": None,
+                            },
+                            "metadata": {},
+                            "error_type": None,
+                            "error_message": None,
+                        }
+                    ],
+                }
+            }
+        )
+    )
+    # The universe-integrity check runs right after validate_execution_plan, before
+    # any receipt/artifact-hash bookkeeping is checked -- only contract_version and
+    # key-shape need to be right; the rest of these placeholder values are never
+    # reached before the ContractError fires.
+    receipt = {
+        "contract_version": "bbb_autoresearch_execution_receipt.v1",
+        "session_id": "",
+        "iteration_id": 0,
+        "baseline_git_sha": "",
+        "canonical_request_sha256": "",
+        "experiment_id": "",
+        "candidate_ids": [],
+        "executor_path": "",
+        "executor_baseline_git_sha": "",
+        "started_at": "",
+        "ended_at": "",
+        "exit_status": 0,
+        "adapter_output_sha256": "",
+        "batch_artifact_path": "",
+        "request_artifact_sha256": "",
+        "summary_artifact_sha256": "",
+        "manifest_artifact_sha256": "",
+    }
+    with pytest.raises(ContractError, match="universe integrity violation"):
+        validate_execution_receipt(receipt, plan, state, request_path, output_path)

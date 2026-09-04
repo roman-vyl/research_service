@@ -477,10 +477,22 @@ class TradeoffDimension(ExactModel):
 
 
 class TradeoffComparison(ExactModel):
+    """Compares two subjects the interpretation worker itself chose to compare.
+
+    Technical market-universe identity (same frozen session research horizon,
+    matching `market_data_hash`) is a harness-owned invariant, not a worker
+    judgment call: the supervisor freezes one research horizon for the whole
+    session and fail-closed hard-stops before interpretation if any candidate's
+    evidence does not match it (see `research_horizon` in session state). A
+    comparison the worker is asked to interpret has therefore already passed
+    deterministic comparability checks; this model carries only the scientific
+    tradeoff judgment (profitability/risk/sample-size/etc), never a
+    provenance/universe declaration.
+    """
+
     left_subject_ref: str = Field(min_length=1)
     right_subject_ref: str = Field(min_length=1)
     stage_kind: StageKind
-    same_market_universe: bool
     dimensions: list[TradeoffDimension] = Field(min_length=1)
     relation: Literal["left_dominates", "right_dominates", "tradeoff", "equivalent", "incomparable"]
 
@@ -490,8 +502,6 @@ class TradeoffComparison(ExactModel):
         if len(dimensions) != len(set(dimensions)):
             raise ValueError("tradeoff dimensions must be unique")
         values = [item.assessment for item in self.dimensions]
-        if not self.same_market_universe and self.relation != "incomparable":
-            raise ValueError("different market universes must be incomparable")
         if self.relation == "left_dominates" and (
             "right_better" in values or "uncertain" in values or "left_better" not in values
         ):

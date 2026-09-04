@@ -26,6 +26,8 @@ For non-batch actions those three values are `NONE`; use only permitted existing
 referenced by the frozen plan. Write the existing iteration contract at `{result_path}`, conforming
 to `{result_schema_path}`. You may write declared textual/JSON analysis only under `{analysis_dir}`.
 
+{universe_comparability_note}
+
 {experiment_id_authority_note}
 
 `{quality_assessment_schema_path}` is the sole authoritative output contract for

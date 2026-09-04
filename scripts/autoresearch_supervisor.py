@@ -22,10 +22,13 @@ from typing import Any, Sequence
 import httpx
 from pydantic import ValidationError
 
+from research_service.adapters.http.market_data_client import HttpMarketDataClient
+from research_service.application.backtests.history_window import ResolveBacktestWindow
 from research_service.application.experiments import (
     BatchExperimentRequest,
     BatchExperimentResult,
 )
+from research_service.domain.errors import ResearchServiceError
 from research_service.runtime.settings import Settings
 
 from autoresearch_quality_contracts import (
@@ -193,7 +196,9 @@ _STATE_V3_KEYS = _STATE_V2_KEYS | {
     "phase_a_references",
     "stage_dispositions",
     "stage_history",
+    "research_horizon",
 }
+_RESEARCH_HORIZON_KEYS = {"ticker", "timeframe", "from_ms", "to_ms", "market_data_hash"}
 _ITERATION_KEYS = {
     "contract_version",
     "session_id",
@@ -370,6 +375,43 @@ def resolve_research_service_base_url(source: dict[str, str] | None = None) -> s
             f"{_RESEARCH_SERVICE_BASE_URL_VAR} must be set by the launch profile wrapper"
         )
     return value
+
+
+def resolve_frozen_research_horizon(
+    *, ticker: str, timeframe: str, settings: Settings
+) -> dict[str, Any]:
+    """Resolve and freeze the one research horizon for an entire AutoResearch session.
+
+    Calls the same production window-resolution path a canonical batch uses
+    (`ResolveBacktestWindow` with `range_policy=full_available`) exactly once, so
+    the frozen `from_ms`/`to_ms`/`market_data_hash` are guaranteed consistent with
+    what the executor itself would resolve right now. Every later batch in the
+    session is then forced onto this frozen `explicit_range` by the supervisor --
+    market universe identity is a harness-owned invariant, never a scientific
+    worker's concern (no worker ever chooses, sees, or reasons about a range).
+    """
+
+    market_data = HttpMarketDataClient(settings.market_data_url)
+    try:
+        window = ResolveBacktestWindow(market_data).execute(
+            ticker=ticker,
+            timeframe=timeframe,
+            explicit_range=None,
+            range_policy="full_available",
+        )
+    except ResearchServiceError as exc:
+        raise ContractError(f"cannot resolve research horizon: {exc}") from exc
+    except httpx.HTTPError as exc:
+        raise ContractError(f"Market Data Service unavailable while resolving horizon: {exc}") from exc
+    finally:
+        market_data.close()
+    return {
+        "ticker": window.market.ticker,
+        "timeframe": window.market.timeframe,
+        "from_ms": window.market.from_ms,
+        "to_ms": window.market.to_ms,
+        "market_data_hash": window.market_data_hash,
+    }
 
 
 def _validate_component_catalog(catalog: dict[str, Any], strategy_id: str) -> None:
@@ -561,8 +603,26 @@ def validate_execution_plan(
         return None
     if not isinstance(plan.get("canonical_request"), dict):
         raise ContractError("batch plan requires canonical_request")
+    raw_request = plan["canonical_request"]
+    if v3:
+        # Market universe identity is a harness-owned invariant, never a scientific
+        # worker's concern: the worker's canonical_request must not name a range at
+        # all, and the supervisor materializes the session's one frozen
+        # research_horizon as explicit_range here, overriding anything the worker
+        # wrote -- see resolve_frozen_research_horizon().
+        if "range_policy" in raw_request or "range" in raw_request:
+            raise ContractError(
+                "canonical_request must not include range_policy/range; the supervisor "
+                "materializes the session's frozen research_horizon"
+            )
+        horizon = state["research_horizon"]
+        raw_request = {
+            **raw_request,
+            "range_policy": "explicit_range",
+            "range": {"from_ms": horizon["from_ms"], "to_ms": horizon["to_ms"]},
+        }
     try:
-        request = BatchExperimentRequest.model_validate(plan["canonical_request"])
+        request = BatchExperimentRequest.model_validate(raw_request)
     except ValidationError as exc:
         raise ContractError(f"invalid canonical batch request: {exc}") from exc
     request = _with_derived_managed_policy_enabled(request)
@@ -592,6 +652,28 @@ def validate_execution_receipt(
         raise ContractError("execution receipt is forbidden for non-batch action")
     request = validate_execution_plan(plan, state)
     assert request is not None
+    if state.get("contract_version") == STATE_VERSION_V3:
+        # Universe integrity is a harness-owned invariant, checked here mechanically
+        # -- before interpretation is ever invoked, straight from the canonical
+        # adapter output, never left as a comparability judgment for the
+        # interpretation worker. A mismatch means the frozen session
+        # research_horizon no longer describes what the executor actually measured
+        # (e.g. upstream data was retroactively revised) and must hard-stop the
+        # session rather than surface as an interpretation-stage puzzle. Checked
+        # first, before receipt/artifact bookkeeping, so it fails fast.
+        output = load_json(output_path)
+        result = BatchExperimentResult.model_validate(output["result"])
+        expected_hash = state["research_horizon"]["market_data_hash"]
+        mismatched = [
+            candidate.candidate_id
+            for candidate in result.candidates
+            if candidate.status == "completed" and candidate.market_data_hash != expected_hash
+        ]
+        if mismatched:
+            raise ContractError(
+                f"universe integrity violation: candidates {mismatched} do not match the "
+                "session's frozen research_horizon"
+            )
     expected = {
         "session_id": state["session_id"],
         "iteration_id": state["iteration"] + 1,
@@ -1109,6 +1191,24 @@ def validate_state(state: dict[str, Any]) -> None:
                 "B1_WIDTH" not in closed or "B2_LOOKBACK" not in closed
             ):
                 raise StageContractError("B3 requires independently closed B1 and B2")
+            horizon = state["research_horizon"]
+            if not isinstance(horizon, dict) or set(horizon) != _RESEARCH_HORIZON_KEYS:
+                raise StageContractError("research_horizon is invalid")
+            if not isinstance(horizon["ticker"], str) or not horizon["ticker"]:
+                raise StageContractError("research_horizon.ticker is invalid")
+            if not isinstance(horizon["timeframe"], str) or not horizon["timeframe"]:
+                raise StageContractError("research_horizon.timeframe is invalid")
+            if not isinstance(horizon["market_data_hash"], str) or not re.fullmatch(
+                r"[0-9a-f]{64}", horizon["market_data_hash"]
+            ):
+                raise StageContractError("research_horizon.market_data_hash is invalid")
+            if (
+                type(horizon["from_ms"]) is not int
+                or type(horizon["to_ms"]) is not int
+                or horizon["from_ms"] < 0
+                or horizon["from_ms"] >= horizon["to_ms"]
+            ):
+                raise StageContractError("research_horizon.from_ms/to_ms is invalid")
         except (StageContractError, KeyError) as exc:
             raise ContractError(f"invalid v3 stage state: {exc}") from exc
 
@@ -1618,6 +1718,15 @@ def render_planning_prompt(
             ),
             "batch_request_schema_path": root
             / "autoresearch/schemas/batch_experiment_request.schema.json",
+            "range_authority_note": (
+                "The schema shows `range_policy`/`range` as part of the full production "
+                "contract, but you must NOT include either key in your canonical_request: "
+                "which historical market range this session measures is a harness-owned, "
+                "session-frozen invariant, not a planning decision. The supervisor "
+                "materializes it into every canonical_request before validation."
+                if state["contract_version"] == STATE_VERSION_V3
+                else "Include `range_policy` and `range` as the schema requires."
+            ),
             "result_path": iteration_root / "execution_plan.json",
             "analysis_dir": iteration_root / "planning_analysis",
             "component_catalog_path": component_catalog_path
@@ -1657,6 +1766,16 @@ def render_interpretation_prompt(
         "execution_output_path": iteration_root / "execution_output.json" if batch else "NONE",
         "receipt_path": iteration_root / "execution_receipt.json" if batch else "NONE",
         "analysis_dir": iteration_root / "interpretation_analysis",
+        "universe_comparability_note": (
+            "All evidence supplied for comparison in this session has already passed "
+            "deterministic market-universe comparability checks (one frozen research "
+            "horizon, enforced by the supervisor before you were invoked). Do not reason "
+            "about, question, or declare market-data comparability/provenance yourself; "
+            "assess only the scientific tradeoffs (sample size, robustness, thinning, "
+            "regime concentration, side behavior, etc)."
+            if batch and state["contract_version"] == STATE_VERSION_V3
+            else "N/A for this action or session."
+        ),
         "canonical_metric_paths": ", ".join(
             f"`{metric_path}`" for metric_path in sorted(CANONICAL_METRIC_PATHS)
         ),
