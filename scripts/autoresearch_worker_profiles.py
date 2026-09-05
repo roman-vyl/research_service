@@ -66,6 +66,12 @@ _WORKER_PROFILES = MappingProxyType(
             model="ollama/qwen3.5:9b",
             argv=("opencode", "run", "--auto", "-m", "ollama/qwen3.5:9b"),
         ),
+        "qwen38-local": WorkerProfile(
+            key="qwen38-local",
+            runner="opencode",
+            model="ollama/qwen3.8:27b",
+            argv=("opencode", "run", "--auto", "-m", "ollama/qwen3.8:27b"),
+        ),
     }
 )
 

@@ -59,6 +59,12 @@ from autoresearch_worker_profiles import resolve_worker_profile  # noqa: E402
             "ollama/qwen3.5:9b",
             ("opencode", "run", "--auto", "-m", "ollama/qwen3.5:9b"),
         ),
+        (
+            "qwen38-local",
+            "opencode",
+            "ollama/qwen3.8:27b",
+            ("opencode", "run", "--auto", "-m", "ollama/qwen3.8:27b"),
+        ),
     ),
 )
 def test_required_worker_profiles_resolve_exact_argv(
@@ -81,7 +87,13 @@ def test_unknown_worker_profile_fails_closed_with_allowed_keys() -> None:
         resolve_worker_profile("invented-runner")
 
     message = str(error.value)
-    for key in ("claude-sonnet46", "codex-gpt56-sol", "glm52-opencode", "qwen35-local"):
+    for key in (
+        "claude-sonnet46",
+        "codex-gpt56-sol",
+        "glm52-opencode",
+        "qwen35-local",
+        "qwen38-local",
+    ):
         assert key in message
 
 
