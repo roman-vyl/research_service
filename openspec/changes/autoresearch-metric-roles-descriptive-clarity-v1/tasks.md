@@ -90,6 +90,18 @@
       confirming interpretation no longer fails on the `metric_roles` pattern observed in session
       `ema-anchor-glm52-b1-smoke-20260905160326`, and confirming the narrowed worker contract
       produces a valid assessment end to end.
+      First attempt (`claude-sonnet46`, session `ema-anchor-sonnet-metricroles-smoke-20260905201503`)
+      found a real gap this task exists to catch: `autoresearch/prompts/interpretation.md` told the
+      worker "`{quality_assessment_schema_path}` is the sole authoritative output contract... if the
+      schema and any other text in this prompt disagree, the schema wins" -- but the schema (still
+      generated from the unchanged `StageAssessment`/`MetricRoles` Pydantic models) shows
+      `stage.metric_roles`, directly contradicting the new `describe_metric_role_selection_contract`
+      cheat-sheet telling the worker to write `stage.metric_role_selection` instead. The worker
+      correctly followed the stronger "schema wins" instruction and wrote `metric_roles`, failing
+      3/3 attempts with `"metric_role_selection is required"`. Fixed: added an explicit exception to
+      the "schema wins" rule in `interpretation.md`, mirroring `planning.md`'s existing
+      `range_authority_note` precedent for the same class of schema-vs-actual-contract conflict.
+      Re-running smoke after this fix.
 - [x] 5.2 `openspec validate --strict --changes autoresearch-metric-roles-descriptive-clarity-v1`
       passed (7/7).
 

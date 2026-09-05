@@ -62,8 +62,16 @@ Allowed canonical metric paths (rendered from the current contract layer):
 Do not invent metric roles or metric paths absent from the applicable result contract and the
 allowlist above. Do not combine fields belonging to different evidence kinds.
 
-Before writing `stage.metric_roles`, apply this exact contract for the current stage (rendered from
-the current contract layer, not a hand-copied list):
+The schema at `{quality_assessment_schema_path}` shows `stage.metric_roles` as part of the full,
+final contract -- but this is the one exception to "the schema wins" above: you must NOT write
+`stage.metric_roles` yourself. Write `stage.metric_role_selection` instead, containing only
+`primary_evidence_additions` and `promotion_gates` as described below. The supervisor
+deterministically materializes the complete `metric_roles` object (mandatory primary evidence,
+`secondary`, `descriptive`) from your selection before validation; none of that is yours to author
+or restate.
+
+Before writing `stage.metric_role_selection`, apply this exact contract for the current stage
+(rendered from the current contract layer, not a hand-copied list):
 
 {stage_metric_role_contract}
 
