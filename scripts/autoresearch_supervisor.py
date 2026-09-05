@@ -35,8 +35,10 @@ from autoresearch_quality_contracts import (
     CANONICAL_METRIC_PATHS,
     EvidenceRef,
     PromotionBlocker,
-    describe_stage_metric_role_contract,
+    MetricRoleSelection,
+    describe_metric_role_selection_contract,
     enforce_quality_policy,
+    materialize_metric_roles,
     phase_binding,
     validate_assessment,
     validate_policy,
@@ -1411,7 +1413,19 @@ def validate_iteration_result(
     if quality_aware:
         try:
             policy = validate_policy(state["research_quality_policy"])
-            assessment = validate_assessment(result["research_quality_assessment"])
+            raw_assessment = result["research_quality_assessment"]
+            if not isinstance(raw_assessment, dict) or not isinstance(
+                raw_assessment.get("stage"), dict
+            ):
+                raise ContractError("research_quality_assessment.stage must be an object")
+            raw_stage = raw_assessment["stage"]
+            if "metric_role_selection" not in raw_stage:
+                raise ContractError("research_quality_assessment.stage.metric_role_selection is required")
+            selection = MetricRoleSelection.model_validate(raw_stage.pop("metric_role_selection"))
+            raw_stage["metric_roles"] = materialize_metric_roles(
+                raw_stage["stage_kind"], selection
+            ).model_dump(mode="json")
+            assessment = validate_assessment(raw_assessment)
             candidate_facts = (
                 {
                     candidate.candidate_id: candidate.model_dump(mode="python")
@@ -1860,7 +1874,7 @@ def render_interpretation_prompt(
             f"`{metric_path}`" for metric_path in sorted(CANONICAL_METRIC_PATHS)
         ),
         "stage_metric_role_contract": (
-            describe_stage_metric_role_contract(state["active_stage_binding"]["stage_kind"])
+            describe_metric_role_selection_contract(state["active_stage_binding"]["stage_kind"])
             if state["contract_version"] in {STATE_VERSION_V2, STATE_VERSION_V3}
             else "N/A (legacy v1 contract has no stage metric-role assessment)."
         ),

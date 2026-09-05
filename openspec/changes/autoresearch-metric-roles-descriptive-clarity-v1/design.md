@@ -93,9 +93,9 @@ All constants referenced below were re-read directly from
 
 ### `robustness_validation` (the `else` branch, `:675-679`)
 
-- `primary` mandatory core: `ROBUSTNESS_PRIMARY` (4 members: `validation_evidence`,
-  `neighborhood_stability`, `realised_trade_count`, `thinning`, `:162-169`) always required.
-  **Materialize this core.**
+- `primary` mandatory core: `ROBUSTNESS_PRIMARY` (6 members: `validation_evidence`,
+  `neighborhood_stability`, `realised_trade_count`, `thinning`, `temporal_concentration`,
+  `regime_concentration`, `:162-169`) always required. **Materialize this core.**
 - `primary` genuine choice: `ROBUSTNESS_PRIMARY_ALLOWED - ROBUSTNESS_PRIMARY` (`response_topology,
   win_rate, long.trades, long.win_rate, short.trades, short.win_rate`, `:170-177`) is optional
   additional evidence -- genuine choice of what extra support to cite. **Worker submits: 0+ optional

@@ -272,6 +272,88 @@ class MetricRoles(ExactModel):
         return self
 
 
+class MetricRoleSelection(ExactModel):
+    """The narrow worker-facing input `materialize_metric_roles` compiles into a full
+    `MetricRoles` object. Only the fields the stage-kind audit found to carry genuine
+    evidentiary judgment: which additional named evidence to cite in `primary` beyond the
+    stage's mandatory core (the worker's only real choice for `structural_entry`/
+    `structural_interaction`/`entry_region_selection`/`robustness_validation`; always empty for
+    `descriptive_baseline`/`exit_geometry`, which have no optional primary evidence), and which
+    promotion gates apply this iteration (always empty for `descriptive_baseline`, which defines
+    none). The worker never authors `secondary`/`descriptive`, and never authors the mandatory
+    part of `primary` -- see `materialize_metric_roles`."""
+
+    primary_evidence_additions: list[str] = Field(default_factory=list)
+    promotion_gates: list[GateId] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def unique(self) -> "MetricRoleSelection":
+        if len(self.primary_evidence_additions) != len(set(self.primary_evidence_additions)):
+            raise ValueError("primary_evidence_additions must be unique")
+        if len(self.promotion_gates) != len(set(self.promotion_gates)):
+            raise ValueError("promotion_gates must be unique")
+        return self
+
+
+# Stage-fixed MetricRoles content the audit found to be fully or mostly deterministic --
+# materialize_metric_roles builds the complete object from this plus the worker's narrow
+# MetricRoleSelection, never asking the worker to reproduce it. Each entry mirrors exactly what
+# validate_metric_roles already enforces for that stage_kind (see that function for the
+# authoritative mechanical constraints this table must stay consistent with).
+_METRIC_ROLES_FIXED_CORE: dict[StageKind, dict[str, Any]] = {
+    "descriptive_baseline": {
+        "primary_core": BASELINE_PRIMARY_ALLOWED,
+        "secondary": frozenset(),
+        "descriptive": None,  # computed as CANONICAL_METRIC_PATHS - primary, see materializer
+    },
+    "structural_entry": {
+        "primary_core": {"response_topology"},
+        "secondary": frozenset({"net_pnl", "return_pct", "profit_factor", "max_drawdown"}),
+        "descriptive": frozenset({"gross_pnl", "fees_paid"}),
+    },
+    "structural_interaction": {
+        "primary_core": {"response_topology", "neighborhood_stability"},
+        "secondary": frozenset({"net_pnl", "return_pct", "profit_factor", "max_drawdown"}),
+        "descriptive": frozenset({"gross_pnl", "fees_paid"}),
+    },
+    "entry_region_selection": {
+        "primary_core": {"response_topology", "neighborhood_stability"},
+        "secondary": frozenset({"net_pnl", "return_pct", "profit_factor", "max_drawdown"}),
+        "descriptive": frozenset({"gross_pnl", "fees_paid"}),
+    },
+    "exit_geometry": {
+        "primary_core": EXIT_PRIMARY,
+        "secondary": frozenset({"win_rate"}),
+        "descriptive": frozenset({"gross_pnl", "fees_paid"}),
+    },
+    "robustness_validation": {
+        "primary_core": ROBUSTNESS_PRIMARY,
+        "secondary": frozenset({"net_pnl"}),
+        "descriptive": frozenset({"gross_pnl", "fees_paid"}),
+    },
+}
+
+
+def materialize_metric_roles(stage_kind: StageKind, selection: MetricRoleSelection) -> MetricRoles:
+    """Deterministically compile the complete `MetricRoles` object for `stage_kind` from the
+    worker's narrow `MetricRoleSelection`, per the fixed core in `_METRIC_ROLES_FIXED_CORE`. The
+    result still passes through the unchanged `validate_metric_roles` before acceptance -- this
+    function performs no independent business-rule enforcement of its own; a selection that
+    produces an invalid union (e.g. missing a required "at least one of" evidence set) is caught
+    there, not here."""
+    fixed = _METRIC_ROLES_FIXED_CORE[stage_kind]
+    primary = sorted(set(fixed["primary_core"]) | set(selection.primary_evidence_additions))
+    descriptive = fixed["descriptive"]
+    if descriptive is None:
+        descriptive = CANONICAL_METRIC_PATHS - set(primary)
+    return MetricRoles(
+        primary=primary,
+        secondary=sorted(fixed["secondary"]),
+        descriptive=sorted(descriptive),
+        promotion_gates=sorted(selection.promotion_gates),
+    )
+
+
 class StageAssessment(ExactModel):
     phase: str = Field(min_length=1)
     stage_kind: StageKind
@@ -589,51 +671,56 @@ def phase_binding(policy: ResearchQualityPolicy, phase: str) -> PhaseBinding:
     return matches[0]
 
 
-def describe_stage_metric_role_contract(stage_kind: StageKind) -> str:
-    """Render the one current stage's metric-role contract that validate_metric_roles enforces.
-
-    A compact, worker-facing cheat-sheet resolved from the same constants the mechanical
-    validator checks against -- not a copy maintained by hand, and not the full quality policy.
-    """
+def describe_metric_role_selection_contract(stage_kind: StageKind) -> str:
+    """Render the narrow `MetricRoleSelection` the worker must submit for `stage_kind` --
+    everything else in `MetricRoles` (the mandatory `primary` core, `secondary`, `descriptive`) is
+    deterministically materialized by the supervisor (`materialize_metric_roles`) from the same
+    constants this function reads; the worker never authors it and must not restate it. This
+    replaces the former full-`MetricRoles` cheat-sheet (`describe_stage_metric_role_contract`) now
+    that the audit backing this change found most of that structure had no worker-facing decision
+    content."""
     if stage_kind == "descriptive_baseline":
         return (
             f"Stage: {stage_kind}\n"
-            "metric_roles.primary is required and must be non-empty; every entry must be one of: "
-            f"{', '.join(sorted(BASELINE_PRIMARY_ALLOWED))}.\n"
-            "primary must include realised_trade_count.\n"
-            "promotion_gates must be empty at this stage.\n"
-            "Baseline economics (return_pct, profit_factor, net_pnl, max_drawdown, ...) remain "
-            "descriptive and must never be promoted to primary."
+            "metric_role_selection: submit `primary_evidence_additions: []` and "
+            "`promotion_gates: []` -- this stage has no optional primary evidence and defines no "
+            "promotion gates. The complete metric_roles object is materialized by the supervisor; "
+            "you author no part of it."
         )
     if stage_kind in {"structural_entry", "structural_interaction", "entry_region_selection"}:
         lines = [
             f"Stage: {stage_kind}",
-            f"metric_roles.primary must be a subset of: {', '.join(sorted(STRUCTURAL_PRIMARY_ALLOWED))}.",
-            "secondary is required, non-empty, and must be a subset of: "
-            f"{', '.join(sorted(DESCRIPTIVE_ECONOMICS))}.",
-            f"primary must include at least one of: {', '.join(sorted(CONDITIONAL_ENTRY_EVIDENCE))}.",
-            "primary must include response_topology.",
-            f"primary must include at least one of: {', '.join(sorted(SAMPLE_THINNING_EVIDENCE))}.",
+            "metric_role_selection.primary_evidence_additions must include, from the evidence you "
+            "judge reliable enough to cite this iteration:",
+            f"  at least one of: {', '.join(sorted(CONDITIONAL_ENTRY_EVIDENCE))}",
+            f"  at least one of: {', '.join(sorted(SAMPLE_THINNING_EVIDENCE))}",
         ]
         if stage_kind in {"structural_interaction", "entry_region_selection"}:
-            lines.append("primary must include neighborhood_stability.")
-            lines.append(
-                f"primary must include at least one of: {', '.join(sorted(SIDE_BEHAVIOR_EVIDENCE))}."
-            )
-        lines.append("promotion_gates must not include after_cost_positive at this stage.")
+            lines.append(f"  at least one of: {', '.join(sorted(SIDE_BEHAVIOR_EVIDENCE))}")
+        lines.append(
+            "The mandatory primary core (response_topology"
+            + (", neighborhood_stability" if stage_kind != "structural_entry" else "")
+            + ") and every secondary/descriptive value are materialized by the supervisor -- do "
+            "not restate them."
+        )
+        lines.append(
+            "metric_role_selection.promotion_gates: name any gates relevant to this iteration's "
+            "promotion claim, except after_cost_positive (forbidden at this stage)."
+        )
         return "\n".join(lines)
     if stage_kind == "exit_geometry":
         return (
             f"Stage: {stage_kind}\n"
-            f"metric_roles.primary must equal exactly: {', '.join(sorted(EXIT_PRIMARY))}.\n"
-            "promotion_gates must include after_cost_positive."
+            "metric_role_selection.primary_evidence_additions must be empty -- this stage's "
+            "primary is fixed exactly and materialized by the supervisor.\n"
+            "metric_role_selection.promotion_gates must include after_cost_positive."
         )
     return (
         f"Stage: {stage_kind}\n"
-        f"metric_roles.primary must include all of: {', '.join(sorted(ROBUSTNESS_PRIMARY))}, and "
-        "may additionally include only: "
-        f"{', '.join(sorted(ROBUSTNESS_PRIMARY_ALLOWED - ROBUSTNESS_PRIMARY))}.\n"
-        "promotion_gates must include after_cost_positive."
+        "metric_role_selection.primary_evidence_additions may optionally include any of: "
+        f"{', '.join(sorted(ROBUSTNESS_PRIMARY_ALLOWED - ROBUSTNESS_PRIMARY))} -- the mandatory "
+        "core is materialized by the supervisor.\n"
+        "metric_role_selection.promotion_gates must include after_cost_positive."
     )
 
 

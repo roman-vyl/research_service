@@ -27,9 +27,13 @@ from autoresearch_quality_contracts import (  # noqa: E402
     EvidenceRef,
     EXIT_PRIMARY,
     ROBUSTNESS_PRIMARY,
+    MetricRoleSelection,
     ResearchQualityAssessment,
     ResearchQualityPolicy,
+    _METRIC_ROLES_FIXED_CORE,
     enforce_quality_policy,
+    materialize_metric_roles,
+    validate_metric_roles,
     write_contract_schemas,
 )
 from autoresearch_supervisor import (  # noqa: E402
@@ -364,6 +368,107 @@ def test_phase_a_economics_are_descriptive_and_cannot_be_primary() -> None:
         _enforce(_policy("descriptive_baseline"), baseline, _facts())
 
 
+_ALL_STAGE_KINDS = (
+    "descriptive_baseline",
+    "structural_entry",
+    "structural_interaction",
+    "entry_region_selection",
+    "exit_geometry",
+    "robustness_validation",
+)
+
+
+@pytest.mark.parametrize(
+    "stage",
+    (
+        "structural_entry",
+        "structural_interaction",
+        "entry_region_selection",
+        "exit_geometry",
+        "robustness_validation",
+    ),
+)
+def test_materialize_metric_roles_matches_existing_fixture_for_every_stage(stage: str) -> None:
+    """The materializer's fixed core plus the fixture's own evidence-set additions must
+    reproduce exactly the same MetricRoles every existing fixture already hand-built --
+    round-tripping `_roles(stage)` through `_as_worker_submitted`/`materialize_metric_roles`
+    is the identity function. `descriptive_baseline` is intentionally excluded here: the
+    materializer now always emits the full `BASELINE_PRIMARY_ALLOWED` set (design.md's explicit
+    decision), not the fixture's old minimal `["realised_trade_count"]` -- exactly the worker
+    guesswork this change replaces; covered separately below."""
+    roles = _roles(stage)
+    selection_dict = _as_worker_submitted({"stage": {"stage_kind": stage, "metric_roles": roles}})[
+        "stage"
+    ]["metric_role_selection"]
+    selection = MetricRoleSelection.model_validate(selection_dict)
+    materialized = materialize_metric_roles(stage, selection)
+    assert sorted(materialized.primary) == sorted(roles["primary"])
+    assert sorted(materialized.secondary) == sorted(roles["secondary"])
+    assert sorted(materialized.descriptive) == sorted(roles["descriptive"])
+    assert sorted(materialized.promotion_gates) == sorted(roles["promotion_gates"])
+
+
+def test_materialize_metric_roles_descriptive_baseline_needs_no_worker_input() -> None:
+    materialized = materialize_metric_roles("descriptive_baseline", MetricRoleSelection())
+
+    class _Stage:
+        stage_kind = "descriptive_baseline"
+        metric_roles = materialized
+
+    class _Assessment:
+        stage = _Stage()
+
+    validate_metric_roles(_Assessment())  # must not raise
+    assert materialized.promotion_gates == []
+    assert materialized.secondary == []
+    assert "realised_trade_count" in materialized.primary
+
+
+@pytest.mark.parametrize(
+    "stage", ("structural_entry", "structural_interaction", "entry_region_selection")
+)
+def test_materialize_metric_roles_rejects_selection_missing_required_evidence(
+    stage: str,
+) -> None:
+    """The materializer performs no independent business-rule enforcement -- a worker selection
+    that omits a required "at least one of" evidence set still fails at the unchanged
+    `validate_metric_roles`, not silently passes."""
+    materialized = materialize_metric_roles(stage, MetricRoleSelection())  # no additions at all
+
+    class _Stage:
+        stage_kind = stage
+        metric_roles = materialized
+
+    class _Assessment:
+        stage = _Stage()
+
+    with pytest.raises(ValueError, match="conditional entry-quality evidence"):
+        validate_metric_roles(_Assessment())
+
+
+def test_glm_smoke_duplicate_metric_failure_is_structurally_eliminated() -> None:
+    """Regression for the real `glm52-opencode` HOST smoke failure
+    (`ema-anchor-glm52-b1-smoke-20260905160326`): the worker duplicated an economics metric into
+    both `descriptive` and `secondary`/`primary`, tripping `exact_role_names`' disjointness
+    check. Under the new contract, the worker cannot express that mistake at all -- it never
+    authors `descriptive`/`secondary`, only `primary_evidence_additions`/`promotion_gates`, so
+    there is no field left for a duplicate to occur in."""
+    selection = MetricRoleSelection.model_validate(
+        {
+            "primary_evidence_additions": ["win_rate", "thinning"],
+            "promotion_gates": [],
+        }
+    )
+    materialized = materialize_metric_roles("structural_entry", selection)
+    assert not (set(materialized.descriptive) & set(materialized.primary))
+    assert not (set(materialized.descriptive) & set(materialized.secondary))
+    # The worker's MetricRoleSelection type itself has no field named "descriptive" or
+    # "secondary" -- there is no attribute to duplicate into, structurally, not just by
+    # convention.
+    assert not hasattr(selection, "descriptive")
+    assert not hasattr(selection, "secondary")
+
+
 def test_semantically_incomplete_stage_metric_roles_fail_closed() -> None:
     baseline = _assessment("descriptive_baseline", decision="continue_discovery")
     baseline["stage"]["metric_roles"]["primary"] = ["win_rate"]
@@ -661,6 +766,28 @@ def _artifact(
     return Path(PersistBatchExperiment(FilesystemArtifactStore(tmp_path / "artifacts")).execute(request, result).artifact_path)
 
 
+def _as_worker_submitted(assessment: dict[str, object]) -> dict[str, object]:
+    """`_assessment()`/`_roles()` build the full, already-materialized `MetricRoles` shape --
+    correct for tests calling `_enforce`/`enforce_quality_policy` directly (below the
+    materialization layer, unchanged by this change). Tests that go through the supervisor's
+    `validate_iteration_result` now need `stage.metric_role_selection` instead: this derives it
+    by subtracting each stage's fixed `primary_core` (the same constant
+    `materialize_metric_roles` reads) from the fixture's full `primary`, so the two test paths
+    stay mechanically tied to one source of truth instead of two independently maintained
+    fixtures."""
+    import copy
+
+    converted = copy.deepcopy(assessment)
+    stage = converted["stage"]
+    roles = stage.pop("metric_roles")
+    core = _METRIC_ROLES_FIXED_CORE[stage["stage_kind"]]["primary_core"]
+    stage["metric_role_selection"] = {
+        "primary_evidence_additions": sorted(set(roles["primary"]) - set(core)),
+        "promotion_gates": roles["promotion_gates"],
+    }
+    return converted
+
+
 def _iteration(artifact: Path, assessment: dict[str, object]) -> dict[str, object]:
     return {
         "contract_version": "bbb_autoresearch_iteration.v2",
@@ -710,7 +837,9 @@ def test_v2_supervisor_validates_and_durably_projects_full_assessment(tmp_path: 
     _, root = _repo(tmp_path / "repo", policy)
     state = load_json(root / "state.json")
     artifact = _artifact(tmp_path)
-    result = _iteration(artifact, _assessment("entry_region_selection", net_positive=False))
+    result = _iteration(
+        artifact, _as_worker_submitted(_assessment("entry_region_selection", net_positive=False))
+    )
     validate_iteration_result(result, state, artifacts_root=tmp_path / "artifacts")
     updated = _advance_state(state, result)
     validate_state(updated)
@@ -730,7 +859,7 @@ def test_missing_optional_canonical_economic_fact_rejects_promotion_cleanly(
     _, root = _repo(tmp_path / "repo", policy)
     state = load_json(root / "state.json")
     artifact = _artifact(tmp_path, null_economic_field=field)
-    result = _iteration(artifact, _assessment("exit_geometry"))
+    result = _iteration(artifact, _as_worker_submitted(_assessment("exit_geometry")))
 
     with pytest.raises(
         ContractError, match=rf"required canonical economic fact {field} is absent"

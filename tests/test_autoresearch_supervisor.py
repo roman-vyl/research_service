@@ -743,8 +743,8 @@ def test_interpretation_prompt_renders_stage_metric_role_contract_for_baseline(
     prompt = render_interpretation_prompt(state, Path(__file__).parents[1], tmp_path, "batch")
 
     assert "Stage: descriptive_baseline" in prompt
-    assert "primary must include realised_trade_count." in prompt
-    assert "promotion_gates must be empty at this stage." in prompt
+    assert "primary_evidence_additions: []" in prompt
+    assert "no optional primary evidence and defines no promotion gates" in prompt
 
 
 def test_interpretation_prompt_renders_stage_metric_role_contract_for_v3_session(
@@ -767,7 +767,7 @@ def test_interpretation_prompt_renders_stage_metric_role_contract_for_v3_session
     prompt = render_interpretation_prompt(state, Path(__file__).parents[1], tmp_path, "batch")
 
     assert "Stage: descriptive_baseline" in prompt
-    assert "primary must include realised_trade_count." in prompt
+    assert "primary_evidence_additions: []" in prompt
 
 
 def test_interpretation_prompt_names_execution_receipt_as_experiment_id_authority(
