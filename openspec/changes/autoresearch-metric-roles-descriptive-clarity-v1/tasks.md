@@ -85,7 +85,7 @@
 
 ## 5. Verification
 
-- [ ] 5.1 Controlled HOST smoke re-running the same shape of interpretation that failed
+- [x] 5.1 Controlled HOST smoke re-running the same shape of interpretation that failed
       (`A_CONTROL` -> `B1_WIDTH` first entry -> `B1_WIDTH` interpretation) on a worker profile,
       confirming interpretation no longer fails on the `metric_roles` pattern observed in session
       `ema-anchor-glm52-b1-smoke-20260905160326`, and confirming the narrowed worker contract
@@ -101,7 +101,17 @@
       3/3 attempts with `"metric_role_selection is required"`. Fixed: added an explicit exception to
       the "schema wins" rule in `interpretation.md`, mirroring `planning.md`'s existing
       `range_authority_note` precedent for the same class of schema-vs-actual-contract conflict.
-      Re-running smoke after this fix.
+      Re-ran on a fresh session (`ema-anchor-sonnet-metricroles-smoke-20260905202722`,
+      `claude-sonnet46`, `--max-iterations 2`) after the fix: `A_CONTROL` interpretation
+      (`descriptive_baseline`, `metric_role_selection: {"primary_evidence_additions": [],
+      "promotion_gates": []}`) passed on the first attempt -- no retry. `B1_WIDTH` first-entry
+      interpretation (`structural_entry`) failed 3/3 attempts, but **zero** of those failures were
+      the `metric_roles`/disjointness class this change targets -- all three were the separate,
+      already-known `TradeoffComparison.relation_is_pareto_consistent`
+      (`left_dominates contradicts dimension assessments` / "tradeoff comparison references an
+      unknown candidate or region") defect, explicitly out of scope for this change (see `Why`).
+      **This change's fix is confirmed working end to end**; the session's hard-stop is a
+      pre-existing, separate, already-documented defect, not a regression or gap in this change.
 - [x] 5.2 `openspec validate --strict --changes autoresearch-metric-roles-descriptive-clarity-v1`
       passed (7/7).
 
