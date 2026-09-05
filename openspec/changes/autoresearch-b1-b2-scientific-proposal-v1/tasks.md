@@ -4,10 +4,12 @@
       `scripts/autoresearch_supervisor.py` (`_advance_state`) -- verify it is appended for every
       committed v3 iteration regardless of disposition status (including `in_progress`), and confirm
       no code path currently reads it for anything this change would conflict with.
-- [ ] 1.2 Confirm `_STATE_V3_KEYS` (or equivalent exact-keyset validation) in
-      `scripts/autoresearch_supervisor.py` and note exactly what changes are needed to add
-      `stage_initial_sweeps` as a new top-level state key without breaking `validate_state`/
-      `validate_state_transition` for existing v3 sessions that lack it.
+- [x] 1.2 Confirm `_STATE_V3_KEYS` exact-keyset validation in `scripts/autoresearch_supervisor.py`.
+      Confirmed: `validate_state` (`:957-968`) calls `_require_exact_keys(state, _STATE_V3_KEYS, ...)`
+      -- a strict, not minimum, set match. `stage_initial_sweeps` is added as a **required** key;
+      historical session-state compatibility is an explicit non-goal (design.md), so no `.get()`
+      fallback, dual-read, or state contract version bump is introduced. A pre-existing v3 session
+      missing the key is expected to fail `validate_state` and is not made loadable again.
 - [ ] 1.3 Confirm whether the bound component for `B1_WIDTH`/`B2_LOOKBACK` can ever already be present
       in a later iteration's "reference" (verify against actual `reference_strategy()` semantics --
       does every B1/B2 iteration start from the same frozen naked strategy, or can prior iterations'
@@ -29,12 +31,12 @@
       template (mirroring the existing `research_quality_policy` template -> state precedent in
       `scripts/autoresearch_init.py`). Shape: `{"B1_WIDTH": {"values": [...]}, "B2_LOOKBACK": {"values": [...]}}`
       only -- no other keys.
-- [ ] 2.2 Add `stage_initial_sweeps` (empty or per-programme values, per 1.3/migration decision) to
-      `autoresearch/templates/ema_anchor_stage_contract_session.json`. **Do not choose the actual
-      numeric `values` here without an explicit operator decision** -- if none is supplied, document
-      the fallback behavior decided in task 3.4.
-- [ ] 2.3 Update `validate_state`/state schema validation to accept the new key without breaking
-      existing v3 sessions initialized before this change (per 1.2's findings).
+- [ ] 2.2 Add `stage_initial_sweeps` to `autoresearch/templates/ema_anchor_stage_contract_session.json`
+      (and any other v3 session template). **Do not choose the actual numeric `values` here without
+      an explicit operator decision.**
+- [ ] 2.3 Add `"stage_initial_sweeps"` to `_STATE_V3_KEYS` in `scripts/autoresearch_supervisor.py`.
+      No `.get()` fallback, no dual-read, no state contract version bump -- a pre-existing v3 session
+      missing the key is expected to fail `validate_state` (per 1.2 finding); this is intentional.
 
 ## 3. Deterministic first-entry materialization
 
@@ -51,11 +53,7 @@
       value, deterministic `candidate_id`/`experiment_id` generation (e.g.
       `"{stage-slug}-initial-sweep"` / `"{stage-slug}-{value}"`, namespaced by the existing
       `_with_canonical_experiment_id`/`_session_scoped_experiment_id` path unchanged).
-- [ ] 3.4 Decide and implement the fallback for a pre-existing session reaching `B1_WIDTH`/
-      `B2_LOOKBACK` for the first time with no `stage_initial_sweeps` present (missing key, per
-      Migration Plan in design.md) -- fall through to full-form planning for that stage's first entry,
-      not a silent `KeyError` or hard stop.
-- [ ] 3.5 Run the materialized first-entry payload through the unchanged `validate_stage_request`/
+- [ ] 3.4 Run the materialized first-entry payload through the unchanged `validate_stage_request`/
       `validate_stage_context` path before treating it as frozen.
 
 ## 4. Narrowed scientific_proposal for subsequent entries

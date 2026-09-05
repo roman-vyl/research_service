@@ -31,6 +31,11 @@ mechanism (not present in the master plan's original conceptual shape).
   domain/boundary/policy semantics, and lives outside `stage_contract`.
 
 **Non-Goals:**
+- Backward compatibility of session state initialized before this change. AutoResearch session state
+  is execution-local orchestration state, not a durable cross-version storage contract; a pre-existing
+  session missing `stage_initial_sweeps` is expected to fail `validate_state`'s exact-keyset check
+  and is not made loadable again -- no dual-read, no `.get()` fallback, no on-disk migration, no new
+  state contract version (see Migration Plan).
 - Choosing actual numeric values for `stage_initial_sweeps` -- open operator decision (see below).
 - `B3_WIDTH_X_LOOKBACK` geometry design (master plan Phase 7).
 - Merging planning and interpretation into one call (master plan Phase 9, separate open question).
@@ -132,11 +137,12 @@ for textual analysis output. Exact prompt text is an implementation task, not fu
   schema-passing candidate] → Mitigation: unchanged, independent `validate_stage_request`/
   `_strip_allowed` path is the last-line defense for every candidate, first-entry and subsequent
   alike -- same mitigation pattern as `A_CONTROL`.
-- [A session initialized before this change lacks `stage_initial_sweeps` in its frozen state, and
-  later reaches `B1_WIDTH`/`B2_LOOKBACK` for the first time] → Mitigation: must be resolved as a
-  migration decision (see Migration Plan) -- most likely, absence of the field for a given stage
-  falls back to today's full-form planning contract for that stage's first entry too, rather than
-  hard-stopping; this needs explicit implementation-time handling, not silent `KeyError`.
+- [A session initialized before this change lacks `stage_initial_sweeps` in its frozen state] →
+  Not mitigated, by design: AutoResearch session state is execution-local orchestration state, not a
+  durable cross-version storage contract. `stage_initial_sweeps` is added as a required key in
+  `_STATE_V3_KEYS`; `validate_state`'s exact-keyset check (`scripts/autoresearch_supervisor.py:957-968`)
+  fail-closes on any session state that predates this change. This is intentional, not a gap -- see
+  Migration Plan.
 - [New component-insertion code, exercised for the first time by this change, has broader blast
   radius than `A_CONTROL`'s materializer since it also runs on every worker-authored subsequent
   candidate, not just a single deterministic one] → Mitigation: unit tests must cover both the
@@ -146,21 +152,29 @@ for textual analysis output. Exact prompt text is an implementation task, not fu
 
 ## Migration Plan
 
-Additive: `stage_initial_sweeps` is a new, optional-at-read-time state field. A pre-existing v3
-session initialized before this change has no such field in its frozen state.
-`scripts/autoresearch_init.py` change only affects sessions initialized after this change ships. For
-a pre-existing session reaching `B1_WIDTH`/`B2_LOOKBACK` for the first time post-upgrade with no
-`stage_initial_sweeps` present: dispatch must treat this as "no deterministic first-entry available"
-and fall through to the existing (pre-this-change) full-form planning contract for that one stage's
-first entry -- an explicit implementation task, not an assumed default. No change to
+**Historical session-state compatibility is a non-goal.** AutoResearch session state
+(`state.json`) is execution-local orchestration state for one running research session, not a
+durable cross-version storage contract -- there is no requirement that a session initialized under
+one internal contract shape remain loadable after the contract changes. `stage_initial_sweeps` is
+added as a **required** key in `_STATE_V3_KEYS` (`scripts/autoresearch_supervisor.py:194-201`); the
+contract version stays `bbb_autoresearch_state.v3` (in-place internal contract change, not a version
+bump), and `validate_state`'s existing exact-keyset check
+(`scripts/autoresearch_supervisor.py:957-968`) fail-closes on any state predating this change --
+correctly, by design. No dual-read path, no `.get()`-with-default fallback, no on-disk migration
+script, and no new `bbb_autoresearch_state.v4` contract version are introduced for this. A
+pre-existing session that predates this change simply cannot resume past this point; that is an
+accepted, intentional consequence, not a defect to engineer around.
+
+`scripts/autoresearch_init.py` and every v3 session template are updated so every session
+initialized *after* this change always carries `stage_initial_sweeps`. No change to
 `execution_plan.v2`'s schema shape or `contract_version` -- both the first-entry materialized plan and
 subsequent worker-authored plans continue to produce the same `bbb_autoresearch_execution_plan.v2`
 shape; only authorship and (for subsequent entries) the worker-facing input contract change. If a new
 `scientific_proposal.json` artifact type is introduced, it must be added to the output-boundary
 protected/allowed filename set (`scripts/autoresearch_supervisor.py`'s boundary check) before any
 worker can write one -- an implementation task, verified by a dedicated boundary test mirroring the
-`A_CONTROL` precedent's coverage. Rollback is reverting the dispatch branches and template field;
-no stored data format needs reverting.
+`A_CONTROL` precedent's coverage. Rollback is reverting the dispatch branches and template field; no
+stored data format needs reverting, and no old session needs to be made loadable again.
 
 ## Open Questions
 
@@ -174,6 +188,3 @@ no stored data format needs reverting.
   `_strip_allowed`, its natural inverse) or in `autoresearch_supervisor.py` (alongside
   `_materialize_a_control_plan`) -- an implementation-time module-organization choice, not a
   behavior decision.
-- Fallback behavior for a pre-existing session missing `stage_initial_sweeps` (see Migration Plan) --
-  needs explicit implementation-time handling; the direction (fall through to full-form planning) is
-  stated above but the exact detection/branching code is not written here.
