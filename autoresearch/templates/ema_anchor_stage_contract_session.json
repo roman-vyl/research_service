@@ -5,6 +5,10 @@
   "strategy_context": {"strategy_id": "ema_pullback"},
   "phase": "baseline",
   "active_stage": "A_CONTROL",
+  "stage_initial_sweeps": {
+    "B1_WIDTH": {"values": [5, 10, 15, 20, 25, 30, 35]},
+    "B2_LOOKBACK": {"values": [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200]}
+  },
   "research_quality_policy": {
     "contract_version": "bbb_research_quality_policy.v1",
     "policy_id": "ema-anchor-stage-aware-v1",

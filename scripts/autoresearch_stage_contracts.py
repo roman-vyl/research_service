@@ -401,6 +401,57 @@ def _strip_allowed(
     return value
 
 
+def insert_bound_value(
+    strategy: dict[str, Any], contract: dict[str, Any], dimension: str, value: Any
+) -> dict[str, Any]:
+    """Insert or overwrite `dimension`'s bound mutable parameter in `strategy`'s naked `raw_spec`
+    -- the missing inverse of `_strip_allowed`'s strip direction. `B1_WIDTH`/`B2_LOOKBACK` targets
+    are explicit prototypes that may be absent from the naked strategy (see `reference_strategy`'s
+    docstring); `reference_strategy` always returns the same frozen naked copy, so in practice the
+    bound component is absent on every call this function serves today. Shared by both the
+    first-entry deterministic materializer and the narrowed subsequent-entry `scientific_proposal`
+    materializer -- one implementation, two call sites. `symmetric_measurement_geometry` is
+    deliberately unsupported: only `A_CONTROL` touches that dimension, and its exit distance is
+    always already present in the naked strategy, never inserted."""
+    if dimension == "symmetric_measurement_geometry":
+        raise StageContractError(f"insert_bound_value does not support {dimension}")
+    target = _binding(contract, dimension)["targets"][0]
+    if target["component_role"] != "setup":
+        raise StageContractError(
+            f"insert_bound_value only supports setup-role targets, got {target['component_role']}"
+        )
+    out = copy.deepcopy(strategy)
+    raw = out["raw_spec"]
+    setups = raw.setdefault("setups", [])
+    matches = [
+        x
+        for x in setups
+        if x.get("component_id") == target["component_id"]
+        and x.get("instance_id") == target["instance_id"]
+    ]
+    if len(matches) > 1:
+        raise StageContractError(f"bound {dimension} component is ambiguous")
+    parameter = target["parameter_name"]
+    if target["params_storage"] == "nested":
+        component = {
+            "component_id": target["component_id"],
+            "instance_id": target["instance_id"],
+            "params": {**target["fixed_parameters"], parameter: value},
+        }
+    else:
+        component = {
+            "component_id": target["component_id"],
+            "instance_id": target["instance_id"],
+            **target["fixed_parameters"],
+            parameter: value,
+        }
+    if matches:
+        setups[setups.index(matches[0])] = component
+    else:
+        setups.append(component)
+    return out
+
+
 def validate_stage_request(
     request: BatchExperimentRequest, plan: dict[str, Any], state: dict[str, Any]
 ) -> None:

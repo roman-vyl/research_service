@@ -53,6 +53,7 @@ from autoresearch_stage_contracts import (
     STATE_VERSION_V3,
     StageContractError,
     expected_prerequisite_disposition_refs,
+    insert_bound_value,
     reference_strategy,
     validate_disposition,
     validate_stage_context,
@@ -198,7 +199,14 @@ _STATE_V3_KEYS = _STATE_V2_KEYS | {
     "stage_dispositions",
     "stage_history",
     "research_horizon",
+    "stage_initial_sweeps",
 }
+# Stages whose first committed touch is deterministically materialized from an
+# init-supplied starting grid rather than a worker-authored plan. Deliberately
+# narrow to `{stage: {"values": [...]}}` -- a one-time starting grid, never a
+# scientific boundary: every subsequent iteration of that stage is fully free,
+# unconstrained by these values.
+_INITIAL_SWEEP_STAGES = ("B1_WIDTH", "B2_LOOKBACK")
 _RESEARCH_HORIZON_KEYS = {"ticker", "timeframe", "from_ms", "to_ms", "market_data_hash"}
 _ITERATION_KEYS = {
     "contract_version",
@@ -297,6 +305,23 @@ _PLAN_KEYS = {
     "hard_stop_reason",
 }
 _PLAN_V2_KEYS = _PLAN_KEYS | {"stage_context"}
+SCIENTIFIC_PROPOSAL_VERSION = "bbb_autoresearch_scientific_proposal.v1"
+# Narrow worker-facing contract for a stage's subsequent (non-first) B1_WIDTH/B2_LOOKBACK
+# iteration: scientific content only -- no component_id/instance_id/parameter_name/
+# fixed_parameters/raw_spec/candidate_id/experiment_id/stage_context, all of which the
+# materializer derives from frozen stage_contract state. `values` is fully the worker's
+# choice, unconstrained by `stage_initial_sweeps`.
+_SCIENTIFIC_PROPOSAL_KEYS = {
+    "contract_version",
+    "session_id",
+    "iteration_id",
+    "hypothesis",
+    "question",
+    "competing_explanation",
+    "values",
+    "rationale",
+    "expected_information_gain",
+}
 _RECEIPT_KEYS = {
     "contract_version",
     "session_id",
@@ -955,6 +980,29 @@ def _validate_datetime(value: object, context: str) -> None:
         raise ContractError(f"{context} must include a timezone")
 
 
+def validate_stage_initial_sweeps(value: dict[str, Any]) -> None:
+    """Deliberately narrow: `{"B1_WIDTH": {"values": [...]}, "B2_LOOKBACK": {"values": [...]}}`
+    only. No `min`/`max`/`step`/`domain`/`recommended_range`/`boundary_policy` -- this is a one-time
+    starting grid for a stage's first committed touch, never a scientific boundary. Rejects anything
+    else outright rather than silently ignoring extra keys."""
+    if not isinstance(value, dict) or set(value) != set(_INITIAL_SWEEP_STAGES):
+        raise StageContractError(
+            f"stage_initial_sweeps must have exactly keys {sorted(_INITIAL_SWEEP_STAGES)}"
+        )
+    for stage, sweep in value.items():
+        if not isinstance(sweep, dict) or set(sweep) != {"values"}:
+            raise StageContractError(f"stage_initial_sweeps.{stage} must have exactly key 'values'")
+        values = sweep["values"]
+        if (
+            not isinstance(values, list)
+            or not values
+            or any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in values)
+        ):
+            raise StageContractError(
+                f"stage_initial_sweeps.{stage}.values must be a non-empty number list"
+            )
+
+
 def validate_state(state: dict[str, Any]) -> None:
     version = state.get("contract_version")
     if version not in {STATE_VERSION, STATE_VERSION_V2, STATE_VERSION_V3}:
@@ -1210,6 +1258,7 @@ def validate_state(state: dict[str, Any]) -> None:
                 or horizon["from_ms"] >= horizon["to_ms"]
             ):
                 raise StageContractError("research_horizon.from_ms/to_ms is invalid")
+            validate_stage_initial_sweeps(state["stage_initial_sweeps"])
         except (StageContractError, KeyError) as exc:
             raise ContractError(f"invalid v3 stage state: {exc}") from exc
 
@@ -1756,6 +1805,36 @@ def render_planning_prompt(
     )
 
 
+def render_scientific_proposal_prompt(
+    state: dict[str, Any], root: Path, iteration_root: Path, stage: str
+) -> str:
+    """Narrow worker-facing prompt for a `B1_WIDTH`/`B2_LOOKBACK` subsequent (non-first) iteration
+    -- scientific content only. Unlike `render_planning_prompt`, this never reads the full
+    `batch_request_schema_path`/component catalog, and never asks the worker to copy `stage_context`
+    verbatim; the compact authority statement below states directly which one dimension the worker
+    may vary."""
+    dimension = STAGE_DIMENSIONS[stage][0]
+    return _render_stage_prompt(
+        "scientific_proposal.md",
+        state,
+        root,
+        iteration_root,
+        {
+            "stage": stage,
+            "session_id": state["session_id"],
+            "result_path": iteration_root / "scientific_proposal.json",
+            "analysis_dir": iteration_root / "planning_analysis",
+            "stage_authority_context": (
+                f"Active stage: {stage}. The only scientific coordinate you may vary is "
+                f"`{dimension}`. Every other structural field (component identity, fixed "
+                "companion parameters, exit geometry, candidate/experiment identity, research "
+                "horizon) is frozen and materialized by the supervisor -- do not restate, "
+                "recompute, or invent any of it."
+            ),
+        },
+    )
+
+
 def render_interpretation_prompt(
     state: dict[str, Any], root: Path, iteration_root: Path, action: str
 ) -> str:
@@ -2183,6 +2262,153 @@ def _materialize_a_control_plan(state: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _is_stage_first_touch(state: dict[str, Any], stage: str) -> bool:
+    """`True` iff no iteration at `stage` has ever committed for this session, per
+    `state["stage_history"]` -- read fresh from disk at the start of dispatch for the current
+    iteration, so it reflects only prior *committed* iterations, never the in-flight one. A batch
+    that fails before commit therefore does not count: a retry of the same not-yet-committed
+    iteration reads the same (still lacking) `stage_history` and is correctly detected as first
+    touch again. Once a stage has one committed entry, this permanently returns `False` for that
+    stage in that session -- `stage_initial_sweeps` is never a fallback after that point, including
+    when a later planning attempt for the same stage fails."""
+    return not any(entry["stage"] == stage for entry in state["stage_history"])
+
+
+def _materialize_initial_sweep_plan(state: dict[str, Any], stage: str) -> dict[str, Any]:
+    """Deterministically build a stage's first `execution_plan.json` from the session's
+    `stage_initial_sweeps` starting grid -- no worker involved. This is a one-time standardized
+    first observation of the response curve, never a scientific choice: the values come from
+    frozen session state, not from the harness picking them, and they impose no constraint on any
+    later iteration of this stage (see `_is_stage_first_touch`)."""
+    dimension = STAGE_DIMENSIONS[stage][0]
+    values = state["stage_initial_sweeps"][stage]["values"]
+    contract = state["stage_contract"]
+    reference = reference_strategy(state)
+    slug = stage.lower().replace("_", "-")
+    stage_context = {
+        "active_stage": stage,
+        "starting_strategy_sha256": contract["starting_strategy"]["resolved_sha256"],
+        "allowed_semantic_dimensions": list(STAGE_DIMENSIONS[stage]),
+        "prerequisite_disposition_refs": expected_prerequisite_disposition_refs(stage, state),
+    }
+    return {
+        "contract_version": PLAN_VERSION_V2,
+        "session_id": state["session_id"],
+        "iteration_id": state["iteration"] + 1,
+        "phase": state["phase"],
+        "hypothesis": (
+            f"This is a standardized initial sweep over `{dimension}`, not itself a scientific "
+            "hypothesis test -- it establishes the first observed points of the response curve "
+            "for a worker to interpret and build hypotheses from."
+        ),
+        "question": (
+            f"What does the response curve for `{dimension}` look like across a standard first "
+            "set of values, before any worker-directed refinement?"
+        ),
+        "market_property_proxy": "none (standardized initial sweep, not a targeted test)",
+        "competing_explanation": (
+            "N/A -- a fixed initial sweep has no competing explanation to discriminate against; "
+            "that begins at interpretation of this result."
+        ),
+        "action": "batch",
+        "canonical_request": {
+            "experiment_id": f"{slug}-initial-sweep",
+            "strategy_id": state["strategy_context"]["strategy_id"],
+            "candidates": [
+                {
+                    "candidate_id": f"{slug}-{value}",
+                    "strategy": insert_bound_value(reference, contract, dimension, value),
+                }
+                for value in values
+            ],
+        },
+        "explanatory_metadata": {
+            "materialized_by": "supervisor",
+            "worker": None,
+            "origin": "initial_sweep",
+        },
+        "hard_stop_reason": None,
+        "stage_context": stage_context,
+    }
+
+
+def validate_scientific_proposal(proposal: dict[str, Any], state: dict[str, Any]) -> None:
+    """Validates the narrow worker-facing contract for a subsequent (non-first) `B1_WIDTH`/
+    `B2_LOOKBACK` iteration -- scientific content only. Every mechanical field (`component_id`,
+    `raw_spec`, `candidate_id`, `experiment_id`, `stage_context`, ...) is deliberately absent from
+    this contract; the materializer derives them from frozen stage_contract state, never from the
+    worker."""
+    _require_exact_keys(proposal, _SCIENTIFIC_PROPOSAL_KEYS, "scientific proposal")
+    if proposal.get("contract_version") != SCIENTIFIC_PROPOSAL_VERSION:
+        raise ContractError(
+            f"scientific proposal contract_version must be {SCIENTIFIC_PROPOSAL_VERSION}"
+        )
+    if proposal.get("session_id") != state["session_id"]:
+        raise ContractError("scientific proposal session_id differs from state")
+    if proposal.get("iteration_id") != state["iteration"] + 1:
+        raise ContractError("scientific proposal iteration_id differs from state")
+    for key in ("hypothesis", "question", "competing_explanation", "rationale", "expected_information_gain"):
+        _require_string(proposal, key)
+    values = proposal.get("values")
+    if (
+        not isinstance(values, list)
+        or not values
+        or any(isinstance(v, bool) or not isinstance(v, (int, float)) for v in values)
+    ):
+        raise ContractError("scientific proposal values must be a non-empty number list")
+
+
+def _materialize_scientific_proposal_plan(
+    state: dict[str, Any], stage: str, proposal: dict[str, Any]
+) -> dict[str, Any]:
+    """Compile a worker's `scientific_proposal` (scientific content only) into a full
+    `execution_plan.json` -- the WHAT/HOW split for a stage's subsequent iterations. Shares
+    `insert_bound_value` with `_materialize_initial_sweep_plan`: one component-insertion
+    implementation, two call sites (initial-sweep values vs worker-chosen values)."""
+    dimension = STAGE_DIMENSIONS[stage][0]
+    contract = state["stage_contract"]
+    reference = reference_strategy(state)
+    slug = stage.lower().replace("_", "-")
+    iteration_id = state["iteration"] + 1
+    stage_context = {
+        "active_stage": stage,
+        "starting_strategy_sha256": contract["starting_strategy"]["resolved_sha256"],
+        "allowed_semantic_dimensions": list(STAGE_DIMENSIONS[stage]),
+        "prerequisite_disposition_refs": expected_prerequisite_disposition_refs(stage, state),
+    }
+    return {
+        "contract_version": PLAN_VERSION_V2,
+        "session_id": state["session_id"],
+        "iteration_id": iteration_id,
+        "phase": state["phase"],
+        "hypothesis": proposal["hypothesis"],
+        "question": proposal["question"],
+        "market_property_proxy": dimension,
+        "competing_explanation": proposal["competing_explanation"],
+        "action": "batch",
+        "canonical_request": {
+            "experiment_id": f"{slug}-iter-{iteration_id}",
+            "strategy_id": state["strategy_context"]["strategy_id"],
+            "candidates": [
+                {
+                    "candidate_id": f"{slug}-{value}",
+                    "strategy": insert_bound_value(reference, contract, dimension, value),
+                }
+                for value in proposal["values"]
+            ],
+        },
+        "explanatory_metadata": {
+            "materialized_by": "supervisor",
+            "worker": "scientific_proposal",
+            "origin": "scientific_proposal",
+            "rationale": proposal["rationale"],
+            "expected_information_gain": proposal["expected_information_gain"],
+        },
+        "hard_stop_reason": None,
+        "stage_context": stage_context,
+    }
+
+
 def _freeze_plan(
     plan_path: Path, control_path: Path, plan: dict[str, Any], state: dict[str, Any]
 ) -> dict[str, Any]:
@@ -2461,9 +2687,13 @@ def run_supervisor(
             path: _sha256(path) for path in (state_path, journal_path, root / "bootstrap.json")
         }
 
+        active_stage = state.get("active_stage")
         catalog_path: Path | None = None
         catalog_sha256: str | None = None
-        if control["stage"] == "planning_pending" and state.get("active_stage") != "A_CONTROL":
+        if control["stage"] == "planning_pending" and active_stage not in (
+            "A_CONTROL",
+            *_INITIAL_SWEEP_STAGES,
+        ):
             try:
                 catalog_path, catalog_sha256 = _prepare_component_catalog_snapshot(
                     iteration_root,
@@ -2477,7 +2707,7 @@ def run_supervisor(
                 return 2
             durable_protected[catalog_path] = catalog_sha256
 
-        if control["stage"] == "planning_pending" and state.get("active_stage") == "A_CONTROL":
+        if control["stage"] == "planning_pending" and active_stage == "A_CONTROL":
             # No allowed semantic dimensions and exactly one enforced candidate --
             # the only valid plan is a pure function of frozen session/stage-
             # contract state, so no planning worker is launched for this stage
@@ -2493,6 +2723,98 @@ def run_supervisor(
                 control = _freeze_plan(plan_path, control_path, plan, state)
             except ContractError as exc:
                 _write_hard_stop(state_path, state, f"invalid materialized A_CONTROL plan: {exc}")
+                return 2
+
+        if (
+            control["stage"] == "planning_pending"
+            and active_stage in _INITIAL_SWEEP_STAGES
+            and _is_stage_first_touch(state, active_stage)
+        ):
+            # This stage's first committed touch is deterministically materialized
+            # from the session's stage_initial_sweeps starting grid -- a one-time
+            # standardized first observation, not a scientific choice, so no
+            # planning worker is launched. Every subsequent touch of this stage
+            # restores full worker freedom (see the scientific_proposal branch
+            # below); stage_initial_sweeps is never consulted again once this
+            # stage has one committed iteration (see _is_stage_first_touch).
+            plan_path = iteration_root / "execution_plan.json"
+            plan = _materialize_initial_sweep_plan(state, active_stage)
+            atomic_write_json(plan_path, plan)
+            metadata["planning_materialized"] = True
+            atomic_write_json(metadata_path, metadata)
+            try:
+                validate_execution_plan(plan, state)
+                control = _freeze_plan(plan_path, control_path, plan, state)
+            except ContractError as exc:
+                _write_hard_stop(
+                    state_path, state, f"invalid materialized {active_stage} initial-sweep plan: {exc}"
+                )
+                return 2
+
+        if (
+            control["stage"] == "planning_pending"
+            and active_stage in _INITIAL_SWEEP_STAGES
+            and not _is_stage_first_touch(state, active_stage)
+        ):
+            # Subsequent touch of this stage: full worker freedom over candidate
+            # values via the narrow scientific_proposal contract, unconstrained by
+            # stage_initial_sweeps. The materializer -- not the worker -- builds
+            # the full execution_plan.json from the proposal's scientific content.
+            proposal_path = iteration_root / "scientific_proposal.json"
+            plan_path = iteration_root / "execution_plan.json"
+            prompt = render_scientific_proposal_prompt(state, repo_root, iteration_root, active_stage)
+            attempts = metadata["planning_attempts"]
+            while len(attempts) < failure_limit:
+                retry = len(attempts)
+                proposal_path.unlink(missing_ok=True)
+                plan_path.unlink(missing_ok=True)
+                run = runner.run(
+                    stage="planning",
+                    prompt=prompt,
+                    prompt_path=iteration_root / "planning_prompt.txt",
+                    result_path=proposal_path,
+                    analysis_dir=iteration_root / "planning_analysis",
+                    stdout_path=iteration_root
+                    / (
+                        "planning.stdout.log"
+                        if retry == 0
+                        else f"planning.stdout.retry-{retry:02d}.log"
+                    ),
+                    stderr_path=iteration_root
+                    / (
+                        "planning.stderr.log"
+                        if retry == 0
+                        else f"planning.stderr.retry-{retry:02d}.log"
+                    ),
+                    values=values,
+                    protected=durable_protected,
+                )
+                failure = run.failure
+                if failure is None:
+                    try:
+                        proposal = load_json(proposal_path)
+                        validate_scientific_proposal(proposal, state)
+                        plan = _materialize_scientific_proposal_plan(state, active_stage, proposal)
+                        control = _freeze_plan(plan_path, control_path, plan, state)
+                    except ContractError as exc:
+                        failure = f"invalid scientific proposal: {exc}"
+                attempts.append({**run.metadata, "retry_index": retry, "failure": failure})
+                atomic_write_json(metadata_path, metadata)
+                if failure is not None and "output boundary violation" in failure:
+                    _write_hard_stop(state_path, state, failure)
+                    return 2
+                violations = repository_violations(repo_root, root)
+                if violations:
+                    _write_hard_stop(
+                        state_path, state, f"unauthorized repository changes: {violations}"
+                    )
+                    return 2
+                if failure is None:
+                    break
+            if control["stage"] == "planning_pending":
+                _write_hard_stop(
+                    state_path, state, f"repeated planning failure: {len(attempts)} attempts"
+                )
                 return 2
 
         if control["stage"] == "planning_pending":

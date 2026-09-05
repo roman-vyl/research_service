@@ -23,12 +23,14 @@ from autoresearch_supervisor import (
     session_dir,
     utc_now,
     validate_state,
+    validate_stage_initial_sweeps,
     resolve_research_service_base_url,
     validate_cli_launch_profile,
 )
 from autoresearch_quality_contracts import phase_binding, validate_policy
 from autoresearch_stage_contracts import (
     STATE_VERSION_V3,
+    StageContractError,
     canonical_sha256,
     validate_resolved_stage_targets,
     validate_stage_contract,
@@ -251,6 +253,13 @@ def initialize_session(
         active_stage = template.get("active_stage", "A_CONTROL")
         if active_stage != "A_CONTROL":
             raise ValueError("a new v3 session must start at A_CONTROL")
+        stage_initial_sweeps = template.get("stage_initial_sweeps")
+        if stage_initial_sweeps is None:
+            raise ValueError("v3 session requires stage_initial_sweeps")
+        try:
+            validate_stage_initial_sweeps(stage_initial_sweeps)
+        except StageContractError as exc:
+            raise ValueError(f"invalid stage_initial_sweeps: {exc}") from exc
         state.update(
             stage_contract=stage_contract,
             active_stage=active_stage,
@@ -258,6 +267,7 @@ def initialize_session(
             stage_dispositions=[],
             stage_history=[],
             research_horizon=research_horizon,
+            stage_initial_sweeps=stage_initial_sweeps,
         )
     validate_state(state)
     skill = repo_root / state["skill_path"]

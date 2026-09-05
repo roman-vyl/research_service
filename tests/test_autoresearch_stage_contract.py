@@ -318,6 +318,145 @@ def test_materialize_a_control_plan_is_pure_function_of_state() -> None:
     assert first == second
 
 
+def test_insert_bound_value_adds_absent_component_for_b1_and_b2() -> None:
+    from autoresearch_stage_contracts import insert_bound_value
+
+    contract = _contract()
+    naked = _strategy()
+    assert naked["raw_spec"].get("setups", []) == []
+
+    width = insert_bound_value(naked, contract, "anchor_stack_width", 20)
+    setups = width["raw_spec"]["setups"]
+    assert setups == [
+        {
+            "component_id": "anchor_stack_width_setup",
+            "instance_id": "stage-width",
+            "params": {
+                "atr_timeframe": "base",
+                "atr_period": 14,
+                "min_recent_width_atr": 4.0,
+                "width_lookback_bars": 80,
+                "min_current_width_atr": 20,
+            },
+        }
+    ]
+    # original untouched
+    assert naked["raw_spec"]["setups"] == []
+
+    lookback = insert_bound_value(naked, contract, "untouched_anchor_lookback", 50)
+    assert lookback["raw_spec"]["setups"] == [
+        {
+            "component_id": "untouched_anchor_setup",
+            "instance_id": "stage-lookback",
+            "active_bars": 3,
+            "lookback": 50,
+        }
+    ]
+
+
+def test_insert_bound_value_overwrites_present_component() -> None:
+    from autoresearch_stage_contracts import insert_bound_value
+
+    contract = _contract()
+    naked = _strategy()
+    once = insert_bound_value(naked, contract, "anchor_stack_width", 5)
+    twice = insert_bound_value(once, contract, "anchor_stack_width", 30)
+    assert len(twice["raw_spec"]["setups"]) == 1
+    assert twice["raw_spec"]["setups"][0]["params"]["min_current_width_atr"] == 30
+
+
+def test_insert_bound_value_rejects_symmetric_measurement_geometry() -> None:
+    from autoresearch_stage_contracts import insert_bound_value
+
+    with pytest.raises(StageContractError, match="does not support"):
+        insert_bound_value(_strategy(), _contract(), "symmetric_measurement_geometry", 3)
+
+
+def test_materialized_initial_sweep_plan_matches_hand_constructed_candidates() -> None:
+    from autoresearch_supervisor import _materialize_initial_sweep_plan
+    from autoresearch_stage_contracts import insert_bound_value
+
+    state = _full_state("B1_WIDTH")
+    state["stage_history"] = []
+    state["stage_initial_sweeps"] = {
+        "B1_WIDTH": {"values": [5, 10, 15, 20, 25, 30, 35]},
+        "B2_LOOKBACK": {"values": [10, 20, 30, 40, 50]},
+    }
+    plan = _materialize_initial_sweep_plan(state, "B1_WIDTH")
+    request = validate_execution_plan(plan, state)
+    assert request is not None
+    validate_stage_request(request, plan, state)
+    assert [c.candidate_id for c in request.candidates] == [
+        "b1-width-5",
+        "b1-width-10",
+        "b1-width-15",
+        "b1-width-20",
+        "b1-width-25",
+        "b1-width-30",
+        "b1-width-35",
+    ]
+    expected = insert_bound_value(reference_strategy(state), state["stage_contract"], "anchor_stack_width", 20)
+    assert request.candidates[3].strategy.model_dump(mode="json") == expected
+    assert plan["stage_context"]["allowed_semantic_dimensions"] == ["anchor_stack_width"]
+    assert plan["explanatory_metadata"]["origin"] == "initial_sweep"
+    assert plan["explanatory_metadata"]["worker"] is None
+
+
+def test_is_stage_first_touch_reads_committed_stage_history_only() -> None:
+    from autoresearch_supervisor import _is_stage_first_touch
+
+    state = {"stage_history": []}
+    assert _is_stage_first_touch(state, "B1_WIDTH") is True
+
+    state["stage_history"] = [{"iteration_id": 1, "stage": "A_CONTROL", "status": "characterized"}]
+    assert _is_stage_first_touch(state, "B1_WIDTH") is True
+
+    state["stage_history"].append(
+        {"iteration_id": 2, "stage": "B1_WIDTH", "status": "in_progress"}
+    )
+    assert _is_stage_first_touch(state, "B1_WIDTH") is False
+    # B2 is an independent stage -- unaffected by B1's history.
+    assert _is_stage_first_touch(state, "B2_LOOKBACK") is True
+
+
+def test_materialize_scientific_proposal_plan_accepts_values_outside_initial_sweep() -> None:
+    from autoresearch_supervisor import (
+        SCIENTIFIC_PROPOSAL_VERSION,
+        _materialize_scientific_proposal_plan,
+        validate_scientific_proposal,
+    )
+
+    state = _full_state("B1_WIDTH")
+    state["stage_history"] = [{"iteration_id": 2, "stage": "B1_WIDTH", "status": "in_progress"}]
+    state["stage_initial_sweeps"] = {
+        "B1_WIDTH": {"values": [5, 10, 15, 20, 25, 30, 35]},
+        "B2_LOOKBACK": {"values": [10, 20, 30, 40, 50]},
+    }
+    state["iteration"] = 2
+    proposal = {
+        "contract_version": SCIENTIFIC_PROPOSAL_VERSION,
+        "session_id": state["session_id"],
+        "iteration_id": 3,
+        "hypothesis": "h",
+        "question": "q",
+        "competing_explanation": "ce",
+        "values": [0.5, 60, 200],  # both below and far above the initial sweep's 5..35 range
+        "rationale": "r",
+        "expected_information_gain": "resolve upper boundary",
+    }
+    validate_scientific_proposal(proposal, state)
+    plan = _materialize_scientific_proposal_plan(state, "B1_WIDTH", proposal)
+    request = validate_execution_plan(plan, state)
+    assert request is not None
+    validate_stage_request(request, plan, state)
+    assert [c.candidate_id for c in request.candidates] == [
+        "b1-width-0.5",
+        "b1-width-60",
+        "b1-width-200",
+    ]
+    assert plan["canonical_request"]["experiment_id"] == "b1-width-iter-3"
+
+
 def test_phase_a_control_accepts_exactly_one_frozen_candidate() -> None:
     state = _state()
     strategy = reference_strategy(state)
@@ -592,6 +731,10 @@ def test_v3_init_validates_and_freezes_operator_fixture(
         contract_version="bbb_autoresearch_state.v3",
         active_stage="A_CONTROL",
         skill_path="skill.md",
+        stage_initial_sweeps={
+            "B1_WIDTH": {"values": [5, 10, 15, 20, 25, 30, 35]},
+            "B2_LOOKBACK": {"values": [10, 20, 30, 40, 50]},
+        },
         stage_contract={
             "starting_strategy_fixture": str(fixture_path),
             "semantic_bindings": [

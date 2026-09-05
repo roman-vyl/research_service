@@ -187,7 +187,7 @@ def _research_service_base_url(monkeypatch: pytest.MonkeyPatch) -> None:
 def _repo(tmp_path: Path) -> tuple[Path, Path]:
     (tmp_path / "autoresearch/prompts").mkdir(parents=True)
     source_root = Path(__file__).parents[1]
-    for name in ("iteration.md", "planning.md", "interpretation.md"):
+    for name in ("iteration.md", "planning.md", "interpretation.md", "scientific_proposal.md"):
         prompt = (source_root / "autoresearch/prompts" / name).read_text()
         (tmp_path / "autoresearch/prompts" / name).write_text(prompt)
     bootstrap = (source_root / "autoresearch/prompts/bootstrap.md").read_text()
@@ -229,7 +229,7 @@ def _repo_v3(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Pat
     tmp_path.mkdir(parents=True, exist_ok=True)
     (tmp_path / "autoresearch/prompts").mkdir(parents=True)
     source_root = Path(__file__).parents[1]
-    for name in ("iteration.md", "planning.md", "interpretation.md"):
+    for name in ("iteration.md", "planning.md", "interpretation.md", "scientific_proposal.md"):
         prompt = (source_root / "autoresearch/prompts" / name).read_text()
         (tmp_path / "autoresearch/prompts" / name).write_text(prompt)
     bootstrap = (source_root / "autoresearch/prompts/bootstrap.md").read_text()
@@ -295,6 +295,10 @@ def _repo_v3(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Pat
     template.update(
         contract_version="bbb_autoresearch_state.v3",
         active_stage="A_CONTROL",
+        stage_initial_sweeps={
+            "B1_WIDTH": {"values": [5, 10, 15, 20, 25, 30, 35]},
+            "B2_LOOKBACK": {"values": [10, 20, 30, 40, 50]},
+        },
         stage_contract={
             "starting_strategy_fixture": str(fixture_path),
             "semantic_bindings": [
@@ -420,6 +424,61 @@ def _repo_v3(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Path, Pat
     return tmp_path, root
 
 
+def _advance_repo_v3_to_b1_width(root: Path, *, first_touch: bool) -> None:
+    """Session surgery: `initialize_session` only allows a new v3 session to start at
+    `A_CONTROL` (`autoresearch_init.py`), so a test that needs a session already past a closed
+    `A_CONTROL` must edit `state.json` directly, mirroring what a real committed `A_CONTROL`
+    iteration would have produced. `first_touch=False` additionally appends a prior committed
+    `B1_WIDTH` entry to `stage_history`, so `_is_stage_first_touch` reports `False`."""
+    state = load_json(root / "state.json")
+    state.update(
+        active_stage="B1_WIDTH",
+        phase="structural_1d",
+        active_stage_binding={"phase": "structural_1d", "stage_kind": "structural_entry"},
+        phase_a_references=[
+            {
+                "experiment_id": "s1-a-control",
+                "candidate_id": "a-control",
+                "run_id": "run_1",
+                "batch_artifact_path": "/artifacts/a-control",
+                "receipt_sha256": "0" * 64,
+                "market_data_hash": "0" * 64,
+                "realised_trade_count": 10,
+                "win_rate": "0.5",
+            }
+        ],
+        stage_dispositions=[
+            {
+                "iteration_id": 1,
+                "disposition": {
+                    "stage": "A_CONTROL",
+                    "status": "characterized",
+                    "evidence": [
+                        {
+                            "kind": "prior_assessment",
+                            "claim_id": "stage-1",
+                            "candidate_id": None,
+                            "metric_path": None,
+                            "iteration_id": 1,
+                            "analysis_path": None,
+                        }
+                    ],
+                },
+            }
+        ],
+        stage_history=(
+            [{"iteration_id": 1, "stage": "A_CONTROL", "status": "characterized"}]
+            if first_touch
+            else [
+                {"iteration_id": 1, "stage": "A_CONTROL", "status": "characterized"},
+                {"iteration_id": 2, "stage": "B1_WIDTH", "status": "in_progress"},
+            ]
+        ),
+        iteration=1 if first_touch else 2,
+    )
+    atomic_write_json(root / "state.json", state)
+
+
 def test_a_control_dispatch_never_renders_planning_prompt_or_launches_worker(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -468,7 +527,155 @@ def test_a_control_dispatch_never_renders_planning_prompt_or_launches_worker(
     assert control["stage"] in {"request_prepared", "non_batch_plan_prepared"}
     metadata = load_json(root / "iterations/0001/supervisor_metadata.json")
     assert metadata.get("planning_materialized") is True
+
+
+def test_b1_first_touch_dispatch_never_renders_scientific_proposal_prompt_or_fetches_catalog(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Mirrors the `A_CONTROL` dispatch-guard precedent for `B1_WIDTH`'s first committed touch:
+    no scientific_proposal worker prompt, no full-form planning prompt, no component-catalog
+    fetch."""
+    repo, root = _repo_v3(tmp_path / "repo", monkeypatch)
+    _advance_repo_v3_to_b1_width(root, first_touch=True)
+    scientific_calls: list[object] = []
+    planning_calls: list[object] = []
+    catalog_calls: list[object] = []
+    monkeypatch.setattr(
+        supervisor_module,
+        "render_scientific_proposal_prompt",
+        lambda *args, **kwargs: scientific_calls.append((args, kwargs))
+        or (_ for _ in ()).throw(
+            AssertionError("render_scientific_proposal_prompt must not be called")
+        ),
+    )
+    monkeypatch.setattr(
+        supervisor_module,
+        "render_planning_prompt",
+        lambda *args, **kwargs: planning_calls.append((args, kwargs))
+        or (_ for _ in ()).throw(AssertionError("render_planning_prompt must not be called")),
+    )
+    monkeypatch.setattr(
+        supervisor_module,
+        "_prepare_component_catalog_snapshot",
+        lambda *args, **kwargs: catalog_calls.append((args, kwargs))
+        or (_ for _ in ()).throw(
+            AssertionError("_prepare_component_catalog_snapshot must not be called")
+        ),
+    )
+    monkeypatch.setattr(
+        supervisor_module,
+        "_execute_canonical_batch",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ContractError("stopped before execution")),
+    )
+    run_supervisor(
+        session_id="s1", agent_command="definitely-missing-agent", repo_root=repo, max_iterations=2
+    )
+    assert scientific_calls == []
+    assert planning_calls == []
+    assert catalog_calls == []
+    plan = load_json(root / "iterations/0002/execution_plan.json")
+    assert plan["stage_context"]["active_stage"] == "B1_WIDTH"
+    assert plan["explanatory_metadata"]["origin"] == "initial_sweep"
+    metadata = load_json(root / "iterations/0002/supervisor_metadata.json")
+    assert metadata.get("planning_materialized") is True
     assert metadata["planning_attempts"] == []
+
+
+def test_b1_subsequent_touch_dispatch_uses_narrowed_prompt_not_full_planning(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """`B1_WIDTH`'s second (and every later) committed touch restores full worker freedom via the
+    narrowed `scientific_proposal` contract -- never the full-form `render_planning_prompt`, never
+    a fallback to `stage_initial_sweeps`."""
+    repo, root = _repo_v3(tmp_path / "repo", monkeypatch)
+    _advance_repo_v3_to_b1_width(root, first_touch=False)
+    planning_calls: list[object] = []
+    monkeypatch.setattr(
+        supervisor_module,
+        "render_planning_prompt",
+        lambda *args, **kwargs: planning_calls.append((args, kwargs))
+        or (_ for _ in ()).throw(AssertionError("render_planning_prompt must not be called")),
+    )
+
+    def fake_agent(**kwargs: object) -> object:
+        result_path = Path(kwargs["result_path"])  # type: ignore[arg-type]
+        result_path.write_text(
+            json.dumps(
+                {
+                    "contract_version": supervisor_module.SCIENTIFIC_PROPOSAL_VERSION,
+                    "session_id": "s1",
+                    "iteration_id": 3,
+                    "hypothesis": "h",
+                    "question": "q",
+                    "competing_explanation": "ce",
+                    "values": [60, 100],
+                    "rationale": "r",
+                    "expected_information_gain": "resolve upper boundary",
+                }
+            )
+        )
+
+        class _Run:
+            failure = None
+            metadata = {"stage": "planning", "started_at": "t", "ended_at": "t"}
+
+        return _Run()
+
+    monkeypatch.setattr(
+        supervisor_module.AgentRunner, "run", lambda self, **kwargs: fake_agent(**kwargs)
+    )
+    monkeypatch.setattr(
+        supervisor_module,
+        "_execute_canonical_batch",
+        lambda *args, **kwargs: (_ for _ in ()).throw(ContractError("stopped before execution")),
+    )
+    run_supervisor(
+        session_id="s1", agent_command="definitely-missing-agent", repo_root=repo, max_iterations=3
+    )
+    assert planning_calls == []
+    plan = load_json(root / "iterations/0003/execution_plan.json")
+    assert plan["stage_context"]["active_stage"] == "B1_WIDTH"
+    assert [c["candidate_id"] for c in plan["canonical_request"]["candidates"]] == [
+        "b1-width-60",
+        "b1-width-100",
+    ]
+    metadata = load_json(root / "iterations/0003/supervisor_metadata.json")
+    assert metadata.get("planning_materialized") is not True
+    assert len(metadata["planning_attempts"]) == 1
+
+
+def test_b1_subsequent_touch_planning_failure_does_not_fall_back_to_initial_sweep(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A failed subsequent-entry planning attempt must retry planning, never silently
+    materialize `stage_initial_sweeps` -- the hard acceptance criterion from `proposal.md`."""
+    repo, root = _repo_v3(tmp_path / "repo", monkeypatch)
+    _advance_repo_v3_to_b1_width(root, first_touch=False)
+    initial_sweep_calls: list[object] = []
+    monkeypatch.setattr(
+        supervisor_module,
+        "_materialize_initial_sweep_plan",
+        lambda *args, **kwargs: initial_sweep_calls.append((args, kwargs))
+        or (_ for _ in ()).throw(
+            AssertionError("_materialize_initial_sweep_plan must not be called")
+        ),
+    )
+
+    class _FailingRun:
+        failure = "planning agent exited with code 1"
+        metadata = {"stage": "planning", "started_at": "t", "ended_at": "t"}
+
+    monkeypatch.setattr(
+        supervisor_module.AgentRunner, "run", lambda self, **kwargs: _FailingRun()
+    )
+    code = run_supervisor(
+        session_id="s1", agent_command="definitely-missing-agent", repo_root=repo, max_iterations=3
+    )
+    assert code == 2
+    assert initial_sweep_calls == []
+    state = load_json(root / "state.json")
+    assert state["status"] == "hard_stopped"
+    assert "repeated planning failure" in state["stop_reason"]
 
 
 def test_interpretation_prompt_renders_evidence_ref_contract_allowlist(tmp_path: Path) -> None:
