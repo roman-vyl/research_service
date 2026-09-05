@@ -811,7 +811,17 @@ prose in `program.md` or `SKILL.md`.
 
 ## 22. Migration / Compatibility
 
-**Enumerated risk list. TARGET DESIGN unless marked otherwise.**
+**System principle (established during `autoresearch-b1-b2-scientific-proposal-v1` design review,
+2026-09-05):** AutoResearch session state is execution-local orchestration state for one running
+research session, not a durable cross-version storage contract. Backward compatibility of historical
+session state is a non-goal unless explicitly introduced later. A contract change may add a required
+state field, fail-close on sessions predating it via existing exact-keyset validation, and leave old
+sessions unloadable -- this is an accepted, intentional consequence, not a defect to engineer around
+with dual-read paths, `.get()` fallbacks, on-disk migration scripts, or reflexive state contract
+version bumps. Apply this principle before proposing any future migration/compatibility mechanism for
+session state; do not re-litigate it per change.
+
+**Enumerated risk list below. TARGET DESIGN unless marked otherwise.**
 
 - **Existing v3 sessions**: sessions created under the current `bbb_autoresearch_execution_plan.v2`
   contract have history in `var/autoresearch/*/iterations/*/execution_plan.json`. A new narrow
