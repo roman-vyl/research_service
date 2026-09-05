@@ -599,6 +599,42 @@ class TradeoffComparison(ExactModel):
         return self
 
 
+class TradeoffComparisonSelection(ExactModel):
+    """The narrow worker-facing input `derive_tradeoff_relation`/the supervisor compile into a
+    full `TradeoffComparison` -- everything except `relation`, which is fully determined by
+    `dimensions[].assessment` and therefore materialized deterministically, never worker-authored.
+    `ExactModel`'s `extra="forbid"` rejects a submission that still includes `relation`, with no
+    separate manual check needed."""
+
+    left_subject_ref: str = Field(min_length=1)
+    right_subject_ref: str = Field(min_length=1)
+    stage_kind: StageKind
+    dimensions: list[TradeoffDimension] = Field(min_length=1)
+
+
+def derive_tradeoff_relation(
+    dimensions: list[TradeoffDimension],
+) -> Literal["left_dominates", "right_dominates", "tradeoff", "equivalent", "incomparable"]:
+    """Deterministically compute the one `relation` value consistent with `dimensions[].assessment`
+    under `relation_is_pareto_consistent`'s exact rules -- a total function whose output always
+    passes that unchanged validator. `dimensions` carries the worker's own scientific judgment
+    (which assessment each named dimension deserves); this function performs no judgment of its
+    own, only the mechanical Pareto consequence of those judgments."""
+    values = {item.assessment for item in dimensions}
+    if values == {"equivalent"}:
+        return "equivalent"
+    has_left = "left_better" in values
+    has_right = "right_better" in values
+    has_uncertain = "uncertain" in values
+    if has_left and has_right:
+        return "tradeoff"
+    if has_left and not has_uncertain:
+        return "left_dominates"
+    if has_right and not has_uncertain:
+        return "right_dominates"
+    return "incomparable"
+
+
 class TradeoffSummary(ExactModel):
     comparisons: list[TradeoffComparison]
     rationale: str = Field(min_length=1)

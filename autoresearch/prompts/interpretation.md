@@ -75,4 +75,19 @@ Before writing `stage.metric_role_selection`, apply this exact contract for the 
 
 {stage_metric_role_contract}
 
+The schema also shows `tradeoff_summary.comparisons[].relation` as part of the full contract -- this
+is a second exception to "the schema wins": you must NOT write `relation` yourself. For each
+comparison, write only `left_subject_ref`, `right_subject_ref`, `stage_kind`, and `dimensions` (each
+with `assessment` and `evidence_refs`). The supervisor deterministically computes `relation` from
+your `dimensions[].assessment` values -- it is the mechanical Pareto consequence of the per-dimension
+judgments you already made, not a separate judgment of your own to restate; do not include it, and
+do not try to make it agree with a summary you have in mind before checking each dimension.
+
+Every `tradeoff_summary` comparison's `left_subject_ref`/`right_subject_ref` must both be candidates
+completed in this iteration's own batch (or the current `promotion_subject.region_id`, if you set
+one). Do not name a candidate from a prior iteration (such as the frozen `A_CONTROL` reference,
+e.g. `a-control`) as a comparison subject -- that comparison already has its own dedicated field,
+`structural_promise.baseline_comparison`; report how this iteration's result compares to the control
+baseline there, not as a `tradeoff_summary` entry.
+
 Exit after interpretation.

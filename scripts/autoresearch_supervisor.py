@@ -36,6 +36,8 @@ from autoresearch_quality_contracts import (
     EvidenceRef,
     PromotionBlocker,
     MetricRoleSelection,
+    TradeoffComparisonSelection,
+    derive_tradeoff_relation,
     describe_metric_role_selection_contract,
     enforce_quality_policy,
     materialize_metric_roles,
@@ -1425,6 +1427,20 @@ def validate_iteration_result(
             raw_stage["metric_roles"] = materialize_metric_roles(
                 raw_stage["stage_kind"], selection
             ).model_dump(mode="json")
+            raw_tradeoff = raw_assessment.get("tradeoff_summary")
+            if not isinstance(raw_tradeoff, dict) or not isinstance(
+                raw_tradeoff.get("comparisons"), list
+            ):
+                raise ContractError(
+                    "research_quality_assessment.tradeoff_summary.comparisons must be an array"
+                )
+            for raw_comparison in raw_tradeoff["comparisons"]:
+                if not isinstance(raw_comparison, dict):
+                    raise ContractError("tradeoff comparison must be an object")
+                comparison_selection = TradeoffComparisonSelection.model_validate(raw_comparison)
+                raw_comparison["relation"] = derive_tradeoff_relation(
+                    comparison_selection.dimensions
+                )
             assessment = validate_assessment(raw_assessment)
             candidate_facts = (
                 {

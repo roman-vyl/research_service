@@ -30,7 +30,11 @@ from autoresearch_quality_contracts import (  # noqa: E402
     MetricRoleSelection,
     ResearchQualityAssessment,
     ResearchQualityPolicy,
+    TradeoffComparison,
+    TradeoffComparisonSelection,
+    TradeoffDimension,
     _METRIC_ROLES_FIXED_CORE,
+    derive_tradeoff_relation,
     enforce_quality_policy,
     materialize_metric_roles,
     validate_metric_roles,
@@ -467,6 +471,98 @@ def test_glm_smoke_duplicate_metric_failure_is_structurally_eliminated() -> None
     # convention.
     assert not hasattr(selection, "descriptive")
     assert not hasattr(selection, "secondary")
+
+
+def _dim(dimension: str, assessment: str) -> TradeoffDimension:
+    return TradeoffDimension(dimension=dimension, assessment=assessment, evidence_refs=[])
+
+
+@pytest.mark.parametrize(
+    ("assessments", "expected"),
+    (
+        (["left_better"], "left_dominates"),
+        (["left_better", "equivalent"], "left_dominates"),
+        (["right_better"], "right_dominates"),
+        (["left_better", "right_better"], "tradeoff"),
+        (["equivalent"], "equivalent"),
+        (["uncertain"], "incomparable"),
+        (["left_better", "uncertain"], "incomparable"),
+        (["right_better", "uncertain"], "incomparable"),
+        (["left_better", "right_better", "uncertain"], "tradeoff"),
+        # exact pattern from the ema-anchor-sonnet-metricroles-smoke-20260905202722 failure:
+        # the worker declared "left_dominates" despite a right_better dimension present.
+        (["left_better", "left_better", "right_better", "left_better", "uncertain"], "tradeoff"),
+    ),
+)
+def test_derive_tradeoff_relation_matches_pareto_consistency_for_every_case(
+    assessments: list[str], expected: str
+) -> None:
+    names = ["profitability", "risk", "sample_size", "side_breadth", "neighborhood_stability"]
+    dimensions = [_dim(names[i % len(names)], a) for i, a in enumerate(assessments)]
+    relation = derive_tradeoff_relation(dimensions)
+    assert relation == expected
+    # Materialized output must always pass the unchanged validator, never bypass it.
+    TradeoffComparison(
+        left_subject_ref="c1",
+        right_subject_ref="c2",
+        stage_kind="structural_entry",
+        dimensions=dimensions,
+        relation=relation,
+    )
+
+
+def test_tradeoff_comparison_selection_rejects_worker_supplied_relation() -> None:
+    with pytest.raises(ValueError):
+        TradeoffComparisonSelection.model_validate(
+            {
+                "left_subject_ref": "c1",
+                "right_subject_ref": "c2",
+                "stage_kind": "structural_entry",
+                "dimensions": [
+                    {"dimension": "profitability", "assessment": "left_better", "evidence_refs": []}
+                ],
+                "relation": "left_dominates",
+            }
+        )
+
+
+def test_sonnet_smoke_tradeoff_relation_mismatch_is_materialized_correctly(
+    tmp_path: Path,
+) -> None:
+    """Regression for the real `claude-sonnet46` HOST smoke failure
+    (`ema-anchor-sonnet-metricroles-smoke-20260905202722`): the worker declared
+    `relation: "left_dominates"` for a comparison whose own `dimensions[].assessment` included
+    `right_better` -- exactly the pattern that hard-stopped interpretation 2/3 attempts. Under the
+    new contract, the worker never authors `relation` at all, so `validate_iteration_result`
+    materializes the only Pareto-consistent value (`tradeoff`) and the assessment is accepted."""
+    policy = _policy("structural_entry")
+    _, root = _repo(tmp_path / "repo", policy)
+    state = load_json(root / "state.json")
+    artifact = _artifact(tmp_path)
+    assessment = _as_worker_submitted(_assessment("structural_entry"))
+    assessment["tradeoff_summary"]["comparisons"] = [
+        {
+            "left_subject_ref": "c1",
+            "right_subject_ref": "c2",
+            "stage_kind": "structural_entry",
+            "dimensions": [
+                {"dimension": "profitability", "assessment": "left_better", "evidence_refs": []},
+                {"dimension": "risk", "assessment": "left_better", "evidence_refs": []},
+                {"dimension": "sample_size", "assessment": "right_better", "evidence_refs": []},
+                {"dimension": "side_breadth", "assessment": "left_better", "evidence_refs": []},
+                {
+                    "dimension": "neighborhood_stability",
+                    "assessment": "uncertain",
+                    "evidence_refs": [],
+                },
+            ],
+            # no "relation" key -- the worker never authors it under the new contract.
+        }
+    ]
+    result = _iteration(artifact, assessment)
+    validate_iteration_result(result, state, artifacts_root=tmp_path / "artifacts")
+    materialized = result["research_quality_assessment"]["tradeoff_summary"]["comparisons"][0]
+    assert materialized["relation"] == "tradeoff"
 
 
 def test_semantically_incomplete_stage_metric_roles_fail_closed() -> None:
