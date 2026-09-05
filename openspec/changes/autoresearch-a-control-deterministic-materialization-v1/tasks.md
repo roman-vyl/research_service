@@ -77,8 +77,25 @@
 
 ## 5. Verification
 
-- [ ] 5.1 Controlled HOST smoke on a strong worker profile (e.g. `claude-sonnet46`) through
+- [x] 5.1 Controlled HOST smoke on a strong worker profile (e.g. `claude-sonnet46`) through
       `A_CONTROL -> B1_WIDTH` (or `B2_LOOKBACK`), confirming the `A_CONTROL` iteration produces no
       planning-worker invocation, interpretation still runs normally, and the session advances exactly
       as it does today from that point on.
-- [ ] 5.2 Confirm `openspec validate --strict` passes for this change before archiving.
+      Ran session `ema-anchor-a-control-smoke-20260904220007`, worker `claude-sonnet46`,
+      `--max-iterations 2`. Confirmed: iteration 1 (`A_CONTROL`) `execution_plan.json` was
+      materialized with `planning_materialized: true` and zero `planning_attempts` -- no planning
+      worker process launched; canonical execution and interpretation both ran and completed
+      normally (327s interpretation). State advanced to `active_stage: B1_WIDTH`. Iteration 2's
+      planning worker ran for real (293s), produced a genuine 9-candidate coarse sweep over
+      `min_current_width_atr` (0.5..12.0 ATR) with fixed_parameters preserved verbatim from the
+      stage contract, and canonical execution completed for all 9 candidates. The session
+      ultimately hard-stopped on `repeated interpretation failure: 3 attempts` for iteration 2 --
+      an existing `research_quality_assessment` "tradeoff comparison references an unknown
+      candidate or region" validation defect in the interpretation contract, unrelated to this
+      change's `A_CONTROL` materializer (which is scoped to planning, not interpretation, and
+      is not touched by that failure). Confirms this change's scope (A_CONTROL requires no
+      planning worker; every other stage/interpretation unaffected) end to end; the
+      interpretation-contract defect is out of scope for this change and tracked separately.
+- [x] 5.2 Confirm `openspec validate --strict` passes for this change before archiving.
+      `openspec validate --strict --changes autoresearch-a-control-deterministic-materialization-v1`
+      passed.
