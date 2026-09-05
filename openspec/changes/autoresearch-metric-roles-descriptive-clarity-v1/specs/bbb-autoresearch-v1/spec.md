@@ -1,23 +1,43 @@
 ## ADDED Requirements
 
-### Requirement: Complete worker-facing metric-role contract
+### Requirement: Deterministic metric-role materialization
 
-For every stage kind, the interpretation worker-facing metric-role contract text SHALL explain
-every `MetricRoles` field the mechanical validator enforces for that stage, including
-`metric_roles.descriptive`. The contract text and the mechanical validator SHALL agree: a field the
-mechanical validator constrains SHALL be explained to the worker, and the explanation SHALL NOT
-permit a value the mechanical validator would reject.
+For every stage kind, the interpretation worker SHALL author only the `metric_roles` selections
+that carry genuine evidentiary judgment for that stage kind; every role assignment that is fully or
+mostly determined by the active stage's fixed quality policy SHALL be materialized deterministically
+by the supervisor from that stage's policy constants, not authored by the worker. The existing
+mechanical validator SHALL continue to enforce the complete, materialized `metric_roles` object
+unchanged, as an independent post-hoc defense.
 
-#### Scenario: Descriptive role is explained for every stage kind
+#### Scenario: Descriptive-baseline stage requires no worker metric-role input
 
-- **WHEN** the interpretation worker reads the rendered metric-role contract for any stage kind
-- **THEN** the contract text states what `metric_roles.descriptive` must contain for that stage,
-  never leaving the field unaddressed.
+- **WHEN** the active stage kind is `descriptive_baseline`
+- **THEN** the supervisor materializes the complete `metric_roles` object (`primary`, `secondary`,
+  `descriptive`, `promotion_gates`) from the stage's fixed policy, and the worker is not required to
+  submit any `metric_roles` content for this stage.
 
-#### Scenario: Mechanical validator matches the stated contract
+#### Scenario: Structural stages retain only the genuine evidentiary choice
 
-- **WHEN** a worker submits a `research_quality_assessment` whose `metric_roles.descriptive` value
-  contradicts what the rendered contract text for the active stage states
-- **THEN** the supervisor's mechanical validation rejects the submission with a clear cause, rather
-  than accepting a value the contract text ruled out or rejecting a value the contract text never
-  addressed.
+- **WHEN** the active stage kind is `structural_entry`, `structural_interaction`, or
+  `entry_region_selection`
+- **THEN** the worker submits only which specific named evidence to include from each "at least one
+  of" requirement (conditional-entry evidence, sample/thinning evidence, and side-behavior evidence
+  where applicable) and, if relevant, which additional promotion gates apply this iteration; the
+  supervisor materializes the mandatory core, `secondary`, and `descriptive` deterministically and
+  compiles the complete `metric_roles` object before validation.
+
+#### Scenario: Exit-geometry and robustness-validation stages retain only genuinely optional choices
+
+- **WHEN** the active stage kind is `exit_geometry` or `robustness_validation`
+- **THEN** the worker submits only the genuinely optional selections for that stage (additional
+  promotion gates for `exit_geometry`; additional optional primary evidence and promotion gates for
+  `robustness_validation`); every mandatory or fixed role assignment is materialized by the
+  supervisor, never authored by the worker.
+
+#### Scenario: Materialized metric_roles still passes independent validation
+
+- **WHEN** the supervisor compiles a complete `metric_roles` object from the worker's narrow
+  selection and the stage's deterministic core
+- **THEN** the existing mechanical validator (`validate_metric_roles`) evaluates that complete
+  object exactly as it would a fully worker-authored one, unchanged, and rejects it if it is
+  invalid.
