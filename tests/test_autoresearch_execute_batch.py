@@ -47,8 +47,9 @@ def test_thin_adapter_validates_runs_and_persists_existing_contracts(
         artifact_path="/artifacts/run_1", realised_trade_count=0, open_position_count=0,
         final_equity="10000", gross_pnl="0", fees_paid="0", net_pnl="0",
         market_data_hash="hash", return_pct="0", max_drawdown="0",
-        long={"trades": 0, "net_pnl": "0", "return_pct": "0"},
-        short={"trades": 0, "net_pnl": "0", "return_pct": "0"},
+        cumulative_risk_outcome="0",
+        long={"trades": 0, "net_pnl": "0", "return_pct": "0", "cumulative_risk_outcome": "0"},
+        short={"trades": 0, "net_pnl": "0", "return_pct": "0", "cumulative_risk_outcome": "0"},
     )
     result = BatchExperimentResult(
         experiment_id="exp-1", status="completed", candidate_count=1,

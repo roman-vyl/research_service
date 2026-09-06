@@ -1146,12 +1146,14 @@ def test_v3_execution_receipt_hard_stops_on_universe_integrity_violation(
                             "max_drawdown": "0",
                             "profit_factor": None,
                             "win_rate": "0",
+                            "cumulative_risk_outcome": "0",
                             "long": {
                                 "net_pnl": "0",
                                 "return_pct": "0",
                                 "trades": 0,
                                 "win_rate": None,
                                 "profit_factor": None,
+                                "cumulative_risk_outcome": "0",
                             },
                             "short": {
                                 "net_pnl": "0",
@@ -1159,6 +1161,7 @@ def test_v3_execution_receipt_hard_stops_on_universe_integrity_violation(
                                 "trades": 0,
                                 "win_rate": None,
                                 "profit_factor": None,
+                                "cumulative_risk_outcome": "0",
                             },
                             "metadata": {},
                             "error_type": None,

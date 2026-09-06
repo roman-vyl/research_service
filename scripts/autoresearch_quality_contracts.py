@@ -67,16 +67,19 @@ CANONICAL_METRIC_PATHS = frozenset(
         "win_rate",
         "profit_factor",
         "max_drawdown",
+        "cumulative_risk_outcome",
         "long.trades",
         "long.net_pnl",
         "long.return_pct",
         "long.win_rate",
         "long.profit_factor",
+        "long.cumulative_risk_outcome",
         "short.trades",
         "short.net_pnl",
         "short.return_pct",
         "short.win_rate",
         "short.profit_factor",
+        "short.cumulative_risk_outcome",
     }
 )
 SEMANTIC_EVIDENCE_NAMES = frozenset(

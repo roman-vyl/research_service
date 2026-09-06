@@ -233,6 +233,7 @@ class RunBatchExperiment:
             win_rate=summary.win_rate,
             profit_factor=summary.profit_factor,
             max_drawdown=summary.max_drawdown,
+            cumulative_risk_outcome=summary.cumulative_risk_outcome,
             long=summary.long,
             short=summary.short,
             metadata=candidate.metadata,

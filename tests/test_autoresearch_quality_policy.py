@@ -4,6 +4,7 @@ import copy
 import json
 import subprocess
 import sys
+from decimal import Decimal
 from pathlib import Path
 
 import pytest
@@ -34,6 +35,7 @@ from autoresearch_quality_contracts import (  # noqa: E402
     TradeoffComparisonSelection,
     TradeoffDimension,
     _METRIC_ROLES_FIXED_CORE,
+    _metric,
     derive_tradeoff_relation,
     enforce_quality_policy,
     materialize_metric_roles,
@@ -91,6 +93,11 @@ def _policy(stage: str, **thresholds: object) -> ResearchQualityPolicy:
 def _facts(*, net: str = "100", trades: int = 100, profit_factor: str = "1.20") -> dict[str, dict[str, object]]:
     def candidate(candidate_id: str, candidate_trades: int) -> dict[str, object]:
         positive = net != "-10"
+        long_trades = candidate_trades // 2
+        short_trades = candidate_trades - long_trades
+        long_wr = Decimal("0.57")
+        short_wr = Decimal("0.53")
+        total_wr = Decimal("0.55")
         return {
             "candidate_id": candidate_id,
             "realised_trade_count": candidate_trades,
@@ -103,19 +110,22 @@ def _facts(*, net: str = "100", trades: int = 100, profit_factor: str = "1.20") 
             "win_rate": "0.55",
             "profit_factor": profit_factor if positive else "0.90",
             "max_drawdown": "-0.02",
+            "cumulative_risk_outcome": str(Decimal(candidate_trades) * (2 * total_wr - 1)),
             "long": {
-                "trades": candidate_trades // 2,
+                "trades": long_trades,
                 "net_pnl": "70" if positive else "5",
                 "return_pct": "0.007" if positive else "0.0005",
                 "win_rate": "0.57",
                 "profit_factor": "1.3" if positive else "1.05",
+                "cumulative_risk_outcome": str(Decimal(long_trades) * (2 * long_wr - 1)),
             },
             "short": {
-                "trades": candidate_trades - candidate_trades // 2,
+                "trades": short_trades,
                 "net_pnl": "30" if positive else "-15",
                 "return_pct": "0.003" if positive else "-0.0015",
                 "win_rate": "0.53",
                 "profit_factor": "1.1" if positive else "0.8",
+                "cumulative_risk_outcome": str(Decimal(short_trades) * (2 * short_wr - 1)),
             },
         }
 
@@ -183,6 +193,29 @@ def test_canonical_metric_evidence_rejects_analysis_path() -> None:
 
     with pytest.raises(ValidationError, match="canonical_metric evidence has invalid fields"):
         EvidenceRef.model_validate(evidence)
+
+
+def test_canonical_metric_evidence_accepts_cumulative_risk_outcome_paths() -> None:
+    for metric in (
+        "cumulative_risk_outcome",
+        "long.cumulative_risk_outcome",
+        "short.cumulative_risk_outcome",
+    ):
+        EvidenceRef.model_validate(_evidence(metric=metric))
+
+
+def test_metric_resolves_cumulative_risk_outcome_paths() -> None:
+    facts = _facts()["c1"]
+
+    assert Decimal(str(_metric(facts, "cumulative_risk_outcome"))) == Decimal(
+        facts["cumulative_risk_outcome"]
+    )
+    assert Decimal(str(_metric(facts, "long.cumulative_risk_outcome"))) == Decimal(
+        facts["long"]["cumulative_risk_outcome"]
+    )
+    assert Decimal(str(_metric(facts, "short.cumulative_risk_outcome"))) == Decimal(
+        facts["short"]["cumulative_risk_outcome"]
+    )
 
 
 def test_canonical_metric_evidence_rejects_unknown_metric_path() -> None:
@@ -844,6 +877,7 @@ def _artifact(
             win_rate=value["win_rate"],
             profit_factor=value["profit_factor"],
             max_drawdown=value["max_drawdown"],
+            cumulative_risk_outcome=value["cumulative_risk_outcome"],
             long=value["long"],
             short=value["short"],
         )

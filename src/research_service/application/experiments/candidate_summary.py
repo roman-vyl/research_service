@@ -21,6 +21,14 @@ def _win_rate(trades: tuple[TradeRecord, ...]) -> Decimal | None:
     return Decimal(winners) / Decimal(len(trades))
 
 
+def _cumulative_risk_outcome(n: int, wr: Decimal | None) -> Decimal:
+    if n == 0:
+        return Decimal("0")
+    if wr is None or not (Decimal(0) <= wr <= Decimal(1)):
+        raise ValueError(f"win_rate must be in [0, 1] for n > 0, got {wr!r}")
+    return Decimal(n) * (2 * wr - 1)
+
+
 def _profit_factor(trades: tuple[TradeRecord, ...]) -> Decimal | None:
     gains = sum((trade.net_pnl for trade in trades if trade.net_pnl > 0), Decimal("0"))
     losses = sum((trade.net_pnl for trade in trades if trade.net_pnl < 0), Decimal("0"))
@@ -48,18 +56,21 @@ def _max_drawdown(trades: tuple[TradeRecord, ...], initial_equity: Decimal) -> D
 
 def _side_summary(trades: tuple[TradeRecord, ...], initial_equity: Decimal) -> BatchSideSummary:
     net_pnl = sum((trade.net_pnl for trade in trades), Decimal("0"))
+    win_rate = _win_rate(trades)
     return BatchSideSummary(
         trades=len(trades),
         net_pnl=net_pnl,
         return_pct=net_pnl / initial_equity,
-        win_rate=_win_rate(trades),
+        win_rate=win_rate,
         profit_factor=_profit_factor(trades),
+        cumulative_risk_outcome=_cumulative_risk_outcome(len(trades), win_rate),
     )
 
 
 class BatchCandidateSummary:
-    """`return_pct`, `win_rate`, `profit_factor`, `max_drawdown`, and
-    `long`/`short` `BatchSideSummary` for one successful batch candidate."""
+    """`return_pct`, `win_rate`, `profit_factor`, `max_drawdown`,
+    `cumulative_risk_outcome`, and `long`/`short` `BatchSideSummary` for one
+    successful batch candidate."""
 
     def __init__(
         self,
@@ -67,6 +78,7 @@ class BatchCandidateSummary:
         win_rate: Decimal | None,
         profit_factor: Decimal | None,
         max_drawdown: Decimal,
+        cumulative_risk_outcome: Decimal,
         long: BatchSideSummary,
         short: BatchSideSummary,
     ) -> None:
@@ -74,6 +86,7 @@ class BatchCandidateSummary:
         self.win_rate = win_rate
         self.profit_factor = profit_factor
         self.max_drawdown = max_drawdown
+        self.cumulative_risk_outcome = cumulative_risk_outcome
         self.long = long
         self.short = short
 
@@ -83,11 +96,13 @@ def derive_batch_candidate_summary(accounting: TradeAccountingResult) -> BatchCa
     initial_equity = accounting.initial_equity
     long_trades = tuple(trade for trade in trades if trade.side == "long")
     short_trades = tuple(trade for trade in trades if trade.side == "short")
+    win_rate = _win_rate(trades)
     return BatchCandidateSummary(
         return_pct=accounting.net_pnl / initial_equity,
-        win_rate=_win_rate(trades),
+        win_rate=win_rate,
         profit_factor=_profit_factor(trades),
         max_drawdown=_max_drawdown(trades, initial_equity),
+        cumulative_risk_outcome=_cumulative_risk_outcome(len(trades), win_rate),
         long=_side_summary(long_trades, initial_equity),
         short=_side_summary(short_trades, initial_equity),
     )

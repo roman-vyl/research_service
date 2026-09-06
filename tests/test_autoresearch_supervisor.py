@@ -1403,8 +1403,9 @@ def _canonical_batch_artifact(
             market_data_hash=market_hash,
             return_pct="0",
             max_drawdown="0",
-            long={"trades": 0, "net_pnl": "0", "return_pct": "0"},
-            short={"trades": 0, "net_pnl": "0", "return_pct": "0"},
+            cumulative_risk_outcome="0",
+            long={"trades": 0, "net_pnl": "0", "return_pct": "0", "cumulative_risk_outcome": "0"},
+            short={"trades": 0, "net_pnl": "0", "return_pct": "0", "cumulative_risk_outcome": "0"},
         )
         for index, market_hash in enumerate(hashes, start=1)
     )

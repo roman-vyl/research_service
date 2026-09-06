@@ -26,8 +26,13 @@ _CANDIDATE_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 # win_rate/profit_factor are legitimately nullable even on a completed
 # candidate (zero-trade / no-losing-trade semantics), so they are excluded
 # from the completion-required set below.
-_SUMMARY_FIELDS_REQUIRED_ON_COMPLETION = ("return_pct", "max_drawdown", "long", "short")
-_SUMMARY_FIELDS = ("return_pct", "win_rate", "profit_factor", "max_drawdown", "long", "short")
+_SUMMARY_FIELDS_REQUIRED_ON_COMPLETION = (
+    "return_pct", "max_drawdown", "cumulative_risk_outcome", "long", "short",
+)
+_SUMMARY_FIELDS = (
+    "return_pct", "win_rate", "profit_factor", "max_drawdown",
+    "cumulative_risk_outcome", "long", "short",
+)
 
 
 class BatchCandidateRequest(BaseModel):
@@ -99,6 +104,7 @@ class BatchSideSummary(BaseModel):
     return_pct: Decimal
     win_rate: Decimal | None = None
     profit_factor: Decimal | None = None
+    cumulative_risk_outcome: Decimal
 
 
 class BatchCandidateResult(BaseModel):
@@ -130,6 +136,7 @@ class BatchCandidateResult(BaseModel):
     win_rate: Decimal | None = None
     profit_factor: Decimal | None = None
     max_drawdown: Decimal | None = None
+    cumulative_risk_outcome: Decimal | None = None
     long: BatchSideSummary | None = None
     short: BatchSideSummary | None = None
     error_type: str | None = None

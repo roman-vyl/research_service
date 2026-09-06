@@ -9,9 +9,13 @@ from research_service.accounting.contracts import (
     TradeRecord,
 )
 from research_service.application.experiments.candidate_summary import (
+    _cumulative_risk_outcome,
     _max_drawdown,
     derive_batch_candidate_summary,
 )
+from research_service.application.experiments.contracts import BatchCandidateResult
+
+import pytest
 
 _PATH = TradePathMetrics(
     mfe_price=Decimal("1"),
@@ -91,12 +95,14 @@ def test_zero_trades_produces_null_metrics_and_zero_scalars() -> None:
     assert summary.win_rate is None
     assert summary.profit_factor is None
     assert summary.max_drawdown == Decimal("0")
+    assert summary.cumulative_risk_outcome == Decimal("0")
     for side in (summary.long, summary.short):
         assert side.trades == 0
         assert side.net_pnl == Decimal("0")
         assert side.return_pct == Decimal("0")
         assert side.win_rate is None
         assert side.profit_factor is None
+        assert side.cumulative_risk_outcome == Decimal("0")
 
 
 def test_all_winners_profit_factor_is_null() -> None:
@@ -158,11 +164,87 @@ def test_side_split_isolates_long_and_short_trades() -> None:
     assert summary.long.net_pnl == Decimal("10")
     assert summary.long.win_rate == Decimal("1")
     assert summary.long.profit_factor is None
+    assert summary.long.cumulative_risk_outcome == Decimal("1")  # 1 * (2*1 - 1)
 
     assert summary.short.trades == 2
     assert summary.short.net_pnl == Decimal("10")
     assert summary.short.win_rate == Decimal("1") / Decimal("2")
     assert summary.short.profit_factor == Decimal("3")
+    assert summary.short.cumulative_risk_outcome == Decimal("0")  # 2 * (2*0.5 - 1)
+
+
+def test_cumulative_risk_outcome_aggregate_equals_side_sum() -> None:
+    # Trade counts and win/loss splits chosen so every win_rate involved is an
+    # exact terminating Decimal (denominators are powers of 2) -- this isolates
+    # the structural long+short=aggregate identity from Decimal's finite-precision
+    # division of non-terminating fractions like 2/3, which is a real (and
+    # acceptable) source of drift for this pre-existing win_rate computation.
+    long_trades = (
+        trade(Decimal("10"), Decimal("1000"), side="long"),
+        trade(Decimal("10"), Decimal("1010"), side="long"),
+        trade(Decimal("10"), Decimal("1020"), side="long"),
+        trade(Decimal("-10"), Decimal("1030"), side="long"),
+    )  # 4 trades, 3 winners -> win_rate = 0.75
+    short_trades = (
+        trade(Decimal("10"), Decimal("1020"), side="short"),
+        trade(Decimal("-10"), Decimal("1030"), side="short"),
+        trade(Decimal("-10"), Decimal("1020"), side="short"),
+        trade(Decimal("-10"), Decimal("1010"), side="short"),
+    )  # 4 trades, 1 winner -> win_rate = 0.25
+    summary = derive_batch_candidate_summary(accounting(long_trades + short_trades))
+
+    assert summary.long.cumulative_risk_outcome == Decimal("2")  # 4 * (2*0.75 - 1)
+    assert summary.short.cumulative_risk_outcome == Decimal("-2")  # 4 * (2*0.25 - 1)
+    assert summary.cumulative_risk_outcome == (
+        summary.long.cumulative_risk_outcome + summary.short.cumulative_risk_outcome
+    )
+
+
+def test_cumulative_risk_outcome_zero_trades_is_zero_not_none() -> None:
+    assert _cumulative_risk_outcome(0, None) == Decimal("0")
+
+
+def test_cumulative_risk_outcome_matches_formula_directly() -> None:
+    assert _cumulative_risk_outcome(743, Decimal("0.6")) == Decimal("743") * (
+        2 * Decimal("0.6") - 1
+    )
+
+
+def test_cumulative_risk_outcome_rejects_win_rate_out_of_range() -> None:
+    with pytest.raises(ValueError, match="win_rate"):
+        _cumulative_risk_outcome(10, Decimal("1.5"))
+    with pytest.raises(ValueError, match="win_rate"):
+        _cumulative_risk_outcome(10, Decimal("-0.1"))
+    with pytest.raises(ValueError, match="win_rate"):
+        _cumulative_risk_outcome(10, None)
+
+
+def _completed_kwargs(**overrides: object) -> dict[str, object]:
+    side = {"trades": 0, "net_pnl": "0", "return_pct": "0", "cumulative_risk_outcome": "0"}
+    kwargs: dict[str, object] = {
+        "candidate_id": "c1", "run_id": "run_1", "instance_id": "i", "status": "completed",
+        "artifact_path": "/a", "realised_trade_count": 0, "open_position_count": 0,
+        "final_equity": "10000", "gross_pnl": "0", "fees_paid": "0", "net_pnl": "0",
+        "market_data_hash": "h", "return_pct": "0", "max_drawdown": "0",
+        "cumulative_risk_outcome": "0", "long": side, "short": side,
+    }
+    kwargs.update(overrides)
+    return kwargs
+
+
+def test_cumulative_risk_outcome_required_on_completed_candidate() -> None:
+    kwargs = _completed_kwargs()
+    del kwargs["cumulative_risk_outcome"]
+    with pytest.raises(Exception, match="missing required summary field"):
+        BatchCandidateResult(**kwargs)
+
+
+def test_cumulative_risk_outcome_forbidden_on_failed_candidate() -> None:
+    with pytest.raises(Exception, match="must not populate summary field"):
+        BatchCandidateResult(
+            candidate_id="c1", run_id=None, instance_id="i", status="failed",
+            error_type="X", error_message="boom", cumulative_risk_outcome="0",
+        )
 
 
 def test_max_drawdown_uses_equity_before_not_only_equity_after() -> None:
