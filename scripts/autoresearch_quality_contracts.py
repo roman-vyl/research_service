@@ -146,6 +146,14 @@ STRUCTURAL_PRIMARY_ALLOWED = {
     "thinning",
     "temporal_concentration",
     "regime_concentration",
+    "cumulative_risk_outcome",
+    "long.cumulative_risk_outcome",
+    "short.cumulative_risk_outcome",
+}
+STRUCTURAL_MANDATORY_RISK_OUTCOME = {
+    "cumulative_risk_outcome",
+    "long.cumulative_risk_outcome",
+    "short.cumulative_risk_outcome",
 }
 EXIT_PRIMARY = {
     "net_pnl",
@@ -310,12 +318,14 @@ _METRIC_ROLES_FIXED_CORE: dict[StageKind, dict[str, Any]] = {
         "descriptive": None,  # computed as CANONICAL_METRIC_PATHS - primary, see materializer
     },
     "structural_entry": {
-        "primary_core": {"response_topology"},
+        "primary_core": {"response_topology"} | STRUCTURAL_MANDATORY_RISK_OUTCOME,
         "secondary": frozenset({"net_pnl", "return_pct", "profit_factor", "max_drawdown"}),
         "descriptive": frozenset({"gross_pnl", "fees_paid"}),
     },
     "structural_interaction": {
-        "primary_core": {"response_topology", "neighborhood_stability"},
+        "primary_core": (
+            {"response_topology", "neighborhood_stability"} | STRUCTURAL_MANDATORY_RISK_OUTCOME
+        ),
         "secondary": frozenset({"net_pnl", "return_pct", "profit_factor", "max_drawdown"}),
         "descriptive": frozenset({"gross_pnl", "fees_paid"}),
     },
@@ -791,6 +801,13 @@ def validate_metric_roles(assessment: ResearchQualityAssessment) -> None:
                 raise ValueError(f"{stage} requires neighborhood evidence")
             if not primary & SIDE_BEHAVIOR_EVIDENCE:
                 raise ValueError(f"{stage} requires side-behavior evidence")
+        if stage in {"structural_entry", "structural_interaction"}:
+            missing_risk_outcome = STRUCTURAL_MANDATORY_RISK_OUTCOME - primary
+            if missing_risk_outcome:
+                raise ValueError(
+                    f"{stage} requires cumulative_risk_outcome evidence "
+                    f"(missing: {sorted(missing_risk_outcome)})"
+                )
         if "after_cost_positive" in roles.promotion_gates:
             raise ValueError("after-cost positivity cannot gate structural discovery")
     elif stage == "exit_geometry":

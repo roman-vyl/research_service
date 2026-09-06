@@ -29,6 +29,7 @@ from autoresearch_quality_contracts import (  # noqa: E402
     EXIT_PRIMARY,
     ROBUSTNESS_PRIMARY,
     MetricRoleSelection,
+    MetricRoles,
     ResearchQualityAssessment,
     ResearchQualityPolicy,
     TradeoffComparison,
@@ -145,13 +146,19 @@ def _roles(stage: str) -> dict[str, object]:
             "promotion_gates": [],
         }
     if stage in {"structural_entry", "structural_interaction", "entry_region_selection"}:
+        primary = [
+            "baseline_uplift", "response_topology", "neighborhood_stability",
+            "realised_trade_count", "win_rate", "long.win_rate", "short.win_rate",
+            "thinning",
+        ]
+        if stage in {"structural_entry", "structural_interaction"}:
+            primary += [
+                "cumulative_risk_outcome", "long.cumulative_risk_outcome",
+                "short.cumulative_risk_outcome",
+            ]
         return {
             "descriptive": ["gross_pnl", "fees_paid"],
-            "primary": [
-                "baseline_uplift", "response_topology", "neighborhood_stability",
-                "realised_trade_count", "win_rate", "long.win_rate", "short.win_rate",
-                "thinning",
-            ],
+            "primary": primary,
             "secondary": ["net_pnl", "return_pct", "profit_factor", "max_drawdown"],
             "promotion_gates": ["neighborhood_supported", "side_classification_permitted"],
         }
@@ -504,6 +511,143 @@ def test_glm_smoke_duplicate_metric_failure_is_structurally_eliminated() -> None
     # convention.
     assert not hasattr(selection, "descriptive")
     assert not hasattr(selection, "secondary")
+
+
+def test_materialize_metric_roles_structural_entry_mandates_cumulative_risk_outcome() -> None:
+    materialized = materialize_metric_roles("structural_entry", MetricRoleSelection())
+
+    assert "response_topology" in materialized.primary
+    assert "cumulative_risk_outcome" in materialized.primary
+    assert "long.cumulative_risk_outcome" in materialized.primary
+    assert "short.cumulative_risk_outcome" in materialized.primary
+    # PF/PnL/return/max_drawdown did not move into primary.
+    assert set(materialized.secondary) == {
+        "net_pnl", "return_pct", "profit_factor", "max_drawdown",
+    }
+
+
+def test_materialize_metric_roles_structural_interaction_mandates_cumulative_risk_outcome() -> None:
+    materialized = materialize_metric_roles("structural_interaction", MetricRoleSelection())
+
+    assert "response_topology" in materialized.primary
+    assert "neighborhood_stability" in materialized.primary
+    assert "cumulative_risk_outcome" in materialized.primary
+    assert "long.cumulative_risk_outcome" in materialized.primary
+    assert "short.cumulative_risk_outcome" in materialized.primary
+    assert set(materialized.secondary) == {
+        "net_pnl", "return_pct", "profit_factor", "max_drawdown",
+    }
+
+
+def test_materialize_metric_roles_entry_region_selection_unaffected() -> None:
+    """entry_region_selection's fixed core is deliberately untouched by this change."""
+    materialized = materialize_metric_roles("entry_region_selection", MetricRoleSelection())
+
+    assert "cumulative_risk_outcome" not in materialized.primary
+    assert "long.cumulative_risk_outcome" not in materialized.primary
+    assert "short.cumulative_risk_outcome" not in materialized.primary
+    assert set(materialized.primary) == {"response_topology", "neighborhood_stability"}
+
+    class _Stage:
+        stage_kind = "entry_region_selection"
+        metric_roles = materialized
+
+    class _Assessment:
+        stage = _Stage()
+
+    with pytest.raises(ValueError, match="conditional entry-quality evidence"):
+        # Unrelated pre-existing requirement still fires first (no worker additions at all) --
+        # confirms validate_metric_roles does not spuriously demand ΣR for this stage.
+        validate_metric_roles(_Assessment())
+
+
+def _fully_valid_structural_materialization(stage: str) -> MetricRoles:
+    """A materialized MetricRoles that satisfies every pre-existing structural requirement
+    (conditional entry-quality, sample/thinning, and -- for structural_interaction -- side
+    behavior), so a test can isolate the new cumulative_risk_outcome check by removing exactly
+    one path without a different, pre-existing check firing first."""
+    additions = ["win_rate", "thinning"]
+    if stage == "structural_interaction":
+        additions.append("long.win_rate")
+    return materialize_metric_roles(
+        stage, MetricRoleSelection(primary_evidence_additions=additions)
+    )
+
+
+@pytest.mark.parametrize("stage", ("structural_entry", "structural_interaction"))
+def test_validate_metric_roles_rejects_missing_aggregate_cumulative_risk_outcome(
+    stage: str,
+) -> None:
+    materialized = _fully_valid_structural_materialization(stage)
+    materialized = materialized.model_copy(
+        update={"primary": [p for p in materialized.primary if p != "cumulative_risk_outcome"]}
+    )
+
+    class _Stage:
+        stage_kind = stage
+        metric_roles = materialized
+
+    class _Assessment:
+        stage = _Stage()
+
+    with pytest.raises(ValueError, match="cumulative_risk_outcome"):
+        validate_metric_roles(_Assessment())
+
+
+@pytest.mark.parametrize("stage", ("structural_entry", "structural_interaction"))
+def test_validate_metric_roles_rejects_missing_long_cumulative_risk_outcome(stage: str) -> None:
+    materialized = _fully_valid_structural_materialization(stage)
+    materialized = materialized.model_copy(
+        update={
+            "primary": [p for p in materialized.primary if p != "long.cumulative_risk_outcome"]
+        }
+    )
+
+    class _Stage:
+        stage_kind = stage
+        metric_roles = materialized
+
+    class _Assessment:
+        stage = _Stage()
+
+    with pytest.raises(ValueError, match="long.cumulative_risk_outcome"):
+        validate_metric_roles(_Assessment())
+
+
+@pytest.mark.parametrize("stage", ("structural_entry", "structural_interaction"))
+def test_validate_metric_roles_rejects_missing_short_cumulative_risk_outcome(stage: str) -> None:
+    materialized = _fully_valid_structural_materialization(stage)
+    materialized = materialized.model_copy(
+        update={
+            "primary": [p for p in materialized.primary if p != "short.cumulative_risk_outcome"]
+        }
+    )
+
+    class _Stage:
+        stage_kind = stage
+        metric_roles = materialized
+
+    class _Assessment:
+        stage = _Stage()
+
+    with pytest.raises(ValueError, match="short.cumulative_risk_outcome"):
+        validate_metric_roles(_Assessment())
+
+
+def test_validate_metric_roles_accepts_full_structural_materialization() -> None:
+    """Sanity check for the helper above: a fully valid materialization (all mandatory
+    evidence present) passes validate_metric_roles without raising, for both stages."""
+    for stage in ("structural_entry", "structural_interaction"):
+        materialized = _fully_valid_structural_materialization(stage)
+
+        class _Stage:
+            stage_kind = stage
+            metric_roles = materialized
+
+        class _Assessment:
+            stage = _Stage()
+
+        validate_metric_roles(_Assessment())  # must not raise
 
 
 def _dim(dimension: str, assessment: str) -> TradeoffDimension:
