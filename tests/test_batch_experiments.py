@@ -23,10 +23,18 @@ from research_service.application.experiments import (
     PersistBatchExperiment,
     RunBatchExperiment,
 )
+from research_service.application.experiments.candidate_summary import (
+    derive_batch_candidate_summary,
+)
 from research_service.domain.contracts import (
     ContinuityAudit,
+    ExecutableEntryOpportunityDTO,
+    ExitAttributionDTO,
     ExplicitRange,
+    HistoricalExecutionProjectionDTO,
+    InitialProtectionLegDTO,
     MarketRange,
+    SignalExitProjectionDTO,
     StrategyEvaluationBatchRequest,
     StrategyEvaluationBatchVariant,
     StrategyEvaluationBatchVariantOutcome,
@@ -680,3 +688,115 @@ def test_failed_candidate_row_has_no_summary_fields(tmp_path: Path) -> None:
     assert failed.max_drawdown is None
     assert failed.long is None
     assert failed.short is None
+
+
+# --- Trade-native R on the production batch settlement path -------------------
+# (research-trade-native-r-v1) -- `RunBatchExperiment.execute` /
+# `_settle_candidate` is the real batch settlement path (not a shortcut
+# around it); this proves its `BatchCandidateResult` R fields agree with an
+# independent `derive_batch_candidate_summary` call over the same
+# materialized accounting, for both an R-eligible projection (has an initial
+# stop) and a zero-eligible one (no initial stop at all).
+
+
+def strategy_projection_without_initial_stop() -> HistoricalExecutionProjectionDTO:
+    """Same single long entry/take-profit as `strategy_projection()`, but
+    with no initial stop at all -- the projection a strategy with no stop
+    component configured would produce. The trade still realises (closes on
+    take-profit), it is just not R-eligible."""
+
+    empty_profile_events = {"aligned": (), "countertrend": (), "neutral": ()}
+    return HistoricalExecutionProjectionDTO(
+        contract_version="strategy_evaluation_execution.v2",
+        strategy_id="ema_pullback",
+        config_hash="config-hash",
+        market=market_frame().market,
+        market_data_hash="market-hash",
+        bar_count=3,
+        entry_opportunities=(
+            ExecutableEntryOpportunityDTO(
+                bar_index=0,
+                side="long",
+                locked_exit_profile="aligned",
+                initial_stop=None,
+                initial_take=InitialProtectionLegDTO(
+                    ratio=0.05,
+                    attribution=ExitAttributionDTO(
+                        rule_id="tp", component_id="c", exit_kind="take_profit"
+                    ),
+                ),
+            ),
+        ),
+        signal_exit_events=SignalExitProjectionDTO(
+            long=empty_profile_events, short=empty_profile_events
+        ),
+        warnings=(),
+    )
+
+
+@pytest.mark.parametrize(
+    "projection_factory,expect_eligible",
+    [
+        pytest.param(strategy_projection, True, id="r_eligible"),
+        pytest.param(strategy_projection_without_initial_stop, False, id="zero_eligible"),
+    ],
+)
+def test_settled_candidate_carries_trade_native_r_matching_materialized_summary(
+    tmp_path: Path,
+    projection_factory: object,
+    expect_eligible: bool,
+) -> None:
+    projection = projection_factory()  # type: ignore[operator]
+    strategy = FakeStrategyEngine(projection)
+    market = FakeMarketData(market_frame())
+    use_case, _ = build_use_case(strategy, market, tmp_path)
+
+    result = use_case.execute(make_request(candidate("a")))
+    item = result.candidates[0]
+    assert item.status == "completed"
+
+    # Independently materialize + derive the summary the same way the batch
+    # settlement path does internally, to cross-check its R output rather
+    # than trust the batch path's own arithmetic in isolation.
+    backtest_request = build_backtest_request(
+        candidate("a").strategy,
+        range_policy="explicit_range",
+        range=ExplicitRange(from_ms=0, to_ms=900_000),
+        execution=ExecutionPolicy(),
+        accounting=AccountingPolicy(
+            initial_equity=Decimal("1000"),
+            entry_fee_rate=Decimal("0.001"),
+            exit_fee_rate=Decimal("0.001"),
+        ),
+        managed_policy_enabled=False,
+    )
+    materialized = MaterializeBacktestProjectionOutcome(strategy).execute(
+        backtest_request, item.instance_id, projection, market.frame
+    )
+    expected_summary = derive_batch_candidate_summary(materialized.accounting)
+
+    assert item.cumulative_gross_r is not None
+    assert item.cumulative_net_r is not None
+    assert item.r_eligible_trade_count is not None
+    assert item.cumulative_gross_r == expected_summary.cumulative_gross_r
+    assert item.cumulative_net_r == expected_summary.cumulative_net_r
+    assert item.r_eligible_trade_count == expected_summary.r_eligible_trade_count
+
+    assert item.long is not None
+    assert item.short is not None
+    assert item.long.cumulative_gross_r == expected_summary.long.cumulative_gross_r
+    assert item.long.cumulative_net_r == expected_summary.long.cumulative_net_r
+    assert item.long.r_eligible_trade_count == expected_summary.long.r_eligible_trade_count
+    assert item.short.cumulative_gross_r == expected_summary.short.cumulative_gross_r
+    assert item.short.r_eligible_trade_count == expected_summary.short.r_eligible_trade_count
+
+    if expect_eligible:
+        assert item.r_eligible_trade_count == 1
+        assert item.cumulative_gross_r != Decimal("0")
+        assert item.long.r_eligible_trade_count == 1
+    else:
+        assert item.r_eligible_trade_count == 0
+        assert item.cumulative_gross_r == Decimal("0")
+        assert item.cumulative_net_r == Decimal("0")
+        assert item.long.r_eligible_trade_count == 0
+        assert item.long.cumulative_gross_r == Decimal("0")
