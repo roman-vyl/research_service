@@ -105,6 +105,10 @@ def account_closed_execution(
     if not equity_after.is_finite() or equity_after <= 0:
         raise InvalidRequest("closed trade produces non-positive or non-finite equity")
 
+    initial_risk_price, initial_risk_amount, gross_r_multiple, net_r_multiple = (
+        _initial_risk(execution, quantity=quantity, gross_pnl=gross, net_pnl=net)
+    )
+
     return TradeRecord(
         trade_id=f"trade:{execution.position.position_id}:{ordinal}",
         position_id=execution.position.position_id,
@@ -137,7 +141,48 @@ def account_closed_execution(
         exit_component_id=exit_fill.component_id,
         exit_kind=exit_fill.exit_kind,
         path=path,
+        initial_risk_price=initial_risk_price,
+        initial_risk_amount=initial_risk_amount,
+        gross_r_multiple=gross_r_multiple,
+        net_r_multiple=net_r_multiple,
     )
+
+
+def _initial_risk(
+    execution: PositionExecution,
+    *,
+    quantity: Decimal,
+    gross_pnl: Decimal,
+    net_pnl: Decimal,
+) -> tuple[Decimal | None, Decimal | None, Decimal | None, Decimal | None]:
+    """Trade-native R accounting (`research-trade-native-r-v1`). Denominator
+    is frozen at entry -- |entry fill price - initial stop price| -- taken
+    from `initial_protection`, which is set once at fill time and never
+    reassigned afterward regardless of what actually closes the position
+    (managed exit, signal exit, runtime exit, ...), so R stays a stable
+    per-trade risk unit independent of the exit path and independent of
+    portfolio sizing (quantity cancels between `gross_pnl`/`net_pnl` and
+    `initial_risk_amount`, both scaled by the same `quantity`).
+
+    Returns all-`None` when there is no initial stop to measure from (no
+    stop component configured) or when the resolved stop collapses onto the
+    entry price (zero risk distance, division undefined) -- either way the
+    trade itself stays fully valid; only R eligibility is affected.
+    """
+
+    stop_price = execution.position.initial_protection.stop_loss_price
+    if stop_price is None:
+        return None, None, None, None
+
+    entry_price = execution.position.entry_fill.fill_price
+    initial_risk_price = abs(entry_price - stop_price)
+    if initial_risk_price <= 0:
+        return None, None, None, None
+
+    initial_risk_amount = initial_risk_price * quantity
+    gross_r_multiple = gross_pnl / initial_risk_amount
+    net_r_multiple = net_pnl / initial_risk_amount
+    return initial_risk_price, initial_risk_amount, gross_r_multiple, net_r_multiple
 
 
 def _calculate_path(execution: PositionExecution, market: MarketFrame) -> TradePathMetrics:

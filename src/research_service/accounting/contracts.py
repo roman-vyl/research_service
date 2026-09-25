@@ -78,6 +78,19 @@ class TradeRecord(BaseModel):
     exit_component_id: str | None = None
     exit_kind: str | None = None
     path: TradePathMetrics
+    # Trade-native R accounting (`research-trade-native-r-v1`). Denominator
+    # is frozen at entry -- |entry_fill.fill_price - initial stop price| --
+    # and never re-derived from a later managed-exit level, so it stays a
+    # stable per-trade risk unit regardless of what actually closed the
+    # trade or how the position was sized. All four fields are set together
+    # from the position's `initial_protection.stop_loss_price`; when that is
+    # `None` (no initial stop configured), all four stay `None` and the
+    # trade remains otherwise fully valid -- R eligibility is optional, not
+    # a validity requirement.
+    initial_risk_price: Decimal | None = Field(default=None, gt=0)
+    initial_risk_amount: Decimal | None = Field(default=None, gt=0)
+    gross_r_multiple: Decimal | None = None
+    net_r_multiple: Decimal | None = None
 
     @model_validator(mode="after")
     def validate_arithmetic(self) -> "TradeRecord":
@@ -89,6 +102,30 @@ class TradeRecord(BaseModel):
             raise ValueError("net_pnl differs from gross_pnl - fees_paid")
         if self.equity_after != self.equity_before + self.net_pnl:
             raise ValueError("equity_after differs from equity_before + net_pnl")
+
+        r_fields = (
+            self.initial_risk_price,
+            self.initial_risk_amount,
+            self.gross_r_multiple,
+            self.net_r_multiple,
+        )
+        if any(value is None for value in r_fields) and any(
+            value is not None for value in r_fields
+        ):
+            raise ValueError(
+                "initial_risk_price, initial_risk_amount, gross_r_multiple, "
+                "net_r_multiple must be all set or all None together"
+            )
+        if self.initial_risk_amount is not None:
+            assert self.initial_risk_price is not None
+            assert self.gross_r_multiple is not None
+            assert self.net_r_multiple is not None
+            if self.initial_risk_amount != self.initial_risk_price * self.quantity:
+                raise ValueError("initial_risk_amount differs from initial_risk_price * quantity")
+            if self.gross_r_multiple != self.gross_pnl / self.initial_risk_amount:
+                raise ValueError("gross_r_multiple differs from gross_pnl / initial_risk_amount")
+            if self.net_r_multiple != self.net_pnl / self.initial_risk_amount:
+                raise ValueError("net_r_multiple differs from net_pnl / initial_risk_amount")
         return self
 
 

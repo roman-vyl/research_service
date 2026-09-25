@@ -25,9 +25,19 @@ _CANDIDATE_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$"
 
 # win_rate/profit_factor are legitimately nullable even on a completed
 # candidate (zero-trade / no-losing-trade semantics), so they are excluded
-# from the completion-required set below.
+# from the completion-required set below. cumulative_gross_r/cumulative_net_r/
+# r_eligible_trade_count (research-trade-native-r-v1) join them here for a
+# different reason: batch artifacts/fixtures written before these fields
+# existed have no way to populate them, so they must stay optional-on-
+# completion rather than break every pre-existing canonical/materialized
+# batch payload. The production path (`run_batch.py`) always populates them
+# (0, never None, when zero trades are R-eligible) for candidates it builds
+# itself.
 _SUMMARY_FIELDS_REQUIRED_ON_COMPLETION = ("return_pct", "max_drawdown", "long", "short")
-_SUMMARY_FIELDS = ("return_pct", "win_rate", "profit_factor", "max_drawdown", "long", "short")
+_SUMMARY_FIELDS = (
+    "return_pct", "win_rate", "profit_factor", "max_drawdown",
+    "cumulative_gross_r", "cumulative_net_r", "r_eligible_trade_count", "long", "short",
+)
 
 
 class BatchCandidateRequest(BaseModel):
@@ -99,6 +109,14 @@ class BatchSideSummary(BaseModel):
     return_pct: Decimal
     win_rate: Decimal | None = None
     profit_factor: Decimal | None = None
+    #: Trade-native R accounting (`research-trade-native-r-v1`) -- sums only
+    #: over trades with a resolved initial stop (`r_eligible_trade_count` of
+    #: this side's `trades`), 0 when none are eligible. Defaulted (not
+    #: required) so batch-fixture dicts written before this field existed
+    #: keep validating a zero-trade side unchanged.
+    cumulative_gross_r: Decimal = Decimal("0")
+    cumulative_net_r: Decimal = Decimal("0")
+    r_eligible_trade_count: int = Field(default=0, ge=0)
 
 
 class BatchCandidateResult(BaseModel):
@@ -130,6 +148,9 @@ class BatchCandidateResult(BaseModel):
     win_rate: Decimal | None = None
     profit_factor: Decimal | None = None
     max_drawdown: Decimal | None = None
+    cumulative_gross_r: Decimal | None = None
+    cumulative_net_r: Decimal | None = None
+    r_eligible_trade_count: int | None = Field(default=None, ge=0)
     long: BatchSideSummary | None = None
     short: BatchSideSummary | None = None
     error_type: str | None = None
