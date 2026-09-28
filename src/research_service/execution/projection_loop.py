@@ -38,6 +38,7 @@ from research_service.domain.execution import (
 from research_service.execution.managed_policy import (
     ManagedPolicyTimeline,
     build_managed_policy_timeline,
+    build_managed_policy_timeline_from_projection,
     collect_managed_exit_candidates,
 )
 from research_service.execution.projection_entry import (
@@ -156,7 +157,10 @@ def run_projection_execution_loop(
             if opened is not None and opened is not current_position:
                 current_position = opened
                 current_timeline = _resolve_managed_timeline(
-                    opened, managed_replay_provider=managed_replay_provider
+                    opened,
+                    projection_index=projection_index,
+                    market_frame=market_frame,
+                    managed_replay_provider=managed_replay_provider,
                 )
                 events.append(_entry_event(opened))
 
@@ -192,8 +196,21 @@ def run_projection_execution_loop(
 def _resolve_managed_timeline(
     position: PositionState,
     *,
+    projection_index: HistoricalExecutionProjectionIndex,
+    market_frame: MarketFrame,
     managed_replay_provider: ManagedReplayProvider | None,
 ) -> ManagedPolicyTimeline | None:
+    """`historical-managed-projection-v1`: when the candidate-wide
+    projection already carries a `HistoricalManagedProjection`
+    (`exit_management.mode == "managed"`), build the timeline from it
+    locally -- no Strategy Engine call. `managed_replay_provider`
+    (a per-position `/managed-replay` call) is used only as a fallback
+    when the projection carries none, so this loop keeps working for
+    any caller not yet passing a managed-projection-bearing DTO."""
+
+    managed = projection_index.projection.managed
+    if managed is not None:
+        return build_managed_policy_timeline_from_projection(managed, position, market_frame)
     if managed_replay_provider is None:
         return None
     replay = managed_replay_provider(position)

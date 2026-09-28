@@ -7,9 +7,27 @@ from typing import Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from research_service.domain.contracts import Candle, ManagedReplayResult
+from research_service.domain.contracts import (
+    Candle,
+    HistoricalManagedProjectionDTO,
+    ManagedReplayResult,
+    MarketFrame,
+)
 from research_service.domain.errors import InvalidRequest
 from research_service.domain.execution import ExecutionSide, ExitCandidate, PositionState
+
+_PHASES = ("initial_risk", "proven", "protected", "runner", "exhaustion")
+_PHASE_RANK = {name: index for index, name in enumerate(_PHASES)}
+
+# Round-trips through this module's own `_runtime_candidate_type`, so a
+# projection-driven `ManagedEffectiveState` reaches the same
+# `candidate_type` as a `/managed-replay`-driven one without that function
+# needing to know about `exit_class` at all.
+_EXIT_CLASS_TO_KIND = {
+    "runtime_protective": "protective_exit",
+    "runtime_take": "take_profit",
+    "runtime_close": "market_close",
+}
 
 
 class ManagedEffectiveState(BaseModel):
@@ -140,6 +158,173 @@ def build_managed_policy_timeline(
         entry_time_ms=replay.entry_time_ms,
         states=tuple(states),
     )
+
+
+def build_managed_policy_timeline_from_projection(
+    projection: HistoricalManagedProjectionDTO,
+    position: PositionState,
+    market_frame: MarketFrame,
+) -> ManagedPolicyTimeline:
+    """`historical-managed-projection-v1`'s generic managed lifecycle
+    consumer -- the candidate-wide-projection counterpart to
+    `build_managed_policy_timeline`, producing the identical
+    `ManagedPolicyTimeline` shape without a `/managed-replay` call per
+    opened trade. Dispatches on `rules[].kind` (and each variant's own
+    closed enum) alone -- never on a `component_id`, never on a raw
+    strategy parameter (this contract carries none).
+
+    `active_stop_component_id`/`active_take_component_id`/
+    `runtime_exit_components` are always `None` here: `component_id` is
+    deliberately not part of this contract (design.md D2/D6), so this
+    path cannot populate those attribution-only fields the way
+    `build_managed_policy_timeline` does from `/managed-replay`'s raw
+    events. They are diagnostic/reason-string fields only -- no exit
+    arbitration or fill decision reads them.
+    """
+
+    entry_index = position.entry_fill.bar_index
+    side = position.side
+    entry_price = float(position.entry_fill.reference_price)
+    candles = market_frame.candles
+    target_index = len(candles) - 1
+
+    phase_rules = [r for r in projection.rules if r.kind == "phase_transition"]
+    stop_rules = [r for r in projection.rules if r.kind == "stop_action"]
+    take_rules = [r for r in projection.rules if r.kind == "take_action"]
+    runtime_rules = [r for r in projection.rules if r.kind == "runtime_exit"]
+
+    phase = "initial_risk"
+    active_stop_price: float | None = None
+    active_stop_rule_id: str | None = None
+    active_take_profile = "initial"
+    active_take_rule_id: str | None = None
+    best_price = entry_price
+    worst_price = entry_price
+
+    states: list[ManagedEffectiveState] = []
+    for index in range(entry_index, target_index + 1):
+        candle = candles[index]
+        high, low = float(candle.high), float(candle.low)
+        if side == "long":
+            best_price = max(best_price, high)
+            worst_price = min(worst_price, low)
+            mfe_price, mae_price = best_price, worst_price
+            mfe_pct = (best_price - entry_price) / entry_price
+            mae_pct = (entry_price - worst_price) / entry_price
+        else:
+            best_price = min(best_price, low)
+            worst_price = max(worst_price, high)
+            mfe_price, mae_price = best_price, worst_price
+            mfe_pct = (entry_price - best_price) / entry_price
+            mae_pct = (worst_price - entry_price) / entry_price
+        bars_in_trade = index - entry_index + 1
+        mfe_distance = abs(mfe_price - entry_price)
+        trade_metric_values = {
+            "bars_since_entry": float(bars_in_trade),
+            "mfe_pct": mfe_pct,
+            "mfe_distance": mfe_distance,
+        }
+
+        for rule in phase_rules:
+            if _PHASE_RANK[rule.target_phase] <= _PHASE_RANK[phase]:
+                continue
+            if rule.condition_id is not None:
+                series = projection.conditions[rule.condition_id]
+                met = (series.long if side == "long" else series.short)[index]
+            else:
+                assert rule.distance_id is not None and rule.trade_metric is not None
+                threshold = projection.distances[rule.distance_id][index]
+                met = threshold is not None and trade_metric_values[rule.trade_metric] >= threshold
+            if met:
+                phase = rule.target_phase
+
+        candidates: list[tuple[float, str]] = []
+        for rule in stop_rules:
+            if not _at_least(phase, rule.activation_phase):
+                continue
+            distance = projection.distances[rule.distance_id][index]
+            if distance is None:
+                continue
+            price = entry_price + distance if side == "long" else entry_price - distance
+            candidates.append((price, rule.rule_id))
+        if candidates:
+            chosen_price, chosen_rule_id = (
+                max(candidates, key=lambda item: item[0])
+                if side == "long"
+                else min(candidates, key=lambda item: item[0])
+            )
+            active_stop_price = (
+                chosen_price
+                if active_stop_price is None
+                else (
+                    max(active_stop_price, chosen_price)
+                    if side == "long"
+                    else min(active_stop_price, chosen_price)
+                )
+            )
+            active_stop_rule_id = chosen_rule_id
+
+        for rule in take_rules:
+            if not _at_least(phase, rule.activation_phase):
+                continue
+            if rule.resulting_profile != active_take_profile:
+                active_take_profile = rule.resulting_profile
+                active_take_rule_id = rule.rule_id
+
+        armed: list[str] = []
+        runtime_kinds: dict[str, str] = {}
+        for rule in runtime_rules:
+            if not _at_least(phase, rule.activation_phase):
+                continue
+            series = projection.conditions[rule.condition_id]
+            values = series.long if side == "long" else series.short
+            start = index - rule.confirm_bars + 1
+            if start < entry_index:
+                continue
+            if all(values[pos] for pos in range(start, index + 1)):
+                armed.append(rule.rule_id)
+                runtime_kinds[rule.rule_id] = _EXIT_CLASS_TO_KIND[rule.exit_class]
+
+        if index == target_index:
+            continue
+        active_runtime_ids = tuple(armed)
+        states.append(
+            ManagedEffectiveState(
+                trade_id=position.position_id,
+                side=side,
+                effective_time_ms=candles[index + 1].open_time_ms,
+                source_bar_index=index,
+                source_time_ms=candle.open_time_ms,
+                phase=phase,
+                bars_in_trade=bars_in_trade,
+                mfe_pct=Decimal(str(mfe_pct)),
+                mae_pct=Decimal(str(mae_pct)),
+                active_stop_price=(
+                    Decimal(str(active_stop_price)) if active_stop_price is not None else None
+                ),
+                active_stop_rule_id=active_stop_rule_id if active_stop_price is not None else None,
+                active_stop_component_id=None,
+                active_take_profile=active_take_profile,
+                active_take_rule_id=active_take_rule_id,
+                active_take_component_id=None,
+                runtime_exit_rule_ids=active_runtime_ids,
+                runtime_exit_components={rule_id: None for rule_id in active_runtime_ids},
+                runtime_exit_kinds=runtime_kinds,
+            )
+        )
+
+    return ManagedPolicyTimeline(
+        trade_id=position.position_id,
+        side=side,
+        entry_time_ms=position.entry_fill.time_ms,
+        states=tuple(states),
+    )
+
+
+def _at_least(current: str, threshold: str) -> bool:
+    if not threshold:
+        return True
+    return _PHASE_RANK[current] >= _PHASE_RANK[threshold]
 
 
 def collect_managed_exit_candidates(

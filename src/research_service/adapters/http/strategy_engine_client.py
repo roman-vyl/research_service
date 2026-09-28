@@ -556,6 +556,7 @@ def parse_historical_execution_projection(body: dict[str, object]) -> Historical
         "entry_opportunities": body.get("entry_opportunities"),
         "signal_exit_events": body.get("signal_exit_events"),
         "warnings": body.get("warnings", []),
+        "managed": body.get("managed"),
     }
     try:
         return HistoricalExecutionProjectionDTO.model_validate(payload)

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import math
 from decimal import Decimal
-from typing import Literal
+from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -462,6 +462,96 @@ class SignalExitProjectionDTO(BaseModel):
         return value
 
 
+class ManagedConditionSeriesDTO(BaseModel):
+    """Pre-confirm boolean condition, both sides, one entry per bar
+    (`historical-managed-projection-v1`). No confirm-bars window
+    applied -- Research applies that itself, entry-anchored, via
+    `build_managed_policy_timeline_from_projection`."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    long: tuple[bool, ...]
+    short: tuple[bool, ...]
+
+
+class ManagedPhaseTransitionRuleDTO(BaseModel):
+    """Exactly one of `condition_id` or (`distance_id`, `trade_metric`)
+    is set -- never both, never neither."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["phase_transition"]
+    rule_id: str = Field(min_length=1)
+    target_phase: str = Field(min_length=1)
+    condition_id: str | None = None
+    distance_id: str | None = None
+    trade_metric: Literal["bars_since_entry", "mfe_pct", "mfe_distance"] | None = None
+
+    @model_validator(mode="after")
+    def validate_exactly_one_reference(self) -> "ManagedPhaseTransitionRuleDTO":
+        has_condition = self.condition_id is not None
+        has_distance = self.distance_id is not None and self.trade_metric is not None
+        if has_condition == has_distance:
+            raise ValueError(
+                "phase_transition rule must set exactly one of condition_id or "
+                "(distance_id, trade_metric)"
+            )
+        return self
+
+
+class ManagedTakeActionRuleDTO(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["take_action"]
+    rule_id: str = Field(min_length=1)
+    activation_phase: str
+    resulting_profile: str = Field(min_length=1)
+
+
+class ManagedStopActionRuleDTO(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["stop_action"]
+    rule_id: str = Field(min_length=1)
+    activation_phase: str
+    distance_id: str = Field(min_length=1)
+
+
+class ManagedRuntimeExitRuleDTO(BaseModel):
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    kind: Literal["runtime_exit"]
+    rule_id: str = Field(min_length=1)
+    activation_phase: str
+    condition_id: str = Field(min_length=1)
+    confirm_bars: int = Field(ge=1)
+    exit_class: Literal["runtime_protective", "runtime_take", "runtime_close"]
+
+
+class HistoricalManagedProjectionDTO(BaseModel):
+    """Research-owned decode of Strategy Engine's
+    `HistoricalManagedProjection` (`historical-managed-projection-v1`).
+    Every identifier here is opaque -- Research dispatches on
+    `rules[].kind` (and each variant's own closed enum) alone, never on
+    a `component_id` or raw strategy parameter (none exists on this
+    contract to read)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    conditions: dict[str, ManagedConditionSeriesDTO]
+    distances: dict[str, tuple[float | None, ...]]
+    rules: tuple[
+        Annotated[
+            ManagedPhaseTransitionRuleDTO
+            | ManagedTakeActionRuleDTO
+            | ManagedStopActionRuleDTO
+            | ManagedRuntimeExitRuleDTO,
+            Field(discriminator="kind"),
+        ],
+        ...,
+    ]
+
+
 class HistoricalExecutionProjectionDTO(BaseModel):
     """Research-owned decode of Strategy Engine's
     `HistoricalExecutionProjection` (`strategy-research-execution-
@@ -498,6 +588,7 @@ class HistoricalExecutionProjectionDTO(BaseModel):
     entry_opportunities: tuple[ExecutableEntryOpportunityDTO, ...]
     signal_exit_events: SignalExitProjectionDTO
     warnings: tuple[str, ...] = ()
+    managed: HistoricalManagedProjectionDTO | None = None
 
     @model_validator(mode="after")
     def validate_bar_indices_in_range(self) -> "HistoricalExecutionProjectionDTO":
