@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from decimal import Decimal
 from typing import Literal, Mapping
 
@@ -10,7 +11,11 @@ from pydantic import BaseModel, ConfigDict, Field
 from research_service.domain.contracts import (
     Candle,
     HistoricalManagedProjectionDTO,
+    ManagedPhaseTransitionRuleDTO,
     ManagedReplayResult,
+    ManagedRuntimeExitRuleDTO,
+    ManagedStopActionRuleDTO,
+    ManagedTakeActionRuleDTO,
     MarketFrame,
 )
 from research_service.domain.errors import InvalidRequest
@@ -319,6 +324,234 @@ def build_managed_policy_timeline_from_projection(
         entry_time_ms=position.entry_fill.time_ms,
         states=tuple(states),
     )
+
+
+@dataclass(frozen=True, slots=True)
+class ManagedRuleSet:
+    """Pre-filtered, per-kind view of a `HistoricalManagedProjection`'s
+    `rules[]`, built once per candidate. `advance_managed_trade_state`
+    is called once per bar for every open managed trade -- re-filtering
+    `projection.rules` by kind on every one of those calls would put
+    `len(rules)` back into the per-bar cost. This exists purely so that
+    per-bar cost depends only on rule *count*, never on how many times
+    the projection has already been consulted."""
+
+    phase_transitions: tuple[ManagedPhaseTransitionRuleDTO, ...]
+    stop_actions: tuple[ManagedStopActionRuleDTO, ...]
+    take_actions: tuple[ManagedTakeActionRuleDTO, ...]
+    runtime_exits: tuple[ManagedRuntimeExitRuleDTO, ...]
+
+    @classmethod
+    def from_projection(cls, projection: HistoricalManagedProjectionDTO) -> "ManagedRuleSet":
+        return cls(
+            phase_transitions=tuple(
+                r for r in projection.rules if r.kind == "phase_transition"
+            ),
+            stop_actions=tuple(r for r in projection.rules if r.kind == "stop_action"),
+            take_actions=tuple(r for r in projection.rules if r.kind == "take_action"),
+            runtime_exits=tuple(r for r in projection.rules if r.kind == "runtime_exit"),
+        )
+
+
+@dataclass(slots=True)
+class ManagedTradeState:
+    """One open trade's managed-policy state, advanced one bar at a
+    time (`historical-managed-projection-v1` design.md amendment:
+    "Historical projection consumption SHALL be incremental over the
+    actual open-trade lifetime"). Lives exactly as long as the position
+    it belongs to -- created at entry, discarded at exit. Never holds
+    anything proportional to the candidate's total bar count."""
+
+    side: ExecutionSide
+    entry_index: int
+    entry_price: float
+    phase: str = "initial_risk"
+    active_stop_price: float | None = None
+    active_stop_rule_id: str | None = None
+    active_take_profile: str = "initial"
+    active_take_rule_id: str | None = None
+    best_price: float = 0.0
+    worst_price: float = 0.0
+    # rule_id -> consecutive true-bar count of that rule's condition,
+    # since entry. Equivalent to (and replaces) recomputing "all true in
+    # the trailing confirm_bars window" from scratch every bar: a count
+    # that resets to 0 on a false bar and increments on a true bar has
+    # length exactly equal to the current true-run, and the run can never
+    # extend past entry_index because the counter starts at entry. This
+    # reproduces managed.py's entry-anchored window exactly (proven by
+    # the eager `build_managed_policy_timeline_from_projection`, which
+    # this incremental path is parity-tested against), without ever
+    # re-scanning a window.
+    confirmation_counts: dict[str, int] = field(default_factory=dict)
+
+
+def initialize_managed_trade_state(position: PositionState) -> ManagedTradeState:
+    entry_price = float(position.entry_fill.reference_price)
+    return ManagedTradeState(
+        side=position.side,
+        entry_index=position.entry_fill.bar_index,
+        entry_price=entry_price,
+        best_price=entry_price,
+        worst_price=entry_price,
+    )
+
+
+def advance_managed_trade_state(
+    state: ManagedTradeState,
+    projection: HistoricalManagedProjectionDTO,
+    rule_set: ManagedRuleSet,
+    *,
+    trade_id: str,
+    bar_index: int,
+    source_time_ms: int,
+    high: float,
+    low: float,
+    next_time_ms: int | None,
+) -> tuple[ManagedTradeState, ManagedEffectiveState | None]:
+    """Advance one open trade's managed state by exactly one bar.
+
+    Mirrors `build_managed_policy_timeline_from_projection`'s per-index
+    loop body formula-for-formula (that function stays as the parity
+    oracle for this one, per design.md -- it is no longer the
+    production historical hot path). `next_time_ms` is the bar this
+    step's decisions become effective on (`None` only when `bar_index`
+    is the last bar in the market frame, matching the eager builder's
+    own "no state for the final bar" rule); when it's `None` this
+    returns `(new_state, None)` -- the caller has nothing to act on
+    next bar because there is no next bar."""
+
+    side = state.side
+    entry_price = state.entry_price
+    if side == "long":
+        best_price = max(state.best_price, high)
+        worst_price = min(state.worst_price, low)
+        mfe_price, mae_price = best_price, worst_price
+        mfe_pct = (best_price - entry_price) / entry_price
+        mae_pct = (entry_price - worst_price) / entry_price
+    else:
+        best_price = min(state.best_price, low)
+        worst_price = max(state.worst_price, high)
+        mfe_price, mae_price = best_price, worst_price
+        mfe_pct = (entry_price - best_price) / entry_price
+        mae_pct = (worst_price - entry_price) / entry_price
+    bars_in_trade = bar_index - state.entry_index + 1
+    mfe_distance = abs(mfe_price - entry_price)
+    trade_metric_values = {
+        "bars_since_entry": float(bars_in_trade),
+        "mfe_pct": mfe_pct,
+        "mfe_distance": mfe_distance,
+    }
+
+    phase = state.phase
+    for rule in rule_set.phase_transitions:
+        if _PHASE_RANK[rule.target_phase] <= _PHASE_RANK[phase]:
+            continue
+        if rule.condition_id is not None:
+            series = projection.conditions[rule.condition_id]
+            met = (series.long if side == "long" else series.short)[bar_index]
+        else:
+            assert rule.distance_id is not None and rule.trade_metric is not None
+            threshold = projection.distances[rule.distance_id][bar_index]
+            met = threshold is not None and trade_metric_values[rule.trade_metric] >= threshold
+        if met:
+            phase = rule.target_phase
+
+    candidates: list[tuple[float, str]] = []
+    for rule in rule_set.stop_actions:
+        if not _at_least(phase, rule.activation_phase):
+            continue
+        distance = projection.distances[rule.distance_id][bar_index]
+        if distance is None:
+            continue
+        price = entry_price + distance if side == "long" else entry_price - distance
+        candidates.append((price, rule.rule_id))
+    active_stop_price = state.active_stop_price
+    active_stop_rule_id = state.active_stop_rule_id
+    if candidates:
+        chosen_price, chosen_rule_id = (
+            max(candidates, key=lambda item: item[0])
+            if side == "long"
+            else min(candidates, key=lambda item: item[0])
+        )
+        active_stop_price = (
+            chosen_price
+            if active_stop_price is None
+            else (
+                max(active_stop_price, chosen_price)
+                if side == "long"
+                else min(active_stop_price, chosen_price)
+            )
+        )
+        active_stop_rule_id = chosen_rule_id
+
+    active_take_profile = state.active_take_profile
+    active_take_rule_id = state.active_take_rule_id
+    for rule in rule_set.take_actions:
+        if not _at_least(phase, rule.activation_phase):
+            continue
+        if rule.resulting_profile != active_take_profile:
+            active_take_profile = rule.resulting_profile
+            active_take_rule_id = rule.rule_id
+
+    confirmation_counts = dict(state.confirmation_counts)
+    armed: list[str] = []
+    runtime_kinds: dict[str, str] = {}
+    for rule in rule_set.runtime_exits:
+        # The confirm-bars counter tracks the condition series alone,
+        # every bar, regardless of phase -- exactly like the eager
+        # builder's window, whose `all(values[start:index+1])` never
+        # itself checked phase at each window position, only at the
+        # current bar (see docstring above).
+        series = projection.conditions[rule.condition_id]
+        value = (series.long if side == "long" else series.short)[bar_index]
+        count = confirmation_counts.get(rule.rule_id, 0)
+        count = count + 1 if value else 0
+        confirmation_counts[rule.rule_id] = count
+        if _at_least(phase, rule.activation_phase) and count >= rule.confirm_bars:
+            armed.append(rule.rule_id)
+            runtime_kinds[rule.rule_id] = _EXIT_CLASS_TO_KIND[rule.exit_class]
+
+    new_state = ManagedTradeState(
+        side=side,
+        entry_index=state.entry_index,
+        entry_price=entry_price,
+        phase=phase,
+        active_stop_price=active_stop_price,
+        active_stop_rule_id=active_stop_rule_id,
+        active_take_profile=active_take_profile,
+        active_take_rule_id=active_take_rule_id,
+        best_price=best_price,
+        worst_price=worst_price,
+        confirmation_counts=confirmation_counts,
+    )
+
+    if next_time_ms is None:
+        return new_state, None
+
+    active_runtime_ids = tuple(armed)
+    effective = ManagedEffectiveState(
+        trade_id=trade_id,
+        side=side,
+        effective_time_ms=next_time_ms,
+        source_bar_index=bar_index,
+        source_time_ms=source_time_ms,
+        phase=phase,
+        bars_in_trade=bars_in_trade,
+        mfe_pct=Decimal(str(mfe_pct)),
+        mae_pct=Decimal(str(mae_pct)),
+        active_stop_price=(
+            Decimal(str(active_stop_price)) if active_stop_price is not None else None
+        ),
+        active_stop_rule_id=active_stop_rule_id if active_stop_price is not None else None,
+        active_stop_component_id=None,
+        active_take_profile=active_take_profile,
+        active_take_rule_id=active_take_rule_id,
+        active_take_component_id=None,
+        runtime_exit_rule_ids=active_runtime_ids,
+        runtime_exit_components={rule_id: None for rule_id in active_runtime_ids},
+        runtime_exit_kinds=runtime_kinds,
+    )
+    return new_state, effective
 
 
 def _at_least(current: str, threshold: str) -> bool:

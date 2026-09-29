@@ -45,8 +45,8 @@ def _position(*, entry_index: int, side: str = "long") -> PositionState:
             anchor_price=Decimal("100"),
             stop_loss_ratio=Decimal("0.02"),
             take_profit_ratio=Decimal("0.05"),
-            stop_loss_price=Decimal("98"),
-            take_profit_price=Decimal("105"),
+            stop_loss_price=Decimal("98") if side == "long" else Decimal("102"),
+            take_profit_price=Decimal("105") if side == "long" else Decimal("95"),
         ),
     )
 
