@@ -25,7 +25,7 @@ from research_service.domain.contracts import (
     ManagedReplayResult,
     MarketFrame,
 )
-from research_service.domain.errors import InvalidRequest
+from research_service.domain.errors import InvalidRequest, UpstreamServiceError
 from research_service.domain.execution import (
     ExecutionEvent,
     ExecutionLoopResult,
@@ -65,6 +65,7 @@ def run_projection_execution_loop(
     *,
     entry_quantity_provider: EntryQuantityProvider,
     managed_replay_provider: ManagedReplayProvider | None = None,
+    allow_legacy_managed_replay_fallback: bool = False,
     closed_position_consumer: ClosedPositionConsumer | None = None,
 ) -> ExecutionLoopResult:
     """Execute one strategy instance against a validated, indexed
@@ -86,6 +87,19 @@ def run_projection_execution_loop(
     before calling this function -- this loop trusts an already-aligned
     index, matching how `run_unified_execution_loop` trusts an already-
     validated `StrategyEvaluationResult`.
+
+    Managed-policy resolution (`historical-managed-projection-v1`)
+    fails closed by default: if `managed_replay_provider` is given (the
+    caller intends managed execution for this run) but a position's
+    acquired projection carries no `HistoricalManagedProjection`, this
+    raises `UpstreamServiceError` rather than silently falling back to
+    a per-position `/managed-replay` call -- that per-trade call is the
+    exact O(trades x full-history evaluation) pathology this contract
+    exists to eliminate, so its absence must never go unnoticed in a
+    production historical run. Pass `allow_legacy_managed_replay_fallback=True`
+    only for an explicit parity/oracle comparison run (e.g. I4's own
+    execution-loop parity tests) that deliberately exercises the old
+    per-trade path against a projection fixture with no `managed` data.
     """
 
     if projection_index.projection.bar_count != len(market_frame.candles):
@@ -161,6 +175,7 @@ def run_projection_execution_loop(
                     projection_index=projection_index,
                     market_frame=market_frame,
                     managed_replay_provider=managed_replay_provider,
+                    allow_legacy_managed_replay_fallback=allow_legacy_managed_replay_fallback,
                 )
                 events.append(_entry_event(opened))
 
@@ -199,20 +214,45 @@ def _resolve_managed_timeline(
     projection_index: HistoricalExecutionProjectionIndex,
     market_frame: MarketFrame,
     managed_replay_provider: ManagedReplayProvider | None,
+    allow_legacy_managed_replay_fallback: bool,
 ) -> ManagedPolicyTimeline | None:
     """`historical-managed-projection-v1`: when the candidate-wide
     projection already carries a `HistoricalManagedProjection`
     (`exit_management.mode == "managed"`), build the timeline from it
-    locally -- no Strategy Engine call. `managed_replay_provider`
-    (a per-position `/managed-replay` call) is used only as a fallback
-    when the projection carries none, so this loop keeps working for
-    any caller not yet passing a managed-projection-bearing DTO."""
+    locally -- no Strategy Engine call.
+
+    `managed_replay_provider` being non-`None` is this loop's only
+    signal that the caller wants managed execution for this position
+    at all (a non-managed candidate never supplies one, and this
+    function returns `None` immediately for it, silently, same as
+    always). Once a caller HAS supplied it, a missing `managed`
+    projection is a contract violation, not a reason to quietly fall
+    back to the per-trade `/managed-replay` call -- that call is
+    exactly the eliminated O(trades x full-history evaluation) path.
+    It fails closed unless `allow_legacy_managed_replay_fallback` was
+    explicitly set (an explicit parity/oracle opt-in, never the
+    production default)."""
 
     managed = projection_index.projection.managed
     if managed is not None:
         return build_managed_policy_timeline_from_projection(managed, position, market_frame)
     if managed_replay_provider is None:
         return None
+    if not allow_legacy_managed_replay_fallback:
+        raise UpstreamServiceError(
+            service="strategy_engine",
+            status_code=502,
+            message=(
+                "Managed historical execution was requested but the acquired "
+                "projection carries no HistoricalManagedProjection; refusing to "
+                "fall back to a per-trade /managed-replay call"
+            ),
+            details={
+                "position_id": position.position_id,
+                "instance_id": position.instance_id,
+                "strategy_id": projection_index.projection.strategy_id,
+            },
+        )
     replay = managed_replay_provider(position)
     if replay is None:
         return None

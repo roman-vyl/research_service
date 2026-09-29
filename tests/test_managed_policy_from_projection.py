@@ -205,3 +205,54 @@ def test_runtime_confirm_bars_is_entry_anchored() -> None:
     # on the False at 3) -- but for a different reason (condition, not
     # anchoring), proving these two trades evaluate independently.
     assert early_entry_timeline.states[4].runtime_exit_rule_ids == ()
+
+
+def test_confirm_bars_positive_boundary_arms_exactly_on_the_nth_consecutive_bar() -> None:
+    """Precise positive-boundary case for confirm_bars=N=3, isolated to a
+    single runtime_exit rule (no phase/stop/take rules, so nothing else
+    can influence arming): the underlying condition is true starting
+    one bar *before* entry and stays true through the end.
+
+    entry_index=1, condition true at bar_index 0..7:
+    - bar_index 2 (bars_in_trade=2=N-1): window would be [0,2] --
+      3 consecutive true values exist, but bar 0 is pre-entry, so the
+      entry-anchored window [1,2] (only 2 bars) is what's actually
+      available -> NOT armed. This is also the "pre-entry true values
+      don't count" case: if they did, this bar would incorrectly arm.
+    - bar_index 3 (bars_in_trade=3=N): window [1,3] is fully inside
+      the trade's life and all three bars are true -> armed, exactly
+      on the Nth confirmed bar, not before.
+    """
+
+    n = 8
+    confirm_bars = 3
+    condition = tuple(True for _ in range(n))
+    projection = HistoricalManagedProjectionDTO(
+        conditions={"rt:condition": ManagedConditionSeriesDTO(long=condition, short=condition)},
+        distances={},
+        rules=[
+            {
+                "kind": "runtime_exit",
+                "rule_id": "rt",
+                "activation_phase": "initial_risk",
+                "condition_id": "rt:condition",
+                "confirm_bars": confirm_bars,
+                "exit_class": "runtime_close",
+            },
+        ],
+    )
+    timeline = build_managed_policy_timeline_from_projection(
+        projection, _position(entry_index=1), _market_frame(n)
+    )
+
+    # states[k] corresponds to bar_index = entry_index + k = 1 + k.
+    assert timeline.states[0].runtime_exit_rule_ids == ()  # bar_index 1, bars_in_trade 1
+    assert timeline.states[1].runtime_exit_rule_ids == ()  # bar_index 2, bars_in_trade 2 = N-1
+    assert timeline.states[2].runtime_exit_rule_ids == ("rt",)  # bar_index 3, bars_in_trade 3 = N
+    # Stays armed on every later bar too (condition never goes false again).
+    assert all(s.runtime_exit_rule_ids == ("rt",) for s in timeline.states[2:])
+
+    # Next-bar effective timing is unchanged by any of this: the bar_index
+    # 3 arming is effective starting at bar_index 4's open time.
+    assert timeline.states[2].source_bar_index == 3
+    assert timeline.states[2].effective_time_ms == 4 * 300_000

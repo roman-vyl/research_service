@@ -147,7 +147,9 @@ def test_managed_replay_events_survive_execution_loop() -> None:
     sink."""
 
     engine = ManagedEventsStrategyEngine(strategy_projection())
-    use_case = RunSingleInstanceBacktest(engine, FakeMarketData(market_frame()))
+    use_case = RunSingleInstanceBacktest(
+        engine, FakeMarketData(market_frame()), allow_legacy_managed_replay_fallback=True
+    )
 
     outcome = use_case.execute(_request(managed_policy_enabled=True))
 
@@ -207,6 +209,7 @@ def _container(tmp_path: Path, engine: Any) -> Container:
         strategy_engine=engine,
         market_data=FakeMarketData(market_frame()),
         artifacts=FilesystemArtifactStore(tmp_path),
+        allow_legacy_managed_replay_fallback=True,
     )
 
 

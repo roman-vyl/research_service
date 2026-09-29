@@ -235,7 +235,12 @@ def test_disable_initial_tp_suppresses_the_stored_take_profit_candidate() -> Non
         )
 
     result = run_projection_execution_loop(
-        "inst", index, market_frame, _POLICY, managed_replay_provider=provider
+        "inst",
+        index,
+        market_frame,
+        _POLICY,
+        managed_replay_provider=provider,
+        allow_legacy_managed_replay_fallback=True,
     )
     assert result.final_open_position is not None
     assert result.final_open_position.initial_protection.take_profit_price == Decimal("110")

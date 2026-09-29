@@ -375,7 +375,9 @@ def test_single_instance_backtest_composes_all_layers() -> None:
 
 def test_managed_replay_request_uses_reference_entry_price() -> None:
     strategy = FakeStrategyEngine(strategy_projection())
-    use_case = RunSingleInstanceBacktest(strategy, FakeMarketData(market_frame()))
+    use_case = RunSingleInstanceBacktest(
+        strategy, FakeMarketData(market_frame()), allow_legacy_managed_replay_fallback=True
+    )
 
     use_case.execute(
         SingleInstanceBacktestRequest(
@@ -454,7 +456,9 @@ def test_full_available_resolved_market_reaches_every_downstream_stage() -> None
     resolved_market = market_frame().market
     strategy = FakeStrategyEngine(strategy_projection(market=resolved_market))
     market = FakeMarketData(market_frame())
-    use_case = RunSingleInstanceBacktest(strategy, market)
+    use_case = RunSingleInstanceBacktest(
+        strategy, market, allow_legacy_managed_replay_fallback=True
+    )
 
     use_case.execute(
         SingleInstanceBacktestRequest(

@@ -28,11 +28,20 @@ class RunSingleInstanceBacktest:
         self,
         strategy_engine: StrategyEnginePort,
         market_data: MarketDataPort,
+        *,
+        allow_legacy_managed_replay_fallback: bool = False,
     ) -> None:
+        """`allow_legacy_managed_replay_fallback`: see
+        `MaterializeBacktestProjectionOutcome`'s own docstring --
+        production/default `False`, explicit test-only opt-in."""
+
         self._strategy_engine = strategy_engine
         self._market_data = market_data
         self._window_planner = ResolveBacktestWindow(market_data)
-        self._materialize = MaterializeBacktestProjectionOutcome(strategy_engine)
+        self._materialize = MaterializeBacktestProjectionOutcome(
+            strategy_engine,
+            allow_legacy_managed_replay_fallback=allow_legacy_managed_replay_fallback,
+        )
 
     def execute(
         self,

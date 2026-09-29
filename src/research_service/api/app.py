@@ -71,6 +71,7 @@ def _build_services(settings: Settings, container: Container) -> AppServices:
     run_single_instance_backtest = RunSingleInstanceBacktest(
         container.strategy_engine,
         container.market_data,
+        allow_legacy_managed_replay_fallback=container.allow_legacy_managed_replay_fallback,
     )
     # I8 (`compact-strategy-evaluation-boundary-v1`): batch and single-
     # instance persistence share the same canonical writer -- no separate
@@ -94,7 +95,10 @@ def _build_services(settings: Settings, container: Container) -> AppServices:
         run_batch_experiment=RunBatchExperiment(
             container.strategy_engine,
             container.market_data,
-            MaterializeBacktestProjectionOutcome(container.strategy_engine),
+            MaterializeBacktestProjectionOutcome(
+                container.strategy_engine,
+                allow_legacy_managed_replay_fallback=container.allow_legacy_managed_replay_fallback,
+            ),
             persist_single_instance_run,
         ),
         persist_batch_experiment=PersistBatchExperiment(container.artifacts),
