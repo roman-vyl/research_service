@@ -219,7 +219,9 @@ def _resolve_managed_timeline(
     """`historical-managed-projection-v1`: when the candidate-wide
     projection already carries a `HistoricalManagedProjection`
     (`exit_management.mode == "managed"`), build the timeline from it
-    locally -- no Strategy Engine call.
+    locally -- no Strategy Engine call. This is unconditional
+    production behaviour (`allow_legacy_managed_replay_fallback=False`,
+    the default): `managed` present -> local path, always.
 
     `managed_replay_provider` being non-`None` is this loop's only
     signal that the caller wants managed execution for this position
@@ -230,15 +232,21 @@ def _resolve_managed_timeline(
     back to the per-trade `/managed-replay` call -- that call is
     exactly the eliminated O(trades x full-history evaluation) path.
     It fails closed unless `allow_legacy_managed_replay_fallback` was
-    explicitly set (an explicit parity/oracle opt-in, never the
-    production default)."""
+    explicitly set.
+
+    `allow_legacy_managed_replay_fallback=True` is a genuine oracle
+    override, not just a missing-`managed` rescue: it forces the
+    per-trade `/managed-replay` path even when `managed` IS present,
+    so a caller can run the same real managed candidate through both
+    paths and diff them (5.2's OLD-vs-NEW parity check) -- never the
+    production default."""
 
     managed = projection_index.projection.managed
-    if managed is not None:
+    if managed is not None and not allow_legacy_managed_replay_fallback:
         return build_managed_policy_timeline_from_projection(managed, position, market_frame)
     if managed_replay_provider is None:
         return None
-    if not allow_legacy_managed_replay_fallback:
+    if managed is None and not allow_legacy_managed_replay_fallback:
         raise UpstreamServiceError(
             service="strategy_engine",
             status_code=502,

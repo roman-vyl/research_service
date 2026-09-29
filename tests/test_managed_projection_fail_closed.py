@@ -100,6 +100,36 @@ def test_c_explicit_opt_in_restores_the_legacy_per_trade_path() -> None:
     assert outcome.execution.positions[0].exit_fill is not None
 
 
+def test_c2_explicit_opt_in_overrides_a_present_projection_too() -> None:
+    """The oracle opt-in is a genuine override, not just a missing-
+    `managed` rescue: even when the projection DOES carry `managed`
+    (the real 5.2 scenario -- a genuine managed candidate run through
+    both paths to diff them), `allow_legacy_managed_replay_fallback=True`
+    must still force the per-trade path, never silently prefer the
+    local one."""
+
+    projection = strategy_projection().model_copy(
+        update={
+            "managed": HistoricalManagedProjectionDTO(conditions={}, distances={}, rules=())
+        }
+    )
+    strategy = FakeStrategyEngine(projection)
+    use_case = RunSingleInstanceBacktest(
+        strategy, FakeMarketData(market_frame()), allow_legacy_managed_replay_fallback=True
+    )
+
+    outcome = use_case.execute(
+        SingleInstanceBacktestRequest(
+            strategy=strategy_identity(),
+            range=ExplicitRange(from_ms=0, to_ms=900_000),
+            managed_policy_enabled=True,
+        )
+    )
+
+    assert len(strategy.managed_requests) == 1
+    assert outcome.execution.positions[0].exit_fill is not None
+
+
 def test_non_managed_candidate_is_unaffected_either_way() -> None:
     """Fail-closed only applies once a caller signals managed intent
     (`managed_policy_enabled=True`). A non-managed run must stay silent
