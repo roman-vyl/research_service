@@ -16,10 +16,12 @@ from research_service.domain.contracts import (
     ManagedRuntimeExitRuleDTO,
     ManagedStopActionRuleDTO,
     ManagedTakeActionRuleDTO,
+    ManagedTransitionPathDTO,
     MarketFrame,
 )
 from research_service.domain.errors import InvalidRequest
 from research_service.domain.execution import ExecutionSide, ExitCandidate, PositionState
+from research_service.execution.managed_policy_events import ManagedPolicyEvent
 
 _PHASES = ("initial_risk", "proven", "protected", "runner", "exhaustion")
 _PHASE_RANK = {name: index for index, name in enumerate(_PHASES)}
@@ -213,13 +215,13 @@ def build_managed_policy_timeline_from_projection(
         if side == "long":
             best_price = max(best_price, high)
             worst_price = min(worst_price, low)
-            mfe_price, mae_price = best_price, worst_price
+            mfe_price = best_price
             mfe_pct = (best_price - entry_price) / entry_price
             mae_pct = (entry_price - worst_price) / entry_price
         else:
             best_price = min(best_price, low)
             worst_price = max(worst_price, high)
-            mfe_price, mae_price = best_price, worst_price
+            mfe_price = best_price
             mfe_pct = (entry_price - best_price) / entry_price
             mae_pct = (worst_price - entry_price) / entry_price
         bars_in_trade = index - entry_index + 1
@@ -233,62 +235,44 @@ def build_managed_policy_timeline_from_projection(
         for rule in phase_rules:
             if _PHASE_RANK[rule.target_phase] <= _PHASE_RANK[phase]:
                 continue
-            if rule.condition_id is not None:
-                series = projection.conditions[rule.condition_id]
-                met = (series.long if side == "long" else series.short)[index]
-            else:
-                assert rule.distance_id is not None and rule.trade_metric is not None
-                threshold = projection.distances[rule.distance_id][index]
-                met = threshold is not None and trade_metric_values[rule.trade_metric] >= threshold
+            met, _path_id = _phase_rule_met(rule, projection, side, trade_metric_values, index)
             if met:
                 phase = rule.target_phase
 
         candidates: list[tuple[float, str]] = []
-        for rule in stop_rules:
-            if not _at_least(phase, rule.activation_phase):
+        for stop_rule in stop_rules:
+            if not _at_least(phase, stop_rule.activation_phase):
                 continue
-            distance = projection.distances[rule.distance_id][index]
+            distance = projection.distances[stop_rule.distance_id][index]
             if distance is None:
                 continue
             price = entry_price + distance if side == "long" else entry_price - distance
-            candidates.append((price, rule.rule_id))
+            candidates.append((price, stop_rule.rule_id))
         if candidates:
-            chosen_price, chosen_rule_id = (
-                max(candidates, key=lambda item: item[0])
-                if side == "long"
-                else min(candidates, key=lambda item: item[0])
-            )
-            active_stop_price = (
-                chosen_price
-                if active_stop_price is None
-                else (
-                    max(active_stop_price, chosen_price)
-                    if side == "long"
-                    else min(active_stop_price, chosen_price)
-                )
-            )
-            active_stop_rule_id = chosen_rule_id
+            updated = _tightened_stop(candidates, side, active_stop_price)
+            if updated is not None:
+                active_stop_price, active_stop_rule_id = updated
 
-        for rule in take_rules:
-            if not _at_least(phase, rule.activation_phase):
+        for take_rule in take_rules:
+            if not _at_least(phase, take_rule.activation_phase):
                 continue
-            if rule.resulting_profile != active_take_profile:
-                active_take_profile = rule.resulting_profile
-                active_take_rule_id = rule.rule_id
+            if take_rule.resulting_profile != active_take_profile:
+                active_take_profile = take_rule.resulting_profile
+                active_take_rule_id = take_rule.rule_id
 
         armed: list[str] = []
         runtime_kinds: dict[str, str] = {}
-        for rule in runtime_rules:
-            if not _at_least(phase, rule.activation_phase):
+        for runtime_rule in runtime_rules:
+            if not _at_least(phase, runtime_rule.activation_phase):
                 continue
-            series = projection.conditions[rule.condition_id]
+            series = projection.conditions[runtime_rule.condition_id]
             values = series.long if side == "long" else series.short
-            start = index - rule.confirm_bars + 1
+            start = index - runtime_rule.confirm_bars + 1
             if start < entry_index:
                 continue
             if all(values[pos] for pos in range(start, index + 1)):
-                armed.append(rule.rule_id)
-                runtime_kinds[rule.rule_id] = _EXIT_CLASS_TO_KIND[rule.exit_class]
+                armed.append(runtime_rule.rule_id)
+                runtime_kinds[runtime_rule.rule_id] = _EXIT_CLASS_TO_KIND[runtime_rule.exit_class]
 
         if index == target_index:
             continue
@@ -407,6 +391,8 @@ def advance_managed_trade_state(
     high: float,
     low: float,
     next_time_ms: int | None,
+    close: float | None = None,
+    event_sink: list[ManagedPolicyEvent] | None = None,
 ) -> tuple[ManagedTradeState, ManagedEffectiveState | None]:
     """Advance one open trade's managed state by exactly one bar.
 
@@ -418,20 +404,36 @@ def advance_managed_trade_state(
     is the last bar in the market frame, matching the eager builder's
     own "no state for the final bar" rule); when it's `None` this
     returns `(new_state, None)` -- the caller has nothing to act on
-    next bar because there is no next bar."""
+    next bar because there is no next bar.
+
+    `event_sink` (`historical-managed-projection-cutover-v1` design D5):
+    when given, this bar's managed-policy events are appended to it.
+    Events are observations of the state transitions this consumer has
+    just produced, not a second implementation of Strategy Engine
+    policy: one `phase_changed` per fired rule (`metadata.path_id` for a
+    paths rule), `active_stop_updated` when the active stop actually
+    moved, `active_take_updated` on a profile change, and
+    `runtime_exit_triggered` on every bar a runtime rule is armed.
+    Event-only prices (the MFE price on `phase_changed`, `close` on
+    `runtime_exit_triggered`) are diagnostic derivations from this
+    state and the market bar; nothing reads them back into a decision.
+    `None` (the default) skips event construction entirely."""
+
+    if event_sink is not None and close is None:
+        raise ValueError("close is required when event_sink is given")
 
     side = state.side
     entry_price = state.entry_price
     if side == "long":
         best_price = max(state.best_price, high)
         worst_price = min(state.worst_price, low)
-        mfe_price, mae_price = best_price, worst_price
+        mfe_price = best_price
         mfe_pct = (best_price - entry_price) / entry_price
         mae_pct = (entry_price - worst_price) / entry_price
     else:
         best_price = min(state.best_price, low)
         worst_price = max(state.worst_price, high)
-        mfe_price, mae_price = best_price, worst_price
+        mfe_price = best_price
         mfe_pct = (entry_price - best_price) / entry_price
         mae_pct = (worst_price - entry_price) / entry_price
     bars_in_trade = bar_index - state.entry_index + 1
@@ -446,70 +448,111 @@ def advance_managed_trade_state(
     for rule in rule_set.phase_transitions:
         if _PHASE_RANK[rule.target_phase] <= _PHASE_RANK[phase]:
             continue
-        if rule.condition_id is not None:
-            series = projection.conditions[rule.condition_id]
-            met = (series.long if side == "long" else series.short)[bar_index]
-        else:
-            assert rule.distance_id is not None and rule.trade_metric is not None
-            threshold = projection.distances[rule.distance_id][bar_index]
-            met = threshold is not None and trade_metric_values[rule.trade_metric] >= threshold
+        met, path_id = _phase_rule_met(rule, projection, side, trade_metric_values, bar_index)
         if met:
+            if event_sink is not None:
+                event_sink.append(
+                    _event(
+                        state,
+                        trade_id,
+                        source_time_ms,
+                        bar_index,
+                        "phase_changed",
+                        rule.rule_id,
+                        from_phase=phase,
+                        to_phase=rule.target_phase,
+                        price=mfe_price,
+                        metadata={"path_id": path_id} if path_id is not None else {},
+                    )
+                )
             phase = rule.target_phase
 
     candidates: list[tuple[float, str]] = []
-    for rule in rule_set.stop_actions:
-        if not _at_least(phase, rule.activation_phase):
+    for stop_rule in rule_set.stop_actions:
+        if not _at_least(phase, stop_rule.activation_phase):
             continue
-        distance = projection.distances[rule.distance_id][bar_index]
+        distance = projection.distances[stop_rule.distance_id][bar_index]
         if distance is None:
             continue
         price = entry_price + distance if side == "long" else entry_price - distance
-        candidates.append((price, rule.rule_id))
+        candidates.append((price, stop_rule.rule_id))
     active_stop_price = state.active_stop_price
     active_stop_rule_id = state.active_stop_rule_id
     if candidates:
-        chosen_price, chosen_rule_id = (
-            max(candidates, key=lambda item: item[0])
-            if side == "long"
-            else min(candidates, key=lambda item: item[0])
-        )
-        active_stop_price = (
-            chosen_price
-            if active_stop_price is None
-            else (
-                max(active_stop_price, chosen_price)
-                if side == "long"
-                else min(active_stop_price, chosen_price)
-            )
-        )
-        active_stop_rule_id = chosen_rule_id
+        updated = _tightened_stop(candidates, side, active_stop_price)
+        if updated is not None:
+            active_stop_price, active_stop_rule_id = updated
+            if event_sink is not None:
+                event_sink.append(
+                    _event(
+                        state,
+                        trade_id,
+                        source_time_ms,
+                        bar_index,
+                        "active_stop_updated",
+                        active_stop_rule_id,
+                        price=active_stop_price,
+                        metadata={"effective_from_bar": bar_index + 1},
+                    )
+                )
 
     active_take_profile = state.active_take_profile
     active_take_rule_id = state.active_take_rule_id
-    for rule in rule_set.take_actions:
-        if not _at_least(phase, rule.activation_phase):
+    for take_rule in rule_set.take_actions:
+        if not _at_least(phase, take_rule.activation_phase):
             continue
-        if rule.resulting_profile != active_take_profile:
-            active_take_profile = rule.resulting_profile
-            active_take_rule_id = rule.rule_id
+        if take_rule.resulting_profile != active_take_profile:
+            active_take_profile = take_rule.resulting_profile
+            active_take_rule_id = take_rule.rule_id
+            if event_sink is not None:
+                event_sink.append(
+                    _event(
+                        state,
+                        trade_id,
+                        source_time_ms,
+                        bar_index,
+                        "active_take_updated",
+                        take_rule.rule_id,
+                        metadata={
+                            "take_profile": active_take_profile,
+                            "effective_from_bar": bar_index + 1,
+                        },
+                    )
+                )
 
     confirmation_counts = dict(state.confirmation_counts)
     armed: list[str] = []
     runtime_kinds: dict[str, str] = {}
-    for rule in rule_set.runtime_exits:
+    for runtime_rule in rule_set.runtime_exits:
         # The confirm-bars counter tracks the condition series alone,
         # every bar, regardless of phase -- exactly like the eager
         # builder's window, whose `all(values[start:index+1])` never
         # itself checked phase at each window position, only at the
         # current bar (see docstring above).
-        series = projection.conditions[rule.condition_id]
+        series = projection.conditions[runtime_rule.condition_id]
         value = (series.long if side == "long" else series.short)[bar_index]
-        count = confirmation_counts.get(rule.rule_id, 0)
+        count = confirmation_counts.get(runtime_rule.rule_id, 0)
         count = count + 1 if value else 0
-        confirmation_counts[rule.rule_id] = count
-        if _at_least(phase, rule.activation_phase) and count >= rule.confirm_bars:
-            armed.append(rule.rule_id)
-            runtime_kinds[rule.rule_id] = _EXIT_CLASS_TO_KIND[rule.exit_class]
+        confirmation_counts[runtime_rule.rule_id] = count
+        if _at_least(phase, runtime_rule.activation_phase) and count >= runtime_rule.confirm_bars:
+            armed.append(runtime_rule.rule_id)
+            runtime_kinds[runtime_rule.rule_id] = _EXIT_CLASS_TO_KIND[runtime_rule.exit_class]
+            if event_sink is not None:
+                event_sink.append(
+                    _event(
+                        state,
+                        trade_id,
+                        source_time_ms,
+                        bar_index,
+                        "runtime_exit_triggered",
+                        runtime_rule.rule_id,
+                        price=close,
+                        metadata={
+                            "exit_kind": runtime_kinds[runtime_rule.rule_id],
+                            "effective_from_bar": bar_index + 1,
+                        },
+                    )
+                )
 
     new_state = ManagedTradeState(
         side=side,
@@ -552,6 +595,145 @@ def advance_managed_trade_state(
         runtime_exit_kinds=runtime_kinds,
     )
     return new_state, effective
+
+
+def _phase_rule_met(
+    rule: ManagedPhaseTransitionRuleDTO,
+    projection: HistoricalManagedProjectionDTO,
+    side: ExecutionSide,
+    trade_metric_values: Mapping[str, float],
+    index: int,
+) -> tuple[bool, str | None]:
+    """Whether one phase rule's condition holds on bar `index`, and the
+    attributed `path_id` for a paths rule (`historical-managed-
+    projection-cutover-v1` design D2). Checks the atomic forms first, so
+    atomic rules pay nothing for the paths form. Generic by construction:
+    only opaque ids, series and the consumer's own trade metrics."""
+
+    if rule.condition_id is not None:
+        return _condition_value(projection, rule.condition_id, side, index), None
+    if rule.distance_id is not None:
+        assert rule.trade_metric is not None
+        return (
+            _threshold_met(
+                projection, rule.distance_id, rule.trade_metric, trade_metric_values, index
+            ),
+            None,
+        )
+    assert rule.paths is not None
+    for path in rule.paths:
+        if _path_met(projection, path, side, trade_metric_values, index):
+            return True, path.path_id
+    return False, None
+
+
+def _path_met(
+    projection: HistoricalManagedProjectionDTO,
+    path: ManagedTransitionPathDTO,
+    side: ExecutionSide,
+    trade_metric_values: Mapping[str, float],
+    index: int,
+) -> bool:
+    if path.condition_id is not None and not _condition_value(
+        projection, path.condition_id, side, index
+    ):
+        return False
+    for item in path.thresholds:
+        if not _threshold_met(
+            projection, item.distance_id, item.trade_metric, trade_metric_values, index
+        ):
+            return False
+    at_least = path.at_least
+    if at_least is None:
+        return True
+    count = 0
+    for term in at_least.terms:
+        if term.condition_id is not None:
+            count += _condition_value(projection, term.condition_id, side, index)
+        else:
+            assert term.distance_id is not None and term.trade_metric is not None
+            count += _threshold_met(
+                projection, term.distance_id, term.trade_metric, trade_metric_values, index
+            )
+    return count >= at_least.k
+
+
+def _condition_value(
+    projection: HistoricalManagedProjectionDTO,
+    condition_id: str,
+    side: ExecutionSide,
+    index: int,
+) -> bool:
+    series = projection.conditions[condition_id]
+    return (series.long if side == "long" else series.short)[index]
+
+
+def _threshold_met(
+    projection: HistoricalManagedProjectionDTO,
+    distance_id: str,
+    trade_metric: str,
+    trade_metric_values: Mapping[str, float],
+    index: int,
+) -> bool:
+    threshold = projection.distances[distance_id][index]
+    return threshold is not None and trade_metric_values[trade_metric] >= threshold
+
+
+def _tightened_stop(
+    candidates: list[tuple[float, str]],
+    side: ExecutionSide,
+    active_stop_price: float | None,
+) -> tuple[float, str] | None:
+    """The new `(active_stop_price, active_stop_rule_id)`, or `None` when
+    the stop does not move. Mirrors Strategy Engine's managed replay
+    (`historical-managed-projection-cutover-v1` design D3): the stop and
+    its rule id change only when the tightened price moves by more than
+    `1e-8`, so a non-tightening candidate never re-labels the active
+    stop."""
+
+    chosen_price, chosen_rule_id = (
+        max(candidates, key=lambda item: item[0])
+        if side == "long"
+        else min(candidates, key=lambda item: item[0])
+    )
+    if active_stop_price is None:
+        return chosen_price, chosen_rule_id
+    tightened = (
+        max(active_stop_price, chosen_price)
+        if side == "long"
+        else min(active_stop_price, chosen_price)
+    )
+    if abs(tightened - active_stop_price) > 1e-8:
+        return tightened, chosen_rule_id
+    return None
+
+
+def _event(
+    state: ManagedTradeState,
+    trade_id: str,
+    time_ms: int,
+    bar_index: int,
+    event_type: str,
+    rule_id: str | None,
+    *,
+    from_phase: str | None = None,
+    to_phase: str | None = None,
+    price: float | None = None,
+    metadata: dict[str, object] | None = None,
+) -> ManagedPolicyEvent:
+    return ManagedPolicyEvent(
+        position_id=trade_id,
+        side=state.side,
+        time_ms=time_ms,
+        bar_index=bar_index,
+        event_type=event_type,  # type: ignore[arg-type]
+        rule_id=rule_id,
+        component_id=None,
+        from_phase=from_phase,
+        to_phase=to_phase,
+        price=Decimal(str(price)) if price is not None else None,
+        metadata=metadata or {},
+    )
 
 
 def _at_least(current: str, threshold: str) -> bool:

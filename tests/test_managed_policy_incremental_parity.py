@@ -19,7 +19,6 @@ per remaining bar in the frame.
 
 from __future__ import annotations
 
-from decimal import Decimal
 
 import pytest
 

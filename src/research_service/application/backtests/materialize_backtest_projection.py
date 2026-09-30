@@ -138,6 +138,10 @@ class MaterializeBacktestProjectionOutcome:
             allow_legacy_managed_replay_fallback=self._allow_legacy_managed_replay_fallback,
             entry_quantity_provider=size_entry,
             closed_position_consumer=account_close,
+            # Local projection-path events land in the same list the
+            # legacy provider fills; only one of the two paths ever runs
+            # for a given position.
+            managed_event_sink=managed_policy_events if managed_provider is not None else None,
         )
         accounting = build_trade_accounting_result(
             execution,

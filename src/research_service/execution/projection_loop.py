@@ -35,6 +35,7 @@ from research_service.domain.execution import (
     PositionExecution,
     PositionState,
 )
+from research_service.execution.managed_policy_events import ManagedPolicyEvent
 from research_service.execution.managed_policy import (
     ManagedEffectiveState,
     ManagedPolicyTimeline,
@@ -71,6 +72,7 @@ def run_projection_execution_loop(
     managed_replay_provider: ManagedReplayProvider | None = None,
     allow_legacy_managed_replay_fallback: bool = False,
     closed_position_consumer: ClosedPositionConsumer | None = None,
+    managed_event_sink: list[ManagedPolicyEvent] | None = None,
 ) -> ExecutionLoopResult:
     """Execute one strategy instance against a validated, indexed
     `HistoricalExecutionProjection` across an aligned market range.
@@ -104,6 +106,12 @@ def run_projection_execution_loop(
     only for an explicit parity/oracle comparison run (e.g. I4's own
     execution-loop parity tests) that deliberately exercises the old
     per-trade path against a projection fixture with no `managed` data.
+
+    `managed_event_sink` (`historical-managed-projection-cutover-v1`
+    design D5): when given, the local projection path appends every
+    managed-policy event it produces to it. The legacy oracle path
+    captures its events from `/managed-replay` responses instead (see
+    `MaterializeBacktestProjectionOutcome._managed_provider`).
     """
 
     if projection_index.projection.bar_count != len(market_frame.candles):
@@ -222,6 +230,8 @@ def run_projection_execution_loop(
                 high=float(candle.high),
                 low=float(candle.low),
                 next_time_ms=next_time_ms,
+                close=float(candle.close),
+                event_sink=managed_event_sink,
             )
 
     if current_position is not None:
@@ -291,11 +301,15 @@ def _open_managed_state(
     (O(states) per call) stays on this path only; it is never reached
     by production historical execution."""
 
+    # Gating first (`historical-managed-projection-cutover-v1` design D4):
+    # no provider means the caller did not request managed execution
+    # (`managed_policy_enabled=False` or a non-managed run), whatever the
+    # projection carries.
+    if managed_replay_provider is None:
+        return None, None
     managed = projection_index.projection.managed
     if managed is not None and not allow_legacy_managed_replay_fallback:
         return None, initialize_managed_trade_state(position)
-    if managed_replay_provider is None:
-        return None, None
     if managed is None and not allow_legacy_managed_replay_fallback:
         raise UpstreamServiceError(
             service="strategy_engine",

@@ -1,14 +1,14 @@
 ## 1. Contract (paths)
 
-- [ ] 1.1 Add `ManagedTransitionThresholdDTO`, `ManagedTransitionTermDTO`,
+- [x] 1.1 Add `ManagedTransitionThresholdDTO`, `ManagedTransitionTermDTO`,
       `ManagedTransitionAtLeastDTO` and `ManagedTransitionPathDTO` to
       `domain/contracts.py`, all `frozen`, `extra="forbid"` (design D1).
-- [ ] 1.2 Add `paths` to `ManagedPhaseTransitionRuleDTO` with a
+- [x] 1.2 Add `paths` to `ManagedPhaseTransitionRuleDTO` with a
       three-way XOR validator.
-- [ ] 1.3 Validate referential integrity of all
+- [x] 1.3 Validate referential integrity of all
       `condition_id`/`distance_id` references in
       `HistoricalManagedProjectionDTO`.
-- [ ] 1.4 Tests: composite rule decodes; atomic rule unchanged; XOR
+- [x] 1.4 Tests: composite rule decodes; atomic rule unchanged; XOR
       violations fail; a parametrized dangling-reference test covers
       every reference kind: atomic `condition_id`, atomic
       `distance_id`, path `condition_id`, path threshold `distance_id`,
@@ -17,26 +17,26 @@
 
 ## 2. Consumer (paths, stop attribution)
 
-- [ ] 2.1 Add a shared `_phase_rule_met` returning `(met, path_id)`,
+- [x] 2.1 Add a shared `_phase_rule_met` returning `(met, path_id)`,
       used by `advance_managed_trade_state` and
       `build_managed_policy_timeline_from_projection` (design D2).
-- [ ] 2.2 Stop attribution mirrors `managed.py`: update price and rule
+- [x] 2.2 Stop attribution mirrors `managed.py`: update price and rule
       id only on a change of more than `1e-8`, in both paths (design D3).
-- [ ] 2.3 Tests: first path wins; mixed market and trade; market-only
+- [x] 2.3 Tests: first path wins; mixed market and trade; market-only
       and trade-only `at_least`; null threshold false; incremental
       equals eager on a paths corpus; stop rule id stable when not
       tightened.
 
 ## 3. Gating and local events
 
-- [ ] 3.1 `_open_managed_state` returns `(None, None)` first when no
+- [x] 3.1 `_open_managed_state` returns `(None, None)` first when no
       managed provider was supplied (design D4).
-- [ ] 3.2 `advance_managed_trade_state` appends per-bar events to an
+- [x] 3.2 `advance_managed_trade_state` appends per-bar events to an
       optional `event_sink` (design D5); `run_projection_execution_loop`
       passes `managed_event_sink` through;
       `MaterializeBacktestProjectionOutcome` supplies its
       `managed_policy_events` list.
-- [ ] 3.3 Tests: managed disabled with a managed projection means no
+- [x] 3.3 Tests: managed disabled with a managed projection means no
       managed candidates; event sequence for phase (with `path_id`),
       stop, take and runtime on a hand-computed trace; persisted trace
       non-empty on the projection path.
