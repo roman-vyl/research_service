@@ -1,0 +1,195 @@
+{
+  "workload_id": "atomic_low",
+  "kind": "atomic",
+  "level": "low",
+  "batch": {
+    "experiment_id": "managed-projection-atomic-low",
+    "strategy_id": "ema_pullback",
+    "range_policy": "explicit_range",
+    "range": {
+      "from_ms": 1751328000000,
+      "to_ms": 1756684800000
+    },
+    "candidates": [
+      {
+        "accounting": {
+          "entry_fee_rate": "0",
+          "exit_fee_rate": "0",
+          "initial_equity": "10000"
+        },
+        "candidate_id": "ema500-rsi87-atomic-low",
+        "execution": {
+          "entry_price_source": "signal_bar_close",
+          "entry_slippage_rate": "0",
+          "protection_anchor": "signal_bar_close"
+        },
+        "managed_policy_enabled": true,
+        "metadata": {
+          "min_current_width_atr": 6,
+          "untouched_lookback": 50,
+          "sl_atr_multiplier": 4.0,
+          "tp_sl_ratio": 7.0,
+          "tp_atr_multiplier": 28.0,
+          "managed_exit_enabled": true,
+          "managed_policy": {
+            "adx_period": 14,
+            "adx_threshold": 25.0,
+            "di_alignment_required": true,
+            "rsi_period": 14,
+            "rsi_long_exit_above": 87.0,
+            "rsi_short_exit_below": 13.0,
+            "confirm_bars": 1
+          }
+        },
+        "strategy": {
+          "base_timeframe": "5m",
+          "enabled": true,
+          "raw_spec": {
+            "anchor_stack": {
+              "anchor": {
+                "period": 500,
+                "source": "close",
+                "timeframe": "base"
+              },
+              "fast": {
+                "period": 200,
+                "source": "close",
+                "timeframe": "base"
+              },
+              "slow": {
+                "period": 1000,
+                "source": "close",
+                "timeframe": "base"
+              }
+            },
+            "components": {
+              "blockers": [],
+              "direction": "ema_anchor_stack_trend",
+              "risk": "no_risk_filter",
+              "trigger": {
+                "component_id": "touch_anchor"
+              }
+            },
+            "contexts": {},
+            "setups": [
+              {
+                "component_id": "anchor_stack_width_setup",
+                "instance_id": "width1",
+                "params": {
+                  "atr_period": 48,
+                  "atr_timeframe": "base",
+                  "min_current_width_atr": 6,
+                  "min_recent_width_atr": 4.0,
+                  "width_lookback_bars": 80
+                }
+              },
+              {
+                "component_id": "untouched_anchor_setup",
+                "instance_id": "untouched1",
+                "params": {
+                  "active_bars": 3,
+                  "lookback": 50
+                }
+              }
+            ],
+            "trade_management": {
+              "exit_management": {
+                "mode": "managed",
+                "phase_rules": [
+                  {
+                    "rule_id": "impulse_adx",
+                    "to_phase": "proven",
+                    "condition": {
+                      "component_id": "adx_di_threshold",
+                      "params": {
+                        "timeframe": "base",
+                        "period": 14,
+                        "adx_threshold": 25.0,
+                        "require_di_alignment": true
+                      }
+                    }
+                  }
+                ],
+                "take_management": [
+                  {
+                    "rule_id": "release_tp_on_impulse",
+                    "component_id": "take_profile_switch",
+                    "activate_when": {
+                      "phase_at_least": "proven"
+                    },
+                    "params": {
+                      "action": "disable_fixed_tp"
+                    }
+                  }
+                ],
+                "runtime_exits": [
+                  {
+                    "rule_id": "rsi_overheat_exit",
+                    "component_id": "rsi_signal_exit",
+                    "activate_when": {
+                      "phase_at_least": "proven"
+                    },
+                    "exit_kind": "market_close",
+                    "params": {
+                      "rsi": {
+                        "timeframe": "base",
+                        "period": 14
+                      },
+                      "long_exit_above": 87.0,
+                      "short_exit_below": 13.0,
+                      "confirm_bars": 1
+                    }
+                  }
+                ]
+              },
+              "exit_policy": {
+                "always_on": {
+                  "exits": [
+                    {
+                      "component_id": "atr_stop_loss",
+                      "distance": {
+                        "multiplier": 4.0,
+                        "period": 48,
+                        "timeframe": "base"
+                      },
+                      "exit_kind": "stop_loss",
+                      "instance_id": "sl-measurement"
+                    },
+                    {
+                      "component_id": "atr_take_profit",
+                      "distance": {
+                        "multiplier": 28.0,
+                        "period": 48,
+                        "timeframe": "base"
+                      },
+                      "exit_kind": "take_profit",
+                      "instance_id": "tp-measurement"
+                    }
+                  ]
+                },
+                "profiles": {
+                  "aligned": {
+                    "exits": []
+                  },
+                  "countertrend": {
+                    "exits": []
+                  },
+                  "neutral": {
+                    "exits": []
+                  }
+                }
+              }
+            },
+            "trade_sides": [
+              "long",
+              "short"
+            ]
+          },
+          "strategy_id": "ema_pullback",
+          "ticker": "BTCUSDT.P"
+        }
+      }
+    ],
+    "description": "Natural two-month atomic managed-projection benchmark window."
+  }
+}

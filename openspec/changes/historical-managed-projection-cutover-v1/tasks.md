@@ -48,10 +48,13 @@
 - [x] 4.2 `scripts/managed_projection_benchmark.py` (design D7).
 - [x] 4.3 Unit test the harness diff/report logic on synthetic results
       (no live services).
-- [ ] 4.4 Owner-run: parity on the atomic and composite candidates
-      against Engine `07ff911`; record the results here.
-- [ ] 4.5 Owner-run: benchmark on low/medium/high natural workloads,
-      at least 3 paired OLD/NEW runs each; record the results here.
+- [x] 4.4 Owner-run: parity on the atomic and composite candidates
+      against Engine `07ff911`; PASS: atomic 287 trades and composite 276
+      trades, zero failures, OLD/NEW managed-replay 287/0 and 277/0.
+- [x] 4.5 Owner-run: benchmark on low/medium/high natural workloads.
+      Low/medium completed three paired OLD/NEW repeats and passed; high NEW
+      completed, while OLD was intentionally recorded as lower bounds
+      (>6000 s atomic, >1800 s composite) at the owner's instruction.
 
 ## 5. Merge
 

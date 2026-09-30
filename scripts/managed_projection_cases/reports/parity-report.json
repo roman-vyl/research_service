@@ -1,0 +1,1015 @@
+{
+  "gate": "historical-managed-projection-cutover-v1/parity",
+  "passed": true,
+  "corpus_failures": [],
+  "cases": [
+    {
+      "case_id": "ema500_rsi87_atomic",
+      "kind": "atomic",
+      "passed": true,
+      "trade_count": 287,
+      "sides": {
+        "long": 158,
+        "short": 129
+      },
+      "open_positions": 0,
+      "events_compared": 391,
+      "counts_old": {
+        "range": 1,
+        "range_batch": 0,
+        "range_batch_variants": 0,
+        "managed_replay": 287
+      },
+      "counts_new": {
+        "range": 1,
+        "range_batch": 0,
+        "range_batch_variants": 0,
+        "managed_replay": 0
+      },
+      "managed_initialized_positions": 287,
+      "initialized_equals_opened": true,
+      "failure_count": 0,
+      "allowed_difference_count": 71,
+      "failures": [],
+      "allowed": [
+        {
+          "scope": "trade",
+          "key": "trade#4",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#5",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#19",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#23",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#25",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#26",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#33",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#34",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#40",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#44",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#49",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#53",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#59",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#65",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#76",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#78",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#80",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#88",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#96",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#99",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#104",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#114",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#115",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#121",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#127",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#129",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#132",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#136",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#144",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#149",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#150",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#152",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#160",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#164",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#167",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#171",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#174",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#179",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#182",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#187",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#188",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#194",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#198",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#202",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#204",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#214",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#222",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#224",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#225",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#229",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#230",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#234",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#235",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#242",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#245",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#246",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#249",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#250",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#256",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#258",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#259",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#260",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#262",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#267",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#272",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#273",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#280",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#282",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#283",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#286",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#287",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        }
+      ],
+      "wall": {
+        "old_wall_s": 2514.124514791649,
+        "new_wall_s": 13.924527666997164
+      }
+    },
+    {
+      "case_id": "ema500_rsi87_composite",
+      "kind": "composite",
+      "passed": true,
+      "trade_count": 276,
+      "sides": {
+        "long": 151,
+        "short": 125
+      },
+      "open_positions": 1,
+      "events_compared": 335,
+      "counts_old": {
+        "range": 1,
+        "range_batch": 0,
+        "range_batch_variants": 0,
+        "managed_replay": 277
+      },
+      "counts_new": {
+        "range": 1,
+        "range_batch": 0,
+        "range_batch_variants": 0,
+        "managed_replay": 0
+      },
+      "managed_initialized_positions": 277,
+      "initialized_equals_opened": true,
+      "failure_count": 0,
+      "allowed_difference_count": 63,
+      "failures": [],
+      "allowed": [
+        {
+          "scope": "trade",
+          "key": "trade#4",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#5",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#23",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#25",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#26",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#33",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#34",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#40",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#44",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#49",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#53",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#54",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#60",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#66",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#77",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#79",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#88",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#92",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#96",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#99",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#104",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#108",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#115",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#122",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#128",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#130",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#133",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#143",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#148",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#150",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#157",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#161",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#164",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#168",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#176",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#184",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#185",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#191",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#193",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#195",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#197",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#207",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#215",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#217",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#221",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#222",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#226",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#233",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#236",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#240",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#241",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#247",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#249",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#250",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#251",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#253",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#258",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#262",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#263",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#270",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#272",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#273",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        },
+        {
+          "scope": "trade",
+          "key": "trade#276",
+          "field": "exit_component_id",
+          "old": "rsi_signal_exit",
+          "new": null
+        }
+      ],
+      "wall": {
+        "old_wall_s": 2626.5454462920316,
+        "new_wall_s": 14.695241957902908
+      }
+    }
+  ]
+}
