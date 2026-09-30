@@ -190,7 +190,10 @@ CPU and wall time. The hard criteria are: zero `/managed-replay` calls
 on the projection path; Engine evaluation calls independent of trade
 count; and, where the oracle is run, a median projection-path wall time
 below the median oracle wall time over at least 3 paired runs per
-workload. Research CPU alone MUST NOT be an acceptance criterion.
+workload. On a high-trade-count window the oracle MAY be stopped and
+recorded as a wall-time lower bound; the projection-path wall time MUST
+then be below that bound. Research CPU alone MUST NOT be an acceptance
+criterion.
 
 #### Scenario: Trade count grows
 

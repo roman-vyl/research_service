@@ -209,6 +209,14 @@ Acceptance (hard):
   least 3 paired OLD/NEW runs (`--with-oracle --repeats N`, N >= 3). No
   minimum speed-up percentage is required.
 
+Exception for high windows (owner decision, 2026-09-30): OLD cost grows
+with trade count times window length, so an OLD run on a high window
+takes hours. On high windows NEW runs to completion and OLD may be
+stopped and recorded as a wall-time lower bound. The wall gate holds
+there when NEW wall < the OLD lower bound. Low and medium windows keep
+the 3 paired runs. Recorded result: atomic/high NEW 34.88 s vs OLD
+> 6000 s; composite/high NEW 37.46 s vs OLD > 1800 s.
+
 Recorded, not gated: Engine CPU, Research CPU and total CPU per
 workload. A total-CPU regression is acceptable only if the report
 explains its bound. Research CPU alone is not a criterion.
