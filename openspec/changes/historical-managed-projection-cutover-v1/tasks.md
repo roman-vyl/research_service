@@ -43,10 +43,10 @@
 
 ## 4. Gates (committed, operator-run)
 
-- [ ] 4.1 `scripts/managed_projection_parity.py` (design D6) with a
+- [x] 4.1 `scripts/managed_projection_parity.py` (design D6) with a
       counting Engine port wrapper and a JSON report.
-- [ ] 4.2 `scripts/managed_projection_benchmark.py` (design D7).
-- [ ] 4.3 Unit test the harness diff/report logic on synthetic results
+- [x] 4.2 `scripts/managed_projection_benchmark.py` (design D7).
+- [x] 4.3 Unit test the harness diff/report logic on synthetic results
       (no live services).
 - [ ] 4.4 Owner-run: parity on the atomic and composite candidates
       against Engine `07ff911`; record the results here.
