@@ -474,9 +474,74 @@ class ManagedConditionSeriesDTO(BaseModel):
     short: tuple[bool, ...]
 
 
+TradeMetric = Literal["bars_since_entry", "mfe_pct", "mfe_distance"]
+
+
+class ManagedTransitionThresholdDTO(BaseModel):
+    """Trade-state quantity `trade_metric` >= `distances[distance_id][i]`
+    (null -> False) (`composite-managed-phase-condition-v1` design D6)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    distance_id: str = Field(min_length=1)
+    trade_metric: TradeMetric
+
+
+class ManagedTransitionTermDTO(BaseModel):
+    """One `at_least` term: exactly one of `condition_id` (market) or
+    (`distance_id`, `trade_metric`) (trade threshold)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    condition_id: str | None = None
+    distance_id: str | None = None
+    trade_metric: TradeMetric | None = None
+
+    @model_validator(mode="after")
+    def validate_exactly_one_reference(self) -> "ManagedTransitionTermDTO":
+        has_condition = self.condition_id is not None
+        has_distance = self.distance_id is not None and self.trade_metric is not None
+        has_partial_distance = (self.distance_id is None) != (self.trade_metric is None)
+        if has_condition == has_distance or has_partial_distance:
+            raise ValueError(
+                "at_least term must set exactly one of condition_id or "
+                "(distance_id, trade_metric)"
+            )
+        return self
+
+
+class ManagedTransitionAtLeastDTO(BaseModel):
+    """At least `k` of `terms` true."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    k: int = Field(ge=1)
+    terms: tuple[ManagedTransitionTermDTO, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_k_within_terms(self) -> "ManagedTransitionAtLeastDTO":
+        if self.k > len(self.terms):
+            raise ValueError("at_least k must not exceed the number of terms")
+        return self
+
+
+class ManagedTransitionPathDTO(BaseModel):
+    """True on a bar iff `condition_id` (if any) is true for the trade
+    side, every threshold holds and `at_least` (if any) holds."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    path_id: str = Field(min_length=1)
+    condition_id: str | None = None
+    thresholds: tuple[ManagedTransitionThresholdDTO, ...] = ()
+    at_least: ManagedTransitionAtLeastDTO | None = None
+
+
 class ManagedPhaseTransitionRuleDTO(BaseModel):
-    """Exactly one of `condition_id` or (`distance_id`, `trade_metric`)
-    is set -- never both, never neither."""
+    """Exactly one of `condition_id`, (`distance_id`, `trade_metric`) or
+    `paths` is set -- never two, never none. `paths` is the generic form
+    of a composite phase condition: the rule fires on the first true path
+    in order (`historical-managed-projection-cutover-v1` design D1)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -485,16 +550,21 @@ class ManagedPhaseTransitionRuleDTO(BaseModel):
     target_phase: str = Field(min_length=1)
     condition_id: str | None = None
     distance_id: str | None = None
-    trade_metric: Literal["bars_since_entry", "mfe_pct", "mfe_distance"] | None = None
+    trade_metric: TradeMetric | None = None
+    paths: tuple[ManagedTransitionPathDTO, ...] | None = None
 
     @model_validator(mode="after")
     def validate_exactly_one_reference(self) -> "ManagedPhaseTransitionRuleDTO":
         has_condition = self.condition_id is not None
         has_distance = self.distance_id is not None and self.trade_metric is not None
-        if has_condition == has_distance:
+        has_partial_distance = (self.distance_id is None) != (self.trade_metric is None)
+        has_paths = self.paths is not None
+        if has_paths and not self.paths:
+            raise ValueError("phase_transition paths must not be empty")
+        if has_partial_distance or (has_condition + has_distance + has_paths) != 1:
             raise ValueError(
-                "phase_transition rule must set exactly one of condition_id or "
-                "(distance_id, trade_metric)"
+                "phase_transition rule must set exactly one of condition_id, "
+                "(distance_id, trade_metric) or paths"
             )
         return self
 
@@ -550,6 +620,42 @@ class HistoricalManagedProjectionDTO(BaseModel):
         ],
         ...,
     ]
+
+    @model_validator(mode="after")
+    def validate_references_exist(self) -> "HistoricalManagedProjectionDTO":
+        """Every `condition_id`/`distance_id` a rule, path, threshold or
+        term names must exist, so a malformed contract fails decode
+        instead of raising `KeyError` mid-execution."""
+
+        condition_ids: set[str] = set()
+        distance_ids: set[str] = set()
+        for rule in self.rules:
+            if rule.kind == "phase_transition":
+                if rule.condition_id is not None:
+                    condition_ids.add(rule.condition_id)
+                if rule.distance_id is not None:
+                    distance_ids.add(rule.distance_id)
+                for path in rule.paths or ():
+                    if path.condition_id is not None:
+                        condition_ids.add(path.condition_id)
+                    distance_ids.update(item.distance_id for item in path.thresholds)
+                    for term in path.at_least.terms if path.at_least is not None else ():
+                        if term.condition_id is not None:
+                            condition_ids.add(term.condition_id)
+                        if term.distance_id is not None:
+                            distance_ids.add(term.distance_id)
+            elif rule.kind == "stop_action":
+                distance_ids.add(rule.distance_id)
+            elif rule.kind == "runtime_exit":
+                condition_ids.add(rule.condition_id)
+        missing_conditions = sorted(condition_ids - self.conditions.keys())
+        missing_distances = sorted(distance_ids - self.distances.keys())
+        if missing_conditions or missing_distances:
+            raise ValueError(
+                "managed projection references unknown ids: "
+                f"conditions={missing_conditions}, distances={missing_distances}"
+            )
+        return self
 
 
 class HistoricalExecutionProjectionDTO(BaseModel):
