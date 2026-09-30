@@ -1,0 +1,55 @@
+## 1. Contract (paths)
+
+- [ ] 1.1 Add `ManagedTransitionThresholdDTO`, `ManagedTransitionTermDTO`,
+      `ManagedTransitionAtLeastDTO` and `ManagedTransitionPathDTO` to
+      `domain/contracts.py`, all `frozen`, `extra="forbid"` (design D1).
+- [ ] 1.2 Add `paths` to `ManagedPhaseTransitionRuleDTO` with a
+      three-way XOR validator.
+- [ ] 1.3 Validate referential integrity of all
+      `condition_id`/`distance_id` references in
+      `HistoricalManagedProjectionDTO`.
+- [ ] 1.4 Tests: composite rule decodes; atomic rule unchanged; XOR
+      violations and dangling references fail.
+
+## 2. Consumer (paths, stop attribution)
+
+- [ ] 2.1 Add a shared `_phase_rule_met` returning `(met, path_id)`,
+      used by `advance_managed_trade_state` and
+      `build_managed_policy_timeline_from_projection` (design D2).
+- [ ] 2.2 Stop attribution mirrors `managed.py`: update price and rule
+      id only on a change of more than `1e-8`, in both paths (design D3).
+- [ ] 2.3 Tests: first path wins; mixed market and trade; market-only
+      and trade-only `at_least`; null threshold false; incremental
+      equals eager on a paths corpus; stop rule id stable when not
+      tightened.
+
+## 3. Gating and local events
+
+- [ ] 3.1 `_open_managed_state` returns `(None, None)` first when no
+      managed provider was supplied (design D4).
+- [ ] 3.2 `advance_managed_trade_state` emits per-bar events (design D5);
+      the projection loop forwards them to an optional
+      `managed_event_consumer`; `MaterializeBacktestProjectionOutcome`
+      collects them into `managed_policy_events`.
+- [ ] 3.3 Tests: managed disabled with a managed projection means no
+      managed candidates; event sequence for phase (with `path_id`),
+      stop, take and runtime on a hand-computed trace; persisted trace
+      non-empty on the projection path.
+
+## 4. Gates (committed, operator-run)
+
+- [ ] 4.1 `scripts/managed_projection_parity.py` (design D6) with a
+      counting Engine port wrapper and a JSON report.
+- [ ] 4.2 `scripts/managed_projection_benchmark.py` (design D7).
+- [ ] 4.3 Unit test the harness diff/report logic on synthetic results
+      (no live services).
+- [ ] 4.4 Owner-run: parity on the atomic and composite candidates
+      against Engine `07ff911`; record the results here.
+- [ ] 4.5 Owner-run: benchmark on low/medium/high natural workloads;
+      record the results here.
+
+## 5. Merge
+
+- [ ] 5.1 `make verify` green (ruff, mypy, pytest).
+- [ ] 5.2 On the owner's command: PR from this branch to `main`, merge,
+      then sync specs and archive this change.
