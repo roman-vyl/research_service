@@ -26,6 +26,7 @@ from research_service.application.backtests.materialize_backtest_projection impo
 from research_service.application.experiments.candidate_summary import (
     derive_batch_candidate_summary,
 )
+from research_service.domain.execution import PositionState
 from research_service.domain.contracts import (
     HistoricalExecutionProjectionDTO,
     ManagedReplayRequest,
@@ -264,6 +265,31 @@ def _compare_candidate_metrics(
             )
 
 
+# Run-scoped identifiers inside `PositionState`: labels derived from the
+# run's instance/position identity, never execution semantics.
+POSITION_LABEL_PATHS = (
+    ("position_id",),
+    ("instance_id",),
+    ("entry_fill", "fill_id"),
+    ("entry_fill", "instance_id"),
+)
+
+
+def normalized_position_state(position: PositionState) -> dict[str, Any]:
+    """Every `PositionState` field, flattened, with exactly the known
+    run-scoped identifiers removed -- side, entry fill (bar, time,
+    prices, quantity, slippage), initial protection (levels, ratios,
+    attribution) and locked exit profile all stay in."""
+
+    state = position.model_dump()
+    for path in POSITION_LABEL_PATHS:
+        container = state
+        for name in path[:-1]:
+            container = container[name]
+        del container[path[-1]]
+    return _flatten(state)
+
+
 def event_horizons(outcome: SingleInstanceRunOutcome) -> list[tuple[str, int | None]]:
     """Per position, in execution order: (`position_id`, exclusive event
     horizon). A closed position's horizon is its exit bar index (events
@@ -315,6 +341,22 @@ def _compare_positions_and_events(
         zip(old_horizons, new_horizons, strict=False)
     ):
         key = f"position#{ordinal + 1}"
+        old_item = old.execution.positions[ordinal]
+        new_item = new.execution.positions[ordinal]
+        if old_item.status != new_item.status:
+            report.failures.append(
+                Difference("positions", key, "status", old_item.status, new_item.status)
+            )
+        # The semantic oracle for a position still open at the end of the
+        # range (it has no TradeRecord); for closed ones it backs up the
+        # TradeRecord comparison.
+        old_state = normalized_position_state(old_item.position)
+        new_state = normalized_position_state(new_item.position)
+        for name in sorted(set(old_state) | set(new_state)):
+            if old_state.get(name) != new_state.get(name):
+                report.failures.append(
+                    Difference("position", key, name, old_state.get(name), new_state.get(name))
+                )
         if old_horizon != new_horizon:
             report.failures.append(
                 Difference("positions", key, "exit_bar_index", old_horizon, new_horizon)

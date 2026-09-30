@@ -26,6 +26,7 @@ from managed_projection_gate import (  # noqa: E402
     corpus_failures,
     evaluate_workload,
     event_horizons,
+    normalized_position_state,
     parse_ps_cputime,
     projection_kind,
     within_horizon,
@@ -187,9 +188,33 @@ def _event(position_id: str, bar_index: int, event_type: str = "phase_changed", 
     )
 
 
-def _run_stub(positions: list[tuple[str, int | None]], events: list[ManagedPolicyEvent], outcome):
+def _position_state(outcome, position_id: str, **changes: Any):
+    """The fake run's real `PositionState`, re-labelled and optionally
+    changed (dotted keys reach into `entry_fill`/`initial_protection`)."""
+
+    base = outcome.execution.positions[0].position
+    nested: dict[str, dict[str, Any]] = {}
+    top: dict[str, Any] = {"position_id": position_id}
+    for key, value in changes.items():
+        if "." in key:
+            parent, name = key.split(".", 1)
+            nested.setdefault(parent, {})[name] = value
+        else:
+            top[key] = value
+    for parent, fields in nested.items():
+        top[parent] = getattr(base, parent).model_copy(update=fields)
+    return base.model_copy(update=top)
+
+
+def _run_stub(
+    positions: list[tuple[str, int | None]],
+    events: list[ManagedPolicyEvent],
+    outcome,
+    position_changes: dict[str, Any] | None = None,
+):
     """An outcome whose positions/events are replaced; trades/accounting
-    stay those of the real fake run, so only positions/events differ."""
+    stay those of the real fake run, so only positions/events differ.
+    Every position carries the fake run's real `PositionState`."""
 
     return SimpleNamespace(
         **{
@@ -198,7 +223,8 @@ def _run_stub(positions: list[tuple[str, int | None]], events: list[ManagedPolic
             "execution": SimpleNamespace(
                 positions=[
                     SimpleNamespace(
-                        position=SimpleNamespace(position_id=position_id),
+                        position=_position_state(outcome, position_id, **(position_changes or {})),
+                        status="closed" if exit_bar is not None else "open",
                         exit_fill=SimpleNamespace(bar_index=exit_bar) if exit_bar is not None else None,
                     )
                     for position_id, exit_bar in positions
@@ -209,10 +235,12 @@ def _run_stub(positions: list[tuple[str, int | None]], events: list[ManagedPolic
     )
 
 
-def _event_report(old_positions, old_events, new_positions, new_events) -> ParityReport:
+def _event_report(
+    old_positions, old_events, new_positions, new_events, new_position_changes=None
+) -> ParityReport:
     outcome = _outcome()
     old = _run_stub(old_positions, old_events, outcome)
-    new = _run_stub(new_positions, new_events, outcome)
+    new = _run_stub(new_positions, new_events, outcome, new_position_changes)
     old_counts = EngineCallCounts(
         range=1,
         managed_replay=len(old_positions),
@@ -285,6 +313,63 @@ def test_event_horizons_and_within_horizon_helpers() -> None:
     events = [_event("a", 1), _event("a", 3), _event("b", 1)]
     assert [e.bar_index for e in within_horizon(events, "a", 3)] == [1]
     assert [e.bar_index for e in within_horizon(events, "a", None)] == [1, 3]
+
+
+# -- parity: position state ---------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "changes",
+    [
+        {"initial_protection.stop_loss_price": Decimal("1")},
+        {"initial_protection.take_profit_ratio": Decimal("0.5")},
+        {"locked_exit_profile": "countertrend"},
+        {"entry_fill.quantity": Decimal("123")},
+        {"entry_fill.fill_price": Decimal("1")},
+    ],
+)
+@pytest.mark.parametrize("exit_bar", [None, 5])
+def test_position_state_difference_fails_open_and_closed(
+    changes: dict[str, Any], exit_bar: int | None
+) -> None:
+    events = [_event("p1", 2)]
+    report = _event_report([("p1", exit_bar)], events, [("p1", exit_bar)], events, changes)
+
+    assert not report.passed
+    assert {item.scope for item in report.failures} == {"position"}
+
+
+def test_open_position_with_identical_state_and_events_passes() -> None:
+    events = [_event("p1", 2)]
+    report = _event_report([("p1", None)], events, [("p1", None)], events)
+
+    assert report.passed, report.failures
+    assert report.open_positions == 1
+
+
+def test_position_run_scoped_identifiers_are_ignored() -> None:
+    outcome = _outcome()
+    base = outcome.execution.positions[0].position
+    relabelled = base.model_copy(
+        update={
+            "position_id": "other-position",
+            "instance_id": "other-instance",
+            "entry_fill": base.entry_fill.model_copy(
+                update={"fill_id": "other-fill", "instance_id": "other-instance"}
+            ),
+        }
+    )
+
+    assert normalized_position_state(relabelled) == normalized_position_state(base)
+    assert "entry_fill.quantity" in normalized_position_state(base)
+    assert "initial_protection.stop_loss_price" in normalized_position_state(base)
+    assert "locked_exit_profile" in normalized_position_state(base)
+
+
+def test_position_status_difference_fails() -> None:
+    report = _event_report([("p1", None)], [], [("p1", 5)], [])
+
+    assert "status" in {item.field for item in report.failures}
 
 
 # -- parity: call counts and corpus ------------------------------------------

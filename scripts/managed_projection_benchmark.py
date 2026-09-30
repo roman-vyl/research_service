@@ -15,7 +15,9 @@ Paired runs alternate OLD/NEW order per repeat. Recorded per run: trade
 count, Research-side Engine calls (`/range`, `/range-batch` and its
 variant count, `/managed-replay`), Research CPU (`time.process_time`),
 Engine CPU (delta of `ps -o cputime` for `--engine-pid`, when given),
-total CPU, wall. Candidates persist into a throwaway artifact root
+total CPU, wall. `ps` reports Engine CPU at coarse (Linux: whole-second)
+resolution, so a small value or 0 on a short workload means "below
+resolution", not zero work. Candidates persist into a throwaway artifact root
 (same cost for OLD and NEW).
 
 Hard gate: every candidate completes; NEW `/managed-replay` = 0; NEW
