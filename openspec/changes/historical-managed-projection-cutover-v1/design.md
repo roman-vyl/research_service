@@ -94,8 +94,9 @@ oracle; projection absent and no opt-in means fail closed.
 
 ### D5. Local managed events from the incremental consumer
 
-`advance_managed_trade_state` returns the events produced on that bar
-as a third element. The emission rules copy `managed.py` for the same
+`advance_managed_trade_state` takes an optional keyword `event_sink`
+(a list) and appends the events produced on that bar to it. When it is
+`None`, no events are built, and existing callers keep their signature. The emission rules copy `managed.py` for the same
 bar:
 
 | event | when | fields |
@@ -109,9 +110,10 @@ Every event carries `time_ms`/`bar_index` of the source bar and
 `position_id`/`side`. `component_id` is `None`, because the contract
 carries none by design.
 
-The loop hands events to an optional `managed_event_consumer` callback.
-`MaterializeBacktestProjectionOutcome` collects them into the same
-`managed_policy_events` list the legacy provider fills. The artifact
+`run_projection_execution_loop` takes an optional `managed_event_sink`
+and passes it through. `MaterializeBacktestProjectionOutcome` passes the
+same `managed_policy_events` list the legacy provider fills, and only
+when managed execution was requested. The artifact
 contract (`research_managed_policy_events.v1`) and API are unchanged.
 `advance_managed_trade_state` takes a `close` argument for the runtime
 event price.

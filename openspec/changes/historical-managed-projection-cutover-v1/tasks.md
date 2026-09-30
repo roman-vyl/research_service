@@ -27,10 +27,11 @@
 
 - [ ] 3.1 `_open_managed_state` returns `(None, None)` first when no
       managed provider was supplied (design D4).
-- [ ] 3.2 `advance_managed_trade_state` emits per-bar events (design D5);
-      the projection loop forwards them to an optional
-      `managed_event_consumer`; `MaterializeBacktestProjectionOutcome`
-      collects them into `managed_policy_events`.
+- [ ] 3.2 `advance_managed_trade_state` appends per-bar events to an
+      optional `event_sink` (design D5); `run_projection_execution_loop`
+      passes `managed_event_sink` through;
+      `MaterializeBacktestProjectionOutcome` supplies its
+      `managed_policy_events` list.
 - [ ] 3.3 Tests: managed disabled with a managed projection means no
       managed candidates; event sequence for phase (with `path_id`),
       stop, take and runtime on a hand-computed trace; persisted trace
