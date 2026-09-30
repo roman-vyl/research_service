@@ -96,10 +96,19 @@ oracle; projection absent and no opt-in means fail closed.
 
 `advance_managed_trade_state` takes an optional keyword `event_sink`
 (a list) and appends the events produced on that bar to it. When it is
-`None`, no events are built, and existing callers keep their signature. The emission rules copy `managed.py` for the same
-bar:
+`None`, no events are built, and existing callers keep their signature.
 
-| event | when | fields |
+Ownership: events are observations of state transitions that the
+generic projection consumer has already produced. They are not a
+second implementation of Strategy Engine policy or event semantics.
+Each event is emitted at the point where the consumer's own state
+changes: `_phase_rule_met` fired a transition; the stop selection
+actually changed the active stop (D3); the take selection changed the
+profile; a generic runtime rule is armed. Strategy Engine stays the
+owner of policy, and Research only reports what happened while
+executing the projection contract.
+
+| event | observed when | fields |
 |---|---|---|
 | `phase_changed` | each phase rule that fires (several per bar possible, in rule order) | `rule_id`, `from_phase`, `to_phase`, `price = mfe_price`, `metadata = {"path_id": ...}` for paths, else `{}` |
 | `active_stop_updated` | the D3 update actually happens | `rule_id`, `price = new active stop`, `metadata = {"effective_from_bar": index + 1}` |
@@ -110,6 +119,12 @@ Every event carries `time_ms`/`bar_index` of the source bar and
 `position_id`/`side`. `component_id` is `None`, because the contract
 carries none by design.
 
+Event-only prices are diagnostic derivations and MUST NOT participate
+in policy decisions: `phase_changed.price` is the MFE price derived
+from Research's own execution state (entry price, best price, side),
+and `runtime_exit_triggered.price` is the bar close observed in the
+`MarketFrame`. Neither is part of the projection contract.
+
 `run_projection_execution_loop` takes an optional `managed_event_sink`
 and passes it through. `MaterializeBacktestProjectionOutcome` passes the
 same `managed_policy_events` list the legacy provider fills, and only
@@ -118,11 +133,19 @@ contract (`research_managed_policy_events.v1`) and API are unchanged.
 `advance_managed_trade_state` takes a `close` argument for the runtime
 event price.
 
-Coverage difference, intentional: `/managed-replay` replays each trade
-to the end of the requested range, so the legacy trace also contains
-events after the trade's exit. The local trace covers exactly the bars
-on which the trade was open and decisions were taken. The parity
-harness compares legacy events with `bar_index < exit bar_index`.
+Event horizon. The projection loop runs exit arbitration at bar open
+first; if the position closes on bar N, its state is discarded and
+`advance_managed_trade_state(N)` is not called. So:
+
+- closed position with `exit_bar_index = N`: local events cover bars
+  `entry_bar_index .. N - 1`;
+- position still `open` at the end of the requested range: local events
+  cover bars `entry_bar_index ..` the last market bar, which is also the
+  end of the legacy `/managed-replay` evaluation range.
+
+`/managed-replay` always evaluates to the end of the range, so for a
+closed position the legacy trace also contains events after its exit.
+The parity harness applies the horizon in D6.
 
 Cost: one list allocation per bar and appends only on change or armed
 runtime bars. No extra passes.
@@ -141,8 +164,11 @@ It compares:
 - every `TradeRecord` field, except the per-run labels
   (`trade_id`/`position_id`/`instance_id`/run ids);
 - the `TradeAccountingResult` summary and candidate metrics;
-- managed events: NEW vs OLD restricted per position to
-  `bar_index < exit bar_index`, on (`bar_index`, `event_type`,
+- managed events, per position, over the D5 horizon: for a closed
+  position, OLD events with `bar_index < exit_bar_index`; for a
+  position open at the end of the range, all OLD events through the
+  last bar of the evaluation range. Both are compared with all NEW
+  events of that position, on (`bar_index`, `event_type`,
   `rule_id`, `from_phase`, `to_phase`, `price`, `metadata.path_id`,
   `metadata.take_profile`).
 
@@ -153,7 +179,10 @@ the canonical kind of `exit_class`), event `component_id`, and event
 `metadata` keys other than those compared above.
 
 It asserts NEW `managed_replay_calls == 0`, and OLD
-`managed_replay_calls == number of opened trades`. It writes a JSON
+`managed_replay_calls ==` the number of positions for which managed
+execution was initialized (counted by the harness at the provider). It
+additionally reports whether that equals the number of opened trades;
+for the required corpus it must. It writes a JSON
 report and exits non-zero on any failure.
 
 Required corpus, on Engine `07ff911`: one atomic candidate (the EMA500
@@ -176,7 +205,9 @@ Acceptance (hard):
 - NEW `/managed-replay` calls = 0 on every workload;
 - Engine evaluation calls per candidate do not depend on trade count
   (1 `/range-batch` per batch, or 1 `/range` per single run);
-- NEW wall time clearly below OLD where OLD is run.
+- NEW median wall time < OLD median wall time per workload, over at
+  least 3 paired OLD/NEW runs (`--with-oracle --repeats N`, N >= 3). No
+  minimum speed-up percentage is required.
 
 Recorded, not gated: Engine CPU, Research CPU and total CPU per
 workload. A total-CPU regression is acceptable only if the report

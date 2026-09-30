@@ -127,10 +127,16 @@ carries `managed`.
 ### Requirement: Local managed event trace
 
 On the projection path, Research Service MUST emit `ManagedPolicyEvent`s
-from its own execution: `phase_changed`, `active_stop_updated`,
-`active_take_updated` and `runtime_exit_triggered`. They MUST use the
-same trigger rules as Strategy Engine managed replay for every bar on
-which the position was open, and MUST be persisted in the unchanged
+as observations of the state transitions its generic projection
+consumer produced: `phase_changed` when a phase rule fires,
+`active_stop_updated` when the active stop actually changes,
+`active_take_updated` when the take profile changes, and
+`runtime_exit_triggered` when a runtime rule is armed. Events MUST NOT
+be a separate implementation of Strategy Engine policy. Event-only
+prices (the MFE price on `phase_changed`, the bar close on
+`runtime_exit_triggered`) are diagnostic derivations from Research
+execution state and the `MarketFrame`, and MUST NOT participate in
+policy decisions. Events MUST be persisted in the unchanged
 `research_managed_policy_events.v1` artifact. An executed managed
 position MUST NOT yield an empty trace when its state changed.
 
@@ -153,10 +159,21 @@ position MUST NOT yield an empty trace when its state changed.
 The repository MUST contain a reproducible, operator-run parity harness.
 It runs the same candidate through the legacy oracle and the projection
 path, and compares all `TradeRecord` fields except run-scoped labels,
-the accounting summary, candidate metrics, and managed events up to
-each position's exit bar. It reports allowed diagnostic differences
+the accounting summary, candidate metrics, and managed events over an
+explicit horizon: for a closed position, events with `bar_index` below
+its exit bar index; for a position open at the end of the range, events
+through the last bar of the evaluation range. The legacy run MUST issue
+exactly one `/managed-replay` call per position for which managed
+execution was initialized. It reports allowed diagnostic differences
 separately. It MUST cover at least one atomic and one composite managed
 candidate against the canonical Strategy Engine baseline.
+
+#### Scenario: Open position at end of range
+
+- **WHEN** a position is still open at the last bar of the requested
+  range
+- **THEN** the harness compares its events through that last bar and
+  does not exclude the position.
 
 #### Scenario: Parity pass
 
@@ -170,8 +187,10 @@ The repository MUST contain a reproducible, operator-run performance
 harness. It records, per workload, the trade count, Research-side call
 counts per Strategy Engine endpoint, Engine CPU, Research CPU, total
 CPU and wall time. The hard criteria are: zero `/managed-replay` calls
-on the projection path, and Engine evaluation calls independent of
-trade count. Research CPU alone MUST NOT be an acceptance criterion.
+on the projection path; Engine evaluation calls independent of trade
+count; and, where the oracle is run, a median projection-path wall time
+below the median oracle wall time over at least 3 paired runs per
+workload. Research CPU alone MUST NOT be an acceptance criterion.
 
 #### Scenario: Trade count grows
 

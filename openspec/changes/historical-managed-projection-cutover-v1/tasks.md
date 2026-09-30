@@ -9,7 +9,11 @@
       `condition_id`/`distance_id` references in
       `HistoricalManagedProjectionDTO`.
 - [ ] 1.4 Tests: composite rule decodes; atomic rule unchanged; XOR
-      violations and dangling references fail.
+      violations fail; a parametrized dangling-reference test covers
+      every reference kind: atomic `condition_id`, atomic
+      `distance_id`, path `condition_id`, path threshold `distance_id`,
+      `at_least` condition term, `at_least` distance term, stop
+      `distance_id`, runtime `condition_id`.
 
 ## 2. Consumer (paths, stop attribution)
 
@@ -46,8 +50,8 @@
       (no live services).
 - [ ] 4.4 Owner-run: parity on the atomic and composite candidates
       against Engine `07ff911`; record the results here.
-- [ ] 4.5 Owner-run: benchmark on low/medium/high natural workloads;
-      record the results here.
+- [ ] 4.5 Owner-run: benchmark on low/medium/high natural workloads,
+      at least 3 paired OLD/NEW runs each; record the results here.
 
 ## 5. Merge
 
