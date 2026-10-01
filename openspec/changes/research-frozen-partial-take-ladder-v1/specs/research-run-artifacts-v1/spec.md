@@ -20,8 +20,10 @@ Previously persisted artifacts without these fields SHALL still be read.
 
 ### Requirement: Byte-identical artifacts without partial takes
 
-For a strategy without partial takes, every persisted artifact SHALL be
-byte-identical to the artifact the same run produced before this change:
+For a strategy without partial takes, on market data where no bar opens
+beyond an active stop, managed-stop or final take level, every persisted
+artifact SHALL be byte-identical to the artifact the same run produced
+before this change:
 
 - `strategy_evaluation.json`;
 - `trades.json`;
@@ -33,6 +35,10 @@ byte-identical to the artifact the same run produced before this change:
 Empty ladder fields SHALL be omitted rather than written as an empty list
 or null.
 
+A bar that opens beyond such a level MAY change the stop or final fill
+from the open to the level, as the level-fill model requires. That
+change SHALL NOT count as a regression.
+
 #### Scenario: Regression gate without legs
 
 - **WHEN** a recorded run without partial takes is re-executed and
@@ -40,3 +46,12 @@ or null.
 - **THEN** each of those files SHALL have the same sha256 as before
 - **AND** `result.json` SHALL equal the earlier one once `run_id` is
   removed.
+
+#### Scenario: Gap-through bar without legs
+
+- **WHEN** a run without partial takes has a long stop at 95 and a bar
+  opens at 90
+- **THEN** the trade SHALL close at 95, where it closed at 90 before
+  this change
+- **AND** the regression gate SHALL NOT treat that difference as a
+  failure.

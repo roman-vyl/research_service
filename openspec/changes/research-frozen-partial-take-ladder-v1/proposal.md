@@ -52,8 +52,16 @@ optional `partial_takes` and validates it fail-closed:
    existing runtime and signal arbitration.
 
 Each leg fills at most once. `disable_initial_tp` suppresses only the
-final take. Gaps are not modelled for legs, and the final take and stop
-fill prices are unchanged.
+final take.
+
+**One level-fill model for every resting exit.** V1 assumes a
+continuous crypto-futures market. The initial stop, the managed stop,
+each partial take and the final take fill at exactly their frozen level.
+A bar that opens beyond a level no longer fills at the open: a long
+final take at 108 with open 112 fills at 108, and a long stop at 95
+with open 90 fills at 95. Short is the mirror. This replaces the
+BBB/vectorbt fill-at-open rule in `_distance_fill_price` and
+`_managed_stop_fill`, and applies to every run, with or without legs.
 
 **Multi-fill position facts.**
 - New: `PositionReduction` and `PositionExecution.reductions`.
@@ -74,13 +82,18 @@ one `TradeRecord`:
 A position left open at range end with filled legs is not a trade, as
 today. Its reductions stay visible in `execution_events.json`.
 
-**Byte-identical without legs.** For specs without partial takes, these
-artifacts are byte-identical to the output before this change:
-`strategy_evaluation.json`, `trades.json`, `execution_events.json` and
-`metrics.json`. `result.json` differs only by `run_id`. Empty ladder
-fields are omitted, not written as `[]` or `null`.
+**Byte-identical without legs on a continuous market.** For specs
+without partial takes, on market data where no bar opens beyond an
+active stop or final take level, these artifacts are byte-identical to
+the output before this change: `strategy_evaluation.json`,
+`trades.json`, `execution_events.json` and `metrics.json`.
+`result.json` differs only by `run_id`. Empty ladder fields are
+omitted, not written as `[]` or `null`. On a gap-through bar the stop
+or final fill moves from the open to the level; that follows from the
+accepted execution model and is not a regression.
 
-**BREAKING:** none.
+**BREAKING:** stop, managed-stop and final-take fill prices change on
+gap-through bars for all runs. No wire or artifact schema breaks.
 
 ## Non-Goals
 
@@ -89,8 +102,7 @@ fields are omitted, not written as `[]` or `null`.
 - The historical E2E proof against the real Engine on a corpus. That is
   the next stage. This change provides the unit truth table and the
   no-legs regression gate only.
-- Gap or slippage modelling for legs, and any change to the stop or
-  final-take fill price.
+- Gap or slippage modelling of any kind.
 - Signal-driven partial exits, market reductions, scale-in, or legs
   depending on managed phases.
 - A Research-side quantity step or lot rounding.
@@ -116,7 +128,11 @@ fields are omitted, not written as `[]` or `null`.
   - R measured on the initial quantity;
   - capture metrics on the average exit price.
 - `research-run-artifacts-v1`: ladder content in the persisted artifacts,
-  and byte-identical artifacts without legs.
+  and byte-identical artifacts without legs on a continuous market.
+- `research-static-exit-arbitration-v1`: stop and take fill at exactly
+  their level, with no fill at the open.
+- `research-managed-policy-consumption-v1`: the managed stop fills at
+  exactly its level, with no fill at the open.
 
 ## Impact
 
@@ -141,9 +157,12 @@ fields are omitted, not written as `[]` or `null`.
   empty), and multi-fill arithmetic.
 - `application/backtests/persist_run.py` and `read_artifacts.py`:
   omit-when-empty dumps, and old artifacts still read.
+- `execution/static_exits._distance_fill_price` and
+  `execution/managed_policy._managed_stop_fill`: the fill-at-open
+  branches are removed. The existing gap tests are rewritten to the
+  level fill.
 - Unchanged:
   - `unified_exits.py` priorities;
-  - `static_exits._distance_fill_price`;
-  - the managed policy and its projection consumer;
+  - managed policy decisions and its projection consumer;
   - sizing, batch summaries (they work from `net_pnl` and R).
 - No dependency changes and no contract version bump.

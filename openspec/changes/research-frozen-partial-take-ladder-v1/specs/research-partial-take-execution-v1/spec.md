@@ -146,9 +146,9 @@ remaining quantity.
 
 A leg SHALL fill at most once per position and never on the entry bar.
 `disable_initial_tp` SHALL suppress only the final take; legs SHALL stay
-eligible. Leg fills SHALL NOT model gaps. The fill prices of the stop
-and the final take SHALL remain those of the existing distance fill
-semantics.
+eligible. A leg SHALL fill at exactly its level, under the same
+level-fill model as the stop and the final take
+(`research-static-exit-arbitration-v1` "Distance fill semantics").
 
 #### Scenario: Entry bar reaches every level
 
@@ -166,6 +166,13 @@ semantics.
 
 - **WHEN** a long bar opens above an unfilled leg level
 - **THEN** the leg SHALL fill at exactly its level, not at the open.
+
+#### Scenario: Bar opens beyond legs and final
+
+- **WHEN** a long position with Q0 100 has a leg at 103 (25%) and a
+  final take at 108, and a bar opens at 112
+- **THEN** Research SHALL fill 25 at 103 and close the remaining 75 at
+  108, not at 112.
 
 ### Requirement: Reduction facts
 

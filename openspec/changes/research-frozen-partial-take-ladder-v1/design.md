@@ -29,6 +29,10 @@ Today in research_service (main 7a07ca5):
   4. the winner becomes the single `ExitFill` and the position closes.
 - `InitialProtection` holds the frozen stop/take prices
   (`anchor × (1 ± ratio)`, anchor = signal-bar close).
+- Stop, take and managed stop currently fill at the bar open when the
+  open is already beyond the level (`static_exits._distance_fill_price`,
+  `managed_policy._managed_stop_fill`). This mirrors BBB/vectorbt gap
+  semantics and contradicts the master plan's continuous-market model.
 - `TradeRecord` assumes one exit price for `quantity`, and its
   validator checks fee/net/equity/R arithmetic.
 - Persistence writes `model_dump(mode="json")` of
@@ -43,11 +47,15 @@ Today in research_service (main 7a07ca5):
   the smallest structural change: a reduction phase before the existing,
   untouched arbitration.
 - One strategic position stays one trade.
-- Output without legs stays byte-identical.
+- One execution model for every resting exit order: stop, managed stop,
+  partial take and final take each fill at exactly their level.
+- Output without legs stays byte-identical on market data without
+  gap-through bars.
 
 **Non-Goals:**
-- Changing arbitration priorities, `_distance_fill_price`, managed
-  policy, sizing or batch summaries.
+- Changing arbitration priorities, managed policy decisions, sizing or
+  batch summaries.
+- Gap or slippage modelling of any kind.
 - Runtime, executor or live concerns.
 
 ## Decisions
@@ -130,7 +138,9 @@ is built conditionally: `entry_filled` gets `partial_takes` only when
 legs exist.
 
 As a result, `strategy_evaluation.json`, `trades.json` and
-`execution_events.json` are byte-identical without legs. Reading old
+`execution_events.json` are byte-identical without legs, subject to D8:
+a bar that opens beyond a stop or final level changes its fill price by
+design. Reading old
 artifacts still works through defaults.
 
 Alternative considered: `Field(exclude_if=…)`. It was rejected because
@@ -182,13 +192,39 @@ carries the reductions, and its events show them. There is no trade and
 no equity update, which is consistent with "open positions reported, not
 forced".
 
-### D8. Gaps
+### D8. One level-fill model for resting exits (continuous market)
 
-Legs fill at exactly their level (owner decision: continuous market). The
-stop and the final take keep `_distance_fill_price`, so when a bar opens
-beyond the final level, the final fills at the open. Legs nearer than
-the final level still fill at their own levels. This is the documented
-V1 behaviour, not a defect.
+Owner decision: V1 assumes a continuous crypto-futures market. Every
+resting exit order fills at exactly its frozen reference level, and a
+bar that opens beyond a level does not fill at the open.
+
+| Order | Touched when (long) | Touched when (short) | Fill |
+|---|---|---|---|
+| initial stop | `low ≤ level` | `high ≥ level` | level |
+| managed stop | `low ≤ level` | `high ≥ level` | level |
+| partial take | `high ≥ level` | `low ≤ level` | level |
+| final take | `high ≥ level` | `low ≤ level` | level |
+
+Examples: long final 108 with open 112 fills at 108, not 112. Long stop
+95 with open 90 fills at 95, not 90. Short is the mirror.
+
+Implementation:
+- `static_exits._distance_fill_price` returns the level whenever the bar
+  reached it, with the open branches removed. It is shared by the
+  projection loop (`projection_static_exits.py`) and the legacy dense
+  loop, so both follow the same model.
+- `managed_policy._managed_stop_fill` gets the same change.
+- The leg traversal uses the same touch test.
+- Arbitration, candidate collection and priorities are unchanged; only
+  the fill price on a gap-through bar changes.
+
+This modifies two existing requirements: `research-static-exit-arbitration-v1`
+"Distance fill semantics" and `research-managed-policy-consumption-v1`
+"Managed stop execution". The existing gap tests
+(`test_static_exit_arbitration.py` 73/81/89,
+`test_managed_policy_consumption.py` 156) are rewritten to the level
+fill. Parity with BBB/vectorbt is deliberately not kept on gap-through
+bars; on bars without a gap-through the fill is the same as before.
 
 ### D9. Scope of the loop change
 
@@ -203,8 +239,11 @@ V1 behaviour, not a defect.
 ## Risks / Trade-offs
 
 - [Byte drift for existing runs through new defaulted fields] → D4
-  serializers. A regression gate re-runs recorded no-leg fixtures and
-  compares sha256 values.
+  serializers. A regression gate re-runs recorded no-leg fixtures
+  without gap-through bars and compares sha256 values.
+- [Gap-through bars change stop/final fills for existing specs] →
+  Accepted by D8 and not a regression. A separate test pins the new
+  fill on synthetic gap-through bars.
 - [Float ratio and fraction converted to Decimal] → `Decimal(str(x))`
   (shortest repr) for both, the same convention as the existing ratios.
 - [Realised leg PnL of an open-at-end position is not in equity] → This
