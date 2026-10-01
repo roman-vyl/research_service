@@ -67,7 +67,7 @@ end of every group, and it is never re-recorded.
 
 ## 3. Frozen leg levels on the position
 
-- [ ] 3.1 `domain/execution.py`: add `ResolvedPartialTake` and
+- [x] 3.1 `domain/execution.py`: add `ResolvedPartialTake` and
       `InitialProtection.partial_takes = ()`.
       `projection_entry.resolve_initial_protection_from_opportunity`
       resolves levels `anchor × (1 ± ratio)` and quantities
@@ -79,7 +79,7 @@ end of every group, and it is never re-recorded.
       - a leg beyond the final take, stored without comparison;
       - a non-positive short leg rejected;
       - unchanged protection without legs.
-- [ ] 3.2 Run the group 0 gate. Verify: green.
+- [x] 3.2 Run the group 0 gate. Verify: green.
 
 ## 4. Traversal and the loop reduction phase
 

@@ -34,6 +34,7 @@ from research_service.domain.execution import (
     InitialProtection,
     InitialProtectionAttribution,
     PositionState,
+    ResolvedPartialTake,
 )
 from research_service.execution.entry import execute_entry, resolve_entry_fill_price
 
@@ -122,6 +123,28 @@ def resolve_initial_protection_from_opportunity(
     if take_price is not None and take_price <= 0:
         raise InvalidRequest("take-profit ratio produces a non-positive price")
 
+    partial_takes = []
+    for leg in opportunity.partial_takes:
+        leg_ratio = Decimal(str(leg.ratio))
+        level = anchor * (one + leg_ratio) if entry_fill.side == "long" else anchor * (one - leg_ratio)
+        if level <= 0:
+            raise InvalidRequest("partial take ratio produces a non-positive price")
+        fraction = Decimal(str(leg.fraction_of_initial))
+        partial_takes.append(
+            ResolvedPartialTake(
+                take_id=leg.take_id,
+                ratio=leg_ratio,
+                fraction_of_initial=fraction,
+                level=level,
+                quantity=fraction * entry_fill.quantity,
+                attribution=InitialProtectionAttribution(
+                    rule_id=leg.attribution.rule_id,
+                    component_id=leg.attribution.component_id,
+                    exit_kind=leg.attribution.exit_kind,
+                ),
+            )
+        )
+
     return InitialProtection(
         side=entry_fill.side,
         source_bar_index=entry_fill.bar_index,
@@ -133,6 +156,7 @@ def resolve_initial_protection_from_opportunity(
         take_profit_price=take_price,
         stop_loss_attribution=_attribution(opportunity.initial_stop),
         take_profit_attribution=_attribution(opportunity.initial_take),
+        partial_takes=tuple(partial_takes),
     )
 
 

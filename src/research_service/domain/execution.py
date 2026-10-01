@@ -70,6 +70,31 @@ class InitialProtectionAttribution(BaseModel):
     layer: Literal["exit_policy"] = "exit_policy"
 
 
+class ResolvedPartialTake(BaseModel):
+    """One partial take leg frozen at entry (`research-partial-take-
+    execution-v1` "Frozen leg levels and quantities"): the absolute
+    `level` (`anchor x (1 +/- ratio)`, the final take's formula) and the
+    physical `quantity` (`fraction_of_initial x Q0`, not rounded). Never
+    recalculated after entry."""
+
+    model_config = ConfigDict(frozen=True)
+
+    take_id: str = Field(min_length=1)
+    ratio: Decimal = Field(gt=0)
+    fraction_of_initial: Decimal = Field(gt=0, lt=1)
+    level: Decimal = Field(gt=0)
+    quantity: Decimal = Field(gt=0)
+    attribution: InitialProtectionAttribution
+
+    @model_validator(mode="after")
+    def validate_attribution(self) -> "ResolvedPartialTake":
+        if self.attribution.exit_kind != "partial_take":
+            raise ValueError("partial take attribution must have exit_kind partial_take")
+        if self.attribution.rule_id != self.take_id:
+            raise ValueError("partial take take_id must equal attribution.rule_id")
+        return self
+
+
 class InitialProtection(BaseModel):
     """Initial static stop/take policy resolved at the entry bar.
 
@@ -94,6 +119,8 @@ class InitialProtection(BaseModel):
     take_profit_price: Decimal | None = Field(default=None, gt=0)
     stop_loss_attribution: InitialProtectionAttribution | None = None
     take_profit_attribution: InitialProtectionAttribution | None = None
+    # Wire order; Research orders by level at execution time (design D3).
+    partial_takes: tuple[ResolvedPartialTake, ...] = ()
     ready: Literal[True] = True
 
     @model_validator(mode="after")
@@ -108,6 +135,9 @@ class InitialProtection(BaseModel):
                 raise ValueError("short stop loss must not be below its anchor")
             if self.take_profit_price is not None and self.take_profit_price > self.anchor_price:
                 raise ValueError("short take profit must not exceed its anchor")
+        for leg in self.partial_takes:
+            if (self.side == "long") != (leg.level > self.anchor_price):
+                raise ValueError("partial take level must be on the profit side of its anchor")
         return self
 
 
