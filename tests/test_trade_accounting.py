@@ -15,6 +15,8 @@ from research_service.domain.contracts import (
 )
 from research_service.domain.execution import ExecutionPolicy
 from research_service.execution.loop import run_unified_execution_loop
+from research_service.accounting.contracts import TradeExitFill
+from partial_take_harness import FLAT as _FLAT, frame as _ladder_frame, run as _ladder_run
 
 
 def frame() -> MarketFrame:
@@ -306,4 +308,120 @@ def test_final_equity_mismatch_beyond_tolerance_still_fails_closed() -> None:
             fees_paid=Decimal("0"),
             net_pnl=sum((t.net_pnl for t in trades), Decimal("0")),
             trades=trades,
+        )
+
+
+# --- one trade record per laddered position (research-frozen-partial-take-
+# ladder-v1 tasks 6.1-6.2, research-trade-accounting-v1) -------------------
+
+
+_LADDER_BARS = [_FLAT, ("100", "109", "99.5", "100")]
+
+
+def _ladder_trade(fee_rate: str = "0", side: str = "long", bars=None) -> TradeRecord:
+    bars = bars or _LADDER_BARS
+    result = _ladder_run(side, bars[1:], entry_bar=bars[0])
+    accounting = account_execution_loop(
+        result,
+        _ladder_frame(bars),
+        AccountingPolicy(
+            initial_equity=Decimal("100000"),
+            entry_fee_rate=Decimal(fee_rate),
+            exit_fee_rate=Decimal(fee_rate),
+        ),
+    )
+    (trade,) = accounting.trades
+    return trade
+
+
+def test_laddered_long_trade_ledger_and_totals() -> None:
+    trade = _ladder_trade()
+    assert trade.quantity == Decimal("100")
+    assert trade.gross_pnl == Decimal("500")
+    assert trade.exit_price == Decimal("108.00")
+    assert trade.average_exit_price == Decimal("105")
+    assert trade.exit_notional == Decimal("10500")
+    assert [(f.kind, f.take_id, f.price, f.quantity) for f in trade.exit_fills] == [
+        ("partial_take", "tp1", Decimal("101.00"), Decimal("25.00")),
+        ("partial_take", "tp2", Decimal("103.00"), Decimal("25.00")),
+        ("final", None, Decimal("108.00"), Decimal("50.00")),
+    ]
+    assert trade.exit_candidate_type == "take_profit"
+    assert trade.exit_fills[-1].exit_kind == "take_profit"
+    assert trade.exit_fills[0].component_id == "pct_partial_take"
+
+
+def test_laddered_short_trade_gross_is_side_aware() -> None:
+    bars = [_FLAT, ("100", "100.5", "91", "100")]
+    trade = _ladder_trade(side="short", bars=bars)
+    assert trade.gross_pnl == Decimal("25") * 1 + Decimal("25") * 3 + Decimal("50") * 8
+    assert trade.average_exit_price == Decimal("95")
+
+
+def test_exit_fee_is_summed_per_fill() -> None:
+    trade = _ladder_trade(fee_rate="0.001")
+    assert [f.fee for f in trade.exit_fills] == [
+        Decimal("2.52500"),
+        Decimal("2.57500"),
+        Decimal("5.40000"),
+    ]
+    assert trade.exit_fee == Decimal("10.50000")
+    assert trade.entry_fee == Decimal("10.000")
+    assert trade.net_pnl == Decimal("500") - Decimal("20.50000")
+    assert trade.equity_after == Decimal("100000") + trade.net_pnl
+
+
+def test_capture_uses_the_average_exit_price() -> None:
+    trade = _ladder_trade()
+    assert trade.path.captured_price == Decimal("5")
+    assert trade.path.mfe_price == Decimal("9")
+    assert trade.path.giveback_price == Decimal("4")
+
+
+def test_single_fill_record_dumps_exactly_as_before() -> None:
+    trade = _ladder_trade(bars=[_FLAT, ("100", "100", "94", "95")])
+    assert trade.exit_fills == ()
+    assert trade.average_exit_price is None
+    dumped = trade.model_dump(mode="json")
+    assert "exit_fills" not in dumped and "average_exit_price" not in dumped
+
+
+def _broken(**changes) -> None:
+    trade = _ladder_trade(fee_rate="0.001")
+    data = {**dict(trade), **changes}
+    TradeRecord(**data)
+
+
+def test_valid_laddered_record_round_trips() -> None:
+    trade = _ladder_trade(fee_rate="0.001")
+    assert TradeRecord.model_validate(trade.model_dump(mode="json")) == trade
+
+
+@pytest.mark.parametrize(
+    "mutate",
+    [
+        lambda fills: fills[:-1],  # quantities no longer sum to Q0
+        lambda fills: (fills[0].model_copy(update={"fee": fills[0].fee + 1}), *fills[1:]),
+        lambda fills: (fills[0].model_copy(update={"notional": fills[0].notional + 1}), *fills[1:]),
+        lambda fills: (*fills[:-1], fills[-1].model_copy(update={"kind": "partial_take", "take_id": "x"})),
+    ],
+    ids=["quantity-sum", "fee-sum", "notional-sum", "no-final-fill"],
+)
+def test_broken_ledger_sums_are_rejected(mutate) -> None:
+    trade = _ladder_trade(fee_rate="0.001")
+    with pytest.raises(ValidationError):
+        _broken(exit_fills=mutate(trade.exit_fills))
+
+
+def test_average_exit_price_requires_a_ledger() -> None:
+    trade = _ladder_trade(bars=[_FLAT, ("100", "100", "94", "95")])
+    with pytest.raises(ValidationError):
+        TradeRecord(**{**dict(trade), "average_exit_price": Decimal("95")})
+
+
+def test_exit_fill_take_id_matches_kind() -> None:
+    with pytest.raises(ValidationError):
+        TradeExitFill(
+            kind="final", take_id="tp1", bar_index=1, time_ms=0, price="1", quantity="1",
+            notional="1", fee="0",
         )

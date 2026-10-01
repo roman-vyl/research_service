@@ -146,7 +146,7 @@ end of every group, and it is never re-recorded.
 
 ## 6. Accounting of one strategic trade
 
-- [ ] 6.1 `accounting/contracts.py`: add `TradeExitFill`,
+- [x] 6.1 `accounting/contracts.py`: add `TradeExitFill`,
       `TradeRecord.exit_fills = ()` and `average_exit_price`, both
       omitted when empty, with sum validators on quantity, notional and
       fee (design D5).
@@ -155,7 +155,7 @@ end of every group, and it is never re-recorded.
       - a valid multi-fill record;
       - a rejection per broken sum;
       - a single-fill record dumping exactly as before.
-- [ ] 6.2 `accounting/service.account_closed_execution` builds fills
+- [x] 6.2 `accounting/service.account_closed_execution` builds fills
       from the reductions plus the closing fill:
       - gross PnL and exit fee summed per fill;
       - `exit_price` is the closing fill;
@@ -168,7 +168,7 @@ end of every group, and it is never re-recorded.
       `test_trade_native_r_accounting.py` reproduce the spec examples
       (gross 500, average exit 105), check fees per fill, and check R
       with a stop after a leg.
-- [ ] 6.3 Run the group 0 gate plus the existing accounting and sizing
+- [x] 6.3 Run the group 0 gate plus the existing accounting and sizing
       tests. Verify: green without changes to existing tests.
 
 ## 7. Persistence and reading
