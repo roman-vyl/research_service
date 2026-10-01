@@ -255,8 +255,42 @@ class ExecutionEvent(BaseModel):
     metadata: dict[str, object] = Field(default_factory=dict)
 
 
+class PositionReduction(BaseModel):
+    """One partial take fill (`research-partial-take-execution-v1`
+    "Reduction facts"): `fraction_of_initial x Q0` closed at exactly the
+    leg's frozen level. The position stays open for the remainder."""
+
+    model_config = ConfigDict(frozen=True)
+
+    fill_id: str = Field(min_length=1)
+    position_id: str = Field(min_length=1)
+    instance_id: str = Field(min_length=1)
+    side: ExecutionSide
+    take_id: str = Field(min_length=1)
+    bar_index: int = Field(ge=0)
+    time_ms: int = Field(ge=0)
+    level: Decimal = Field(gt=0)
+    fill_price: Decimal = Field(gt=0)
+    quantity: Decimal = Field(gt=0)
+    fraction_of_initial: Decimal = Field(gt=0, lt=1)
+    attribution: InitialProtectionAttribution
+
+    @model_validator(mode="after")
+    def validate_fill(self) -> "PositionReduction":
+        if self.fill_price != self.level:
+            raise ValueError("partial take fills at exactly its level")
+        if self.attribution.exit_kind != "partial_take":
+            raise ValueError("reduction attribution must have exit_kind partial_take")
+        return self
+
+
 class PositionExecution(BaseModel):
-    """Execution facts for one position, before fees/PnL accounting."""
+    """Execution facts for one position, before fees/PnL accounting.
+
+    `reductions` are the partial take fills in bar and traversal order;
+    `exit_fill` keeps its meaning, the fill that closes what remains.
+    The remaining quantity is derived (`remaining_quantity`), never
+    stored."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -264,9 +298,30 @@ class PositionExecution(BaseModel):
     status: Literal["open", "closed"]
     exit_fill: ExitFill | None = None
     exit_arbitration: ExitArbitrationResult | None = None
+    reductions: tuple[PositionReduction, ...] = ()
+
+    @property
+    def remaining_quantity(self) -> Decimal:
+        """Q0 minus every reduction: the quantity the closing fill closes,
+        or the quantity still open."""
+
+        reduced = sum((item.quantity for item in self.reductions), Decimal("0"))
+        return self.position.entry_fill.quantity - reduced
 
     @model_validator(mode="after")
     def validate_status(self) -> "PositionExecution":
+        take_ids = [item.take_id for item in self.reductions]
+        if len(set(take_ids)) != len(take_ids):
+            raise ValueError("a partial take fills at most once per position")
+        for item in self.reductions:
+            if item.position_id != self.position.position_id:
+                raise ValueError("reduction belongs to another position")
+            if item.bar_index <= self.position.entry_fill.bar_index:
+                raise ValueError("a partial take never fills on the entry bar")
+            if self.exit_fill is not None and item.bar_index > self.exit_fill.bar_index:
+                raise ValueError("reduction after the closing fill")
+        if self.reductions and self.remaining_quantity <= 0:
+            raise ValueError("reductions must leave a positive remaining quantity")
         if self.status == "closed":
             if self.exit_fill is None or self.exit_arbitration is None:
                 raise ValueError("closed execution requires exit fill and arbitration")

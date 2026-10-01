@@ -21,6 +21,7 @@ from __future__ import annotations
 from collections.abc import Callable
 
 from research_service.domain.contracts import (
+    Candle,
     HistoricalExecutionProjectionIndex,
     ManagedReplayResult,
     MarketFrame,
@@ -31,11 +32,14 @@ from research_service.domain.execution import (
     ExecutionLoopResult,
     ExecutionPolicy,
     ExitArbitrationResult,
+    ExitCandidate,
     ExitFill,
     PositionExecution,
+    PositionReduction,
     PositionState,
 )
 from research_service.execution.managed_policy_events import ManagedPolicyEvent
+from research_service.execution.partial_takes import traverse_partial_takes
 from research_service.execution.managed_policy import (
     ManagedEffectiveState,
     ManagedPolicyTimeline,
@@ -132,6 +136,8 @@ def run_projection_execution_loop(
     current_managed_timeline: ManagedPolicyTimeline | None = None
     current_managed_trade_state: ManagedTradeState | None = None
     current_managed_effective: ManagedEffectiveState | None = None
+    # Partial take fills of the currently open position (design D2).
+    current_reductions: list[PositionReduction] = []
     completed: list[PositionExecution] = []
     events: list[ExecutionEvent] = []
 
@@ -160,9 +166,12 @@ def run_projection_execution_loop(
                 managed_state,
                 bar_index=bar_index,
             )
-            arbitration = arbitrate_unified_exit_candidates(
-                (*static_candidates, *managed_candidates)
-            )
+            candidates = (*static_candidates, *managed_candidates)
+            if current_position.initial_protection.partial_takes:
+                current_reductions.extend(
+                    _reduction_phase(current_position, candle, bar_index, candidates, current_reductions)
+                )
+            arbitration = arbitrate_unified_exit_candidates(candidates)
             exit_fill = execute_unified_exit(current_position, arbitration)
             if exit_fill is not None:
                 closed_execution = PositionExecution(
@@ -170,6 +179,7 @@ def run_projection_execution_loop(
                         status="closed",
                         exit_fill=exit_fill,
                         exit_arbitration=arbitration,
+                        reductions=tuple(current_reductions),
                     )
                 completed.append(closed_execution)
                 if closed_position_consumer is not None:
@@ -178,6 +188,7 @@ def run_projection_execution_loop(
                     _exit_event(current_position, exit_fill=exit_fill, arbitration=arbitration)
                 )
                 current_position = None
+                current_reductions = []
                 current_managed_timeline = None
                 current_managed_trade_state = None
                 current_managed_effective = None
@@ -235,7 +246,13 @@ def run_projection_execution_loop(
             )
 
     if current_position is not None:
-        completed.append(PositionExecution(position=current_position, status="open"))
+        completed.append(
+            PositionExecution(
+                position=current_position,
+                status="open",
+                reductions=tuple(current_reductions),
+            )
+        )
         last_candle = market_frame.candles[-1]
         events.append(
             ExecutionEvent(
@@ -260,6 +277,38 @@ def run_projection_execution_loop(
         positions=tuple(completed),
         events=tuple(events),
         final_open_position=current_position,
+    )
+
+
+_STOP_CANDIDATES = frozenset({"stop_loss", "managed_stop"})
+
+
+def _reduction_phase(
+    position: PositionState,
+    candle: Candle,
+    bar_index: int,
+    candidates: tuple[ExitCandidate, ...],
+    filled: list[PositionReduction],
+) -> tuple[PositionReduction, ...]:
+    """Design D1: a stop or managed-stop candidate means the existing
+    arbitration closes everything and no take level is traversed.
+    Otherwise touched legs fill in price order up to the final take's
+    level; arbitration afterwards is unchanged, so a touched final take
+    (`take_profit`, priority 3) closes the remainder ahead of runtime and
+    signal exits."""
+
+    if any(candidate.candidate_type in _STOP_CANDIDATES for candidate in candidates):
+        return ()
+    final_level = next(
+        (c.reference_level for c in candidates if c.candidate_type == "take_profit"),
+        None,
+    )
+    return traverse_partial_takes(
+        position,
+        candle,
+        bar_index=bar_index,
+        filled_take_ids={item.take_id for item in filled},
+        final_level=final_level,
     )
 
 

@@ -83,7 +83,7 @@ end of every group, and it is never re-recorded.
 
 ## 4. Traversal and the loop reduction phase
 
-- [ ] 4.1 New `execution/partial_takes.py` with a pure
+- [x] 4.1 New `execution/partial_takes.py` with a pure
       `traverse_partial_takes` (design D1). It takes the resolved legs,
       the filled ids, the side, the candle and the final level (or
       `None`), and returns the ordered reductions.
@@ -97,7 +97,7 @@ end of every group, and it is never re-recorded.
       - already-filled legs skipped;
       - fill at the exact level when the bar opens beyond it;
       - the short mirror.
-- [ ] 4.2 `execution/projection_loop.py`: add the reduction phase before
+- [x] 4.2 `execution/projection_loop.py`: add the reduction phase before
       the unchanged arbitration:
       - no traversal when a `stop_loss` or `managed_stop` candidate
         exists;
@@ -120,10 +120,10 @@ end of every group, and it is never re-recorded.
       - the entry bar reaching every level;
       - `disable_initial_tp` with legs;
       - a managed stop on a bar that touches a leg.
-- [ ] 4.3 Cover the master plan §7 truth table rows 1–16 as
+- [x] 4.3 Cover the master plan §7 truth table rows 1–16 as
       parametrised cases in `test_partial_take_execution.py`. Verify:
       every row passes, and a row comment cites its number.
-- [ ] 4.4 Run the group 0 gate plus `test_unified_execution_loop.py`,
+- [x] 4.4 Run the group 0 gate plus `test_unified_execution_loop.py`,
       `test_static_exit_arbitration.py`, `test_unified_exit_arbitration.py`
       and the managed policy tests. Verify: green without changes to
       those tests.
