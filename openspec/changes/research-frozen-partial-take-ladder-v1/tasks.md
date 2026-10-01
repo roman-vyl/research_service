@@ -47,7 +47,7 @@ end of every group, and it is never re-recorded.
 
 ## 2. Decoding the ladder
 
-- [ ] 2.1 `domain/contracts.py`:
+- [x] 2.1 `domain/contracts.py`:
       - add `PartialTakeLegDTO` (`extra="forbid"`);
       - add `ExecutableEntryOpportunityDTO.partial_takes = ()`;
       - widen `ExitAttributionDTO.exit_kind` with `"partial_take"`;
@@ -59,11 +59,11 @@ end of every group, and it is never re-recorded.
       outside (0, 1), sum ≥ 1, duplicate `take_id`, `take_id` ≠
       `rule_id`, wrong leg kind, `partial_take` on `initial_take`,
       `initial_stop` or a signal).
-- [ ] 2.2 Omit-when-empty serializer on `ExecutableEntryOpportunityDTO`
+- [x] 2.2 Omit-when-empty serializer on `ExecutableEntryOpportunityDTO`
       (design D4). Verify: a dump without legs has the same key set as
       before, and a dump with legs reproduces the Engine scenario JSON
       at `a4c3b02` exactly.
-- [ ] 2.3 Run the group 0 gate. Verify: green.
+- [x] 2.3 Run the group 0 gate. Verify: green.
 
 ## 3. Frozen leg levels on the position
 

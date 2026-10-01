@@ -66,7 +66,7 @@ class InitialProtectionAttribution(BaseModel):
 
     rule_id: str = Field(min_length=1)
     component_id: str = Field(min_length=1)
-    exit_kind: Literal["stop_loss", "take_profit", "signal"]
+    exit_kind: Literal["stop_loss", "take_profit", "signal", "partial_take"]
     layer: Literal["exit_policy"] = "exit_policy"
 
 
