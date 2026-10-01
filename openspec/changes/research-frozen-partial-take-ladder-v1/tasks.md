@@ -130,7 +130,7 @@ end of every group, and it is never re-recorded.
 
 ## 5. Events
 
-- [ ] 5.1 Add the `position_reduced` event type (design D6). Emit it
+- [x] 5.1 Add the `position_reduced` event type (design D6). Emit it
       per reduction, before the same bar's `exit_filled`. `entry_filled`
       metadata lists the resolved legs only when legs exist.
 
@@ -139,10 +139,10 @@ end of every group, and it is never re-recorded.
       - the metadata keys and the `remaining_quantity` values;
       - `event_id` format;
       - `entry_filled` metadata without legs unchanged.
-- [ ] 5.2 Open position at range end with reductions (design D7).
+- [x] 5.2 Open position at range end with reductions (design D7).
       Verify: a test shows `position_reduced` plus `position_left_open`
       events and no trade record.
-- [ ] 5.3 Run the group 0 gate. Verify: green.
+- [x] 5.3 Run the group 0 gate. Verify: green.
 
 ## 6. Accounting of one strategic trade
 

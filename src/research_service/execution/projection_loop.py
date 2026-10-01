@@ -19,6 +19,7 @@ tests.
 from __future__ import annotations
 
 from collections.abc import Callable
+from decimal import Decimal
 
 from research_service.domain.contracts import (
     Candle,
@@ -168,9 +169,15 @@ def run_projection_execution_loop(
             )
             candidates = (*static_candidates, *managed_candidates)
             if current_position.initial_protection.partial_takes:
-                current_reductions.extend(
-                    _reduction_phase(current_position, candle, bar_index, candidates, current_reductions)
-                )
+                for reduction in _reduction_phase(
+                    current_position, candle, bar_index, candidates, current_reductions
+                ):
+                    current_reductions.append(reduction)
+                    events.append(
+                        _reduction_event(
+                            current_position, reduction, reductions=current_reductions
+                        )
+                    )
             arbitration = arbitrate_unified_exit_candidates(candidates)
             exit_fill = execute_unified_exit(current_position, arbitration)
             if exit_fill is not None:
@@ -397,6 +404,62 @@ def _entry_event(position: PositionState) -> ExecutionEvent:
             "quantity": str(fill.quantity),
             "stop_loss_price": _decimal_text(position.initial_protection.stop_loss_price),
             "take_profit_price": _decimal_text(position.initial_protection.take_profit_price),
+            "locked_exit_profile": position.locked_exit_profile,
+            # Only when legs exist, so events without legs stay
+            # byte-identical (design D4).
+            **_entry_partial_takes(position),
+        },
+    )
+
+
+def _entry_partial_takes(position: PositionState) -> dict[str, object]:
+    legs = position.initial_protection.partial_takes
+    if not legs:
+        return {}
+    return {
+        "partial_takes": [
+            {
+                "take_id": leg.take_id,
+                "level": str(leg.level),
+                "quantity": str(leg.quantity),
+                "fraction_of_initial": str(leg.fraction_of_initial),
+            }
+            for leg in legs
+        ]
+    }
+
+
+def _reduction_event(
+    position: PositionState,
+    reduction: PositionReduction,
+    *,
+    reductions: list[PositionReduction],
+) -> ExecutionEvent:
+    """`position_reduced` (design D6). `reductions` already includes this
+    one, so `remaining_quantity` is the quantity left after it."""
+
+    remaining = position.entry_fill.quantity - sum(
+        (item.quantity for item in reductions), Decimal("0")
+    )
+    return ExecutionEvent(
+        event_id=f"event:{reduction.fill_id}",
+        event_type="position_reduced",
+        instance_id=position.instance_id,
+        position_id=position.position_id,
+        side=position.side,
+        bar_index=reduction.bar_index,
+        time_ms=reduction.time_ms,
+        fill_id=reduction.fill_id,
+        metadata={
+            "take_id": reduction.take_id,
+            "level": str(reduction.level),
+            "fill_price": str(reduction.fill_price),
+            "quantity": str(reduction.quantity),
+            "fraction_of_initial": str(reduction.fraction_of_initial),
+            "remaining_quantity": str(remaining),
+            "rule_id": reduction.attribution.rule_id,
+            "component_id": reduction.attribution.component_id,
+            "exit_kind": reduction.attribution.exit_kind,
             "locked_exit_profile": position.locked_exit_profile,
         },
     )

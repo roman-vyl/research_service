@@ -243,6 +243,7 @@ class ExecutionEvent(BaseModel):
     event_id: str = Field(min_length=1)
     event_type: Literal[
         "entry_filled",
+        "position_reduced",
         "exit_filled",
         "position_left_open",
     ]

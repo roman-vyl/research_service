@@ -12,10 +12,13 @@ from decimal import Decimal
 
 import pytest
 
+from research_service.accounting import AccountingPolicy
+from research_service.accounting.service import account_execution_loop
 from partial_take_harness import (
     D,
     FLAT,
     fills,
+    frame,
     managed_projection,
     run,
 )
@@ -214,3 +217,78 @@ def test_open_position_keeps_its_reductions() -> None:
     assert execution.status == "open"
     assert [item.take_id for item in execution.reductions] == ["tp1"]
     assert execution.remaining_quantity == Decimal("75.00")
+
+
+# --- events (task 5.1-5.2, design D6-D7) ----------------------------------
+
+
+def _event_rows(result):
+    return [(event.bar_index, event.event_type, event.fill_id) for event in result.events]
+
+
+def test_leg_and_final_on_one_bar_emit_reduced_before_exit() -> None:
+    result = run("long", [("100", "109", "99.5", "100")])
+    position_id = result.positions[0].position.position_id
+    assert [(bar, kind) for bar, kind, _ in _event_rows(result)] == [
+        (0, "entry_filled"),
+        (1, "position_reduced"),
+        (1, "position_reduced"),
+        (1, "exit_filled"),
+    ]
+    assert [fill_id for _, kind, fill_id in _event_rows(result) if kind == "position_reduced"] == [
+        f"reduce:{position_id}:tp1",
+        f"reduce:{position_id}:tp2",
+    ]
+    assert result.events[1].event_id == f"event:reduce:{position_id}:tp1"
+
+
+def test_reduction_event_metadata() -> None:
+    result = run("long", [("100", "104", "99.5", "100")])
+    first, second = (event for event in result.events if event.event_type == "position_reduced")
+    assert first.metadata == {
+        "take_id": "tp1",
+        "level": "101.00",
+        "fill_price": "101.00",
+        "quantity": "25.00",
+        "fraction_of_initial": "0.25",
+        "remaining_quantity": "75.00",
+        "rule_id": "tp1",
+        "component_id": "pct_partial_take",
+        "exit_kind": "partial_take",
+        "locked_exit_profile": "aligned",
+    }
+    assert second.metadata["remaining_quantity"] == "50.00"
+    assert second.metadata["level"] == "103.00"
+
+
+def test_entry_filled_lists_legs_only_when_present() -> None:
+    with_legs = run("short", [FLAT])
+    assert with_legs.events[0].metadata["partial_takes"] == [
+        {"take_id": "tp1", "level": "99.00", "quantity": "25.00", "fraction_of_initial": "0.25"},
+        {"take_id": "tp2", "level": "97.00", "quantity": "25.00", "fraction_of_initial": "0.25"},
+    ]
+    without_legs = run("short", [FLAT], legs=())
+    assert set(without_legs.events[0].metadata) == {
+        "reference_price",
+        "fill_price",
+        "quantity",
+        "stop_loss_price",
+        "take_profit_price",
+        "locked_exit_profile",
+    }
+
+
+def test_range_end_after_a_leg_reports_reduction_and_left_open_without_a_trade() -> None:
+    bars = [FLAT, ("100", "101.5", "99.5", "100")]
+    result = run("long", bars[1:])
+    assert [event.event_type for event in result.events] == [
+        "entry_filled",
+        "position_reduced",
+        "position_left_open",
+    ]
+    accounting = account_execution_loop(
+        result, frame(bars), AccountingPolicy(initial_equity=Decimal("100000"))
+    )
+    assert accounting.trades == ()
+    assert accounting.final_equity == Decimal("100000")
+    assert accounting.open_position_count == 1
