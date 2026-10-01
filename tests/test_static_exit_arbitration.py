@@ -6,6 +6,7 @@ from research_service.domain.contracts import Candle, MarketRange, StrategyEvalu
 from research_service.domain.errors import InvalidRequest
 from research_service.domain.execution import EntryFill, InitialProtection, PositionState
 from research_service.execution.static_exits import (
+    _distance_fill_price,
     arbitrate_static_exit_candidates,
     collect_static_exit_candidates,
     execute_static_exit,
@@ -70,34 +71,82 @@ def candle(open_, high, low, close):
     return Candle(open_time_ms=300_000, open=open_, high=high, low=low, close=close, volume="1")
 
 
-def test_long_stop_gap_fills_at_open() -> None:
+# research-static-exit-arbitration-v1 "Distance fill semantics"
+# (research-frozen-partial-take-ladder-v1, design D8): continuous market,
+# a level crossed by the bar open still fills at exactly the level.
+
+
+def test_long_stop_gap_fills_at_level_not_open() -> None:
     candidates = collect_static_exit_candidates(
         evaluation(), position(), candle("97", "99", "96", "98"), bar_index=1
     )
     assert candidates[0].candidate_type == "stop_loss"
-    assert candidates[0].fill_price == Decimal("97")
+    assert candidates[0].fill_price == Decimal("98")
 
 
-def test_long_take_gap_fills_at_open() -> None:
+def test_long_take_gap_fills_at_level_not_open() -> None:
     candidates = collect_static_exit_candidates(
         evaluation(), position(), candle("106", "107", "104", "106"), bar_index=1
     )
     assert candidates[0].candidate_type == "take_profit"
-    assert candidates[0].fill_price == Decimal("106")
+    assert candidates[0].fill_price == Decimal("105")
 
 
-def test_short_gap_semantics_are_side_aware() -> None:
+def test_short_gap_fills_at_level_not_open() -> None:
     stop = collect_static_exit_candidates(
         evaluation(), position("short"), candle("103", "104", "101", "102"), bar_index=1
     )
     assert stop[0].candidate_type == "stop_loss"
-    assert stop[0].fill_price == Decimal("103")
+    assert stop[0].fill_price == Decimal("102")
 
     take = collect_static_exit_candidates(
         evaluation(), position("short"), candle("94", "96", "93", "94.5"), bar_index=1
     )
     assert take[0].candidate_type == "take_profit"
-    assert take[0].fill_price == Decimal("94")
+    assert take[0].fill_price == Decimal("95")
+
+
+@pytest.mark.parametrize(
+    ("side", "is_loss", "level", "open_", "high", "low"),
+    [
+        ("long", False, "108", "112", "113", "111"),  # final 108, open 112 -> 108
+        ("long", True, "95", "90", "91", "89"),  # stop 95, open 90 -> 95
+        ("short", False, "92", "88", "89", "87"),  # final 92, open 88 -> 92
+        ("short", True, "105", "110", "111", "109"),  # stop 105, open 110 -> 105
+    ],
+)
+def test_gap_through_fills_at_the_frozen_level(side, is_loss, level, open_, high, low) -> None:
+    price = _distance_fill_price(
+        side, candle(open_, high, low, open_), level=Decimal(level), is_loss=is_loss
+    )
+    assert price == Decimal(level)
+
+
+def test_whole_bar_beyond_the_level_fills_at_level() -> None:
+    long_stop = collect_static_exit_candidates(
+        evaluation(), position(), candle("90", "91", "89", "90"), bar_index=1
+    )
+    assert [(c.candidate_type, c.fill_price) for c in long_stop] == [
+        ("stop_loss", Decimal("98"))
+    ]
+    long_take = collect_static_exit_candidates(
+        evaluation(), position(), candle("112", "113", "111", "112"), bar_index=1
+    )
+    assert [(c.candidate_type, c.fill_price) for c in long_take] == [
+        ("take_profit", Decimal("105"))
+    ]
+    short_stop = collect_static_exit_candidates(
+        evaluation(), position("short"), candle("110", "111", "109", "110"), bar_index=1
+    )
+    assert [(c.candidate_type, c.fill_price) for c in short_stop] == [
+        ("stop_loss", Decimal("102"))
+    ]
+    short_take = collect_static_exit_candidates(
+        evaluation(), position("short"), candle("88", "89", "87", "88"), bar_index=1
+    )
+    assert [(c.candidate_type, c.fill_price) for c in short_take] == [
+        ("take_profit", Decimal("95"))
+    ]
 
 
 def test_same_bar_priority_is_stop_then_take_then_signal() -> None:

@@ -24,7 +24,7 @@ end of every group, and it is never re-recorded.
 
 ## 1. One level-fill model for resting exits
 
-- [ ] 1.1 `static_exits._distance_fill_price` and
+- [x] 1.1 `static_exits._distance_fill_price` and
       `managed_policy._managed_stop_fill`: remove the fill-at-open
       branches, so a reached level fills at exactly the level (design
       D8).
@@ -38,7 +38,7 @@ end of every group, and it is never re-recorded.
       - new cases cover long final 108 with open 112 → 108 and long stop
         95 with open 90 → 95, plus the short mirrors;
       - intrabar-touch tests pass unchanged.
-- [ ] 1.2 Run the group 0 gate plus the parity and loop tests
+- [x] 1.2 Run the group 0 gate plus the parity and loop tests
       (`test_i4_execution_parity.py`,
       `test_vectorbt_position_sizing_parity.py`,
       `test_unified_execution_loop.py`). Verify: green; any expectation
