@@ -58,6 +58,7 @@
 
 ## 5. Merge
 
-- [ ] 5.1 `make verify` green (ruff, mypy, pytest).
-- [ ] 5.2 On the owner's command: PR from this branch to `main`, merge,
-      then sync specs and archive this change.
+- [x] 5.1 `make verify` green (ruff, mypy, pytest): 450 passed.
+- [x] 5.2 On the owner's command: PR from this branch to `main`, merge,
+      then sync specs and archive this change. PR #13 merged as
+      `c976730`; specs synced and archived on 2026-10-01.
