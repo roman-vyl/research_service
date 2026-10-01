@@ -19,6 +19,7 @@ from research_service.domain.contracts import (
     ExitAttributionDTO,
     ExplicitRange,
     HistoricalExecutionProjectionDTO,
+    HistoricalManagedProjectionDTO,
     InitialProtectionLegDTO,
     ManagedBarDecision,
     ManagedReplayRequest,
@@ -374,7 +375,9 @@ def test_single_instance_backtest_composes_all_layers() -> None:
 
 def test_managed_replay_request_uses_reference_entry_price() -> None:
     strategy = FakeStrategyEngine(strategy_projection())
-    use_case = RunSingleInstanceBacktest(strategy, FakeMarketData(market_frame()))
+    use_case = RunSingleInstanceBacktest(
+        strategy, FakeMarketData(market_frame()), allow_legacy_managed_replay_fallback=True
+    )
 
     use_case.execute(
         SingleInstanceBacktestRequest(
@@ -453,7 +456,9 @@ def test_full_available_resolved_market_reaches_every_downstream_stage() -> None
     resolved_market = market_frame().market
     strategy = FakeStrategyEngine(strategy_projection(market=resolved_market))
     market = FakeMarketData(market_frame())
-    use_case = RunSingleInstanceBacktest(strategy, market)
+    use_case = RunSingleInstanceBacktest(
+        strategy, market, allow_legacy_managed_replay_fallback=True
+    )
 
     use_case.execute(
         SingleInstanceBacktestRequest(
@@ -529,3 +534,34 @@ def test_sequential_closes_compound_the_next_entry_quantity() -> None:
     assert second.equity_before == first.equity_after
     assert second.quantity == first.equity_after / (Decimal("200") * Decimal("1.001"))
     assert outcome.execution.positions[1].position.entry_fill.quantity == second.quantity
+
+
+def test_managed_candidate_with_projection_skips_managed_replay_http_call() -> None:
+    """`historical-managed-projection-v1` computational-parity acceptance
+    criterion, exercised through the real `RunSingleInstanceBacktest`
+    seam: when the acquired projection already carries a (possibly
+    empty) `HistoricalManagedProjection`, the loop never calls
+    `evaluate_managed_replay` -- zero Strategy Engine requests per
+    opened trade, not one. Contrast with
+    `test_managed_replay_request_uses_reference_entry_price` above,
+    which proves the *fallback* path (no `managed` on the projection)
+    still calls it exactly once per position."""
+
+    projection = strategy_projection().model_copy(
+        update={
+            "managed": HistoricalManagedProjectionDTO(conditions={}, distances={}, rules=())
+        }
+    )
+    strategy = FakeStrategyEngine(projection)
+    use_case = RunSingleInstanceBacktest(strategy, FakeMarketData(market_frame()))
+
+    outcome = use_case.execute(
+        SingleInstanceBacktestRequest(
+            strategy=strategy_identity(),
+            range=ExplicitRange(from_ms=0, to_ms=900_000),
+            managed_policy_enabled=True,
+        )
+    )
+
+    assert strategy.managed_requests == []
+    assert outcome.execution.positions[0].exit_fill is not None

@@ -97,13 +97,20 @@ def make_request(*candidates: BatchCandidateRequest, **overrides: object) -> Bat
 
 
 def build_use_case(
-    strategy: object, market: FakeMarketData, tmp_path: Path
+    strategy: object,
+    market: FakeMarketData,
+    tmp_path: Path,
+    *,
+    allow_legacy_managed_replay_fallback: bool = False,
 ) -> tuple[RunBatchExperiment, PersistSingleInstanceRun]:
     persist_run = PersistSingleInstanceRun(FilesystemArtifactStore(tmp_path))
     use_case = RunBatchExperiment(
         strategy,  # type: ignore[arg-type]
         market,  # type: ignore[arg-type]
-        MaterializeBacktestProjectionOutcome(strategy),  # type: ignore[arg-type]
+        MaterializeBacktestProjectionOutcome(
+            strategy,  # type: ignore[arg-type]
+            allow_legacy_managed_replay_fallback=allow_legacy_managed_replay_fallback,
+        ),
         persist_run,
     )
     return use_case, persist_run
@@ -588,7 +595,9 @@ def test_batch_candidate_with_managed_policy_persists_real_events(tmp_path: Path
 
     strategy = ManagedEventsStrategyEngine(strategy_projection())
     market = FakeMarketData(market_frame())
-    use_case, _ = build_use_case(strategy, market, tmp_path)
+    use_case, _ = build_use_case(
+        strategy, market, tmp_path, allow_legacy_managed_replay_fallback=True
+    )
     request = make_request(candidate("managed-a", managed_policy_enabled=True))
 
     result = use_case.execute(request)

@@ -66,8 +66,25 @@ class MaterializeBacktestProjectionOutcome:
     materialized Research backtest outcome -- no further Engine range
     evaluation or MDS window resolution."""
 
-    def __init__(self, strategy_engine: StrategyEnginePort) -> None:
+    def __init__(
+        self,
+        strategy_engine: StrategyEnginePort,
+        *,
+        allow_legacy_managed_replay_fallback: bool = False,
+    ) -> None:
+        """`allow_legacy_managed_replay_fallback` (`historical-managed-
+        projection-v1`): production/default is `False` -- a managed
+        candidate whose acquired projection carries no
+        `HistoricalManagedProjection` fails closed rather than silently
+        falling back to a per-trade `/managed-replay` call (see
+        `execution/projection_loop.py::_resolve_managed_timeline`).
+        `True` is an explicit opt-in for parity/oracle test scenarios
+        that deliberately exercise the old per-trade path against a
+        fixture with no `managed` data -- never set by a production
+        caller."""
+
         self._strategy_engine = strategy_engine
+        self._allow_legacy_managed_replay_fallback = allow_legacy_managed_replay_fallback
 
     def execute(
         self,
@@ -118,8 +135,13 @@ class MaterializeBacktestProjectionOutcome:
             market_frame,
             request.execution,
             managed_replay_provider=managed_provider,
+            allow_legacy_managed_replay_fallback=self._allow_legacy_managed_replay_fallback,
             entry_quantity_provider=size_entry,
             closed_position_consumer=account_close,
+            # Local projection-path events land in the same list the
+            # legacy provider fills; only one of the two paths ever runs
+            # for a given position.
+            managed_event_sink=managed_policy_events if managed_provider is not None else None,
         )
         accounting = build_trade_accounting_result(
             execution,

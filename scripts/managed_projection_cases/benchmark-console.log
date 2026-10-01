@@ -1,0 +1,73 @@
+atomic_low #1 new: wall=0.87s research_cpu=0.06s engine_cpu=0.2199999999997999 trades=13 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 0} failed=0
+atomic_low #1 old: wall=7.43s research_cpu=0.56s engine_cpu=3.6900000000000546 trades=13 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 13} failed=0
+atomic_low #2 old: wall=7.28s research_cpu=0.53s engine_cpu=3.7200000000002547 trades=13 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 13} failed=0
+atomic_low #2 new: wall=0.99s research_cpu=0.07s engine_cpu=0.2199999999997999 trades=13 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 0} failed=0
+atomic_low #3 new: wall=0.92s research_cpu=0.07s engine_cpu=0.2600000000002183 trades=13 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 0} failed=0
+atomic_low #3 old: wall=7.43s research_cpu=0.52s engine_cpu=3.8099999999999454 trades=13 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 13} failed=0
+atomic_medium #1 new: wall=5.02s research_cpu=0.36s engine_cpu=1.3099999999999454 trades=99 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 0} failed=0
+atomic_medium #1 old: wall=335.46s research_cpu=55.74s engine_cpu=169.6199999999999 trades=99 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 99} failed=0
+atomic_medium #2 old: wall=334.19s research_cpu=56.08s engine_cpu=168.98000000000002 trades=99 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 99} failed=0
+atomic_medium #2 new: wall=4.93s research_cpu=0.36s engine_cpu=1.3600000000001273 trades=99 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 0} failed=0
+atomic_medium #3 new: wall=4.97s research_cpu=0.36s engine_cpu=1.3399999999996908 trades=99 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 0} failed=0
+atomic_medium #3 old: wall=332.44s research_cpu=55.32s engine_cpu=168.48000000000002 trades=99 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 99} failed=0
+atomic_high #1 new: wall=34.88s research_cpu=2.72s engine_cpu=9.420000000000073 trades=719 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 0} failed=0
+atomic_high #1 old: wall=>6000s interrupted
+composite_low #1 new: wall=0.83s research_cpu=0.09s engine_cpu=0.23999999999978172 trades=12 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 0} failed=0
+composite_low #1 old: wall=7.12s research_cpu=0.57s engine_cpu=3.910000000000764 trades=12 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 13} failed=0
+composite_low #2 old: wall=7.09s research_cpu=0.57s engine_cpu=3.9399999999996 trades=12 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 13} failed=0
+composite_low #2 new: wall=0.89s research_cpu=0.08s engine_cpu=0.25 trades=12 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 0} failed=0
+composite_low #3 new: wall=0.81s research_cpu=0.07s engine_cpu=0.25 trades=12 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 0} failed=0
+composite_low #3 old: wall=7.25s research_cpu=0.59s engine_cpu=4.0 trades=12 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 13} failed=0
+composite_medium #1 new: wall=5.25s research_cpu=0.47s engine_cpu=1.449999999999818 trades=91 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 0} failed=0
+composite_medium #1 old: wall=341.05s research_cpu=52.52s engine_cpu=180.15999999999985 trades=91 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 92} failed=0
+composite_medium #2 old: wall=338.06s research_cpu=55.77s engine_cpu=176.97000000000025 trades=91 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 92} failed=0
+composite_medium #2 new: wall=5.66s research_cpu=0.55s engine_cpu=1.5100000000002183 trades=91 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 0} failed=0
+composite_medium #3 new: wall=5.47s research_cpu=0.49s engine_cpu=1.4600000000000364 trades=91 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 0} failed=0
+composite_medium #3 old: wall=339.98s research_cpu=56.05s engine_cpu=177.76999999999953 trades=91 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 92} failed=0
+report: /tmp/composite-low-medium-report.json -> PASS
+composite_high #1 new: wall=37.46s research_cpu=3.88s engine_cpu=10.210000000000036 trades=707 counts={'range': 0, 'range_batch': 1, 'range_batch_variants': 1, 'managed_replay': 0} failed=0
+composite_high #1 old: wall=>1800s interrupted (operator-requested limit; process stopped after agent-limit overrun)
+Traceback (most recent call last):
+  File "/Users/mcroma/BBB_project/research_service/scripts/managed_projection_benchmark.py", line 219, in <module>
+    raise SystemExit(main())
+                     ^^^^^^
+  File "/Users/mcroma/BBB_project/research_service/scripts/managed_projection_benchmark.py", line 183, in main
+    summary, workload_failures = run_workload(
+                                 ^^^^^^^^^^^^^
+  File "/Users/mcroma/BBB_project/research_service/scripts/managed_projection_benchmark.py", line 147, in run_workload
+    run = measure_batch(mode, request, strategy_engine, market_data, artifacts_root, engine_pid)
+          ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mcroma/BBB_project/research_service/scripts/managed_projection_benchmark.py", line 107, in measure_batch
+    result = use_case.execute(request)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mcroma/BBB_project/research_service/src/research_service/application/experiments/run_batch.py", line 136, in execute
+    outcome.variant_id: self._settle_candidate(
+                        ^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mcroma/BBB_project/research_service/src/research_service/application/experiments/run_batch.py", line 188, in _settle_candidate
+    materialized = self._materialize.execute(
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mcroma/BBB_project/research_service/src/research_service/application/backtests/materialize_backtest_projection.py", line 132, in execute
+    execution = run_projection_execution_loop(
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mcroma/BBB_project/research_service/src/research_service/execution/projection_loop.py", line 200, in run_projection_execution_loop
+    current_managed_timeline, current_managed_trade_state = _open_managed_state(
+                                                            ^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mcroma/BBB_project/research_service/src/research_service/execution/projection_loop.py", line 328, in _open_managed_state
+    replay = managed_replay_provider(position)
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mcroma/BBB_project/research_service/src/research_service/application/backtests/materialize_backtest_projection.py", line 168, in evaluate
+    replay = self._strategy_engine.evaluate_managed_replay(
+             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mcroma/BBB_project/research_service/scripts/managed_projection_gate.py", line 88, in evaluate_managed_replay
+    return self._inner.evaluate_managed_replay(request)
+           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mcroma/BBB_project/research_service/src/research_service/adapters/http/strategy_engine_client.py", line 370, in evaluate_managed_replay
+    bars = tuple(
+           ^^^^^^
+  File "/Users/mcroma/BBB_project/research_service/src/research_service/adapters/http/strategy_engine_client.py", line 385, in <genexpr>
+    str(value) for value in _list(item.get("runtime_exit_rule_ids", []))
+                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/Users/mcroma/BBB_project/research_service/src/research_service/adapters/http/strategy_engine_client.py", line 584, in _list
+    def _list(value: object) -> list[object]:
+
+KeyboardInterrupt

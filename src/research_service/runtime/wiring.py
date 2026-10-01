@@ -19,6 +19,13 @@ class Container:
     strategy_engine: StrategyEnginePort
     market_data: MarketDataPort
     artifacts: ResearchArtifactStore
+    allow_legacy_managed_replay_fallback: bool = False
+    """`historical-managed-projection-v1`: production default is `False`
+    (fail closed -- see `RunSingleInstanceBacktest`'s own docstring).
+    `True` is a test-only opt-in for scenarios that deliberately
+    exercise the legacy per-trade `/managed-replay` path against a
+    fixture engine with no `HistoricalManagedProjection` -- never set
+    by `build_container()`."""
 
     def close(self) -> None:
         """Close the long-lived HTTP clients, if the wired port owns one.
