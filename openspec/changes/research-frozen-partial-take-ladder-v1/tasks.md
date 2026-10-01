@@ -3,7 +3,7 @@ end of every group, and it is never re-recorded.
 
 ## 0. Baseline gate for specs without legs
 
-- [ ] 0.1 Before any code change, on main `7a07ca5`, record a no-legs
+- [x] 0.1 Before any code change, on main `7a07ca5`, record a no-legs
       regression fixture:
       - a recorded Engine projection without `partial_takes`, both
         sides, with stop, final take, a runtime exit, a signal exit and
@@ -17,7 +17,7 @@ end of every group, and it is never re-recorded.
 
       No live Engine and no market data load: the fixture is a local
       file. Verify: the new gate test is green on unchanged code.
-- [ ] 0.2 The gate names the requirement it protects
+- [x] 0.2 The gate names the requirement it protects
       (`research-run-artifacts-v1` "Byte-identical artifacts without
       partial takes"). Verify: the test id or message cites it, and the
       test asserts the fixture has no gap-through bar.
