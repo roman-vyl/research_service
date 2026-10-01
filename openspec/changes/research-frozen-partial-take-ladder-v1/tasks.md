@@ -184,12 +184,12 @@ end of every group, and it is never re-recorded.
 
 ## 8. Integration checks
 
-- [ ] 8.1 End-to-end single run and batch through
+- [x] 8.1 End-to-end single run and batch through
       `MaterializeBacktestProjectionOutcome` on a recorded projection
       with one pct and one ATR leg in `always_on` plus one leg in a
       locked profile. Use a local fixture with no live Engine. Verify:
       - the trades, events and metrics match hand-computed values;
       - the batch summary equals the sum of single-run trades.
-- [ ] 8.2 Run `make verify` and `openspec validate
+- [x] 8.2 Run `make verify` and `openspec validate
       research-frozen-partial-take-ladder-v1 --strict`. Verify: all
       green.
