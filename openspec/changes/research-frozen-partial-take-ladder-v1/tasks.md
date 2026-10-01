@@ -173,14 +173,14 @@ end of every group, and it is never re-recorded.
 
 ## 7. Persistence and reading
 
-- [ ] 7.1 `persist_run.py` and `read_artifacts.py` write and read ladder
+- [x] 7.1 `persist_run.py` and `read_artifacts.py` write and read ladder
       content: opportunities with legs, trades with `exit_fills`, and
       `position_reduced` events. Old artifacts still read through
       defaults.
 
       Verify: tests in `test_run_artifacts.py` cover a round trip with
       legs and reading an artifact recorded before this change.
-- [ ] 7.2 Run the group 0 gate. Verify: green with no re-recording.
+- [x] 7.2 Run the group 0 gate. Verify: green with no re-recording.
 
 ## 8. Integration checks
 

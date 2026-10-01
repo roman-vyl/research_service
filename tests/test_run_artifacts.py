@@ -13,8 +13,19 @@ from research_service.application.backtests import (
     RunSingleInstanceBacktest,
     SingleInstanceBacktestRequest,
 )
-from research_service.domain.contracts import ExplicitRange
+from research_service.application.backtests.read_artifacts import ReadResearchRuns
+from research_service.domain.contracts import (
+    ExitAttributionDTO,
+    ExplicitRange,
+    PartialTakeLegDTO,
+)
 from research_service.domain.execution import ExecutionPolicy
+from no_legs_gate_fixture import (
+    gate_market_frame,
+    gate_opportunities,
+    gate_projection,
+    gate_request,
+)
 from test_single_instance_backtest import (
     FakeMarketData,
     FakeStrategyEngine,
@@ -136,3 +147,87 @@ def test_request_result_identity_is_required(tmp_path) -> None:
             accounting=outcome.accounting,
             managed_policy_events=outcome.managed_policy_events,
         )
+
+
+# --- partial take content (research-frozen-partial-take-ladder-v1 7.1) -----
+
+def _gate_run(opportunities=None):
+    request = gate_request()
+    outcome = RunSingleInstanceBacktest(
+        FakeStrategyEngine(gate_projection(opportunities)),
+        FakeMarketData(gate_market_frame()),
+    ).execute(request)
+    return request, outcome
+
+
+def _laddered_opportunities():
+    # The short entry at bar 3 (anchor 97, final take 94.09) gets one leg at
+    # 1% (96.03), touched on bar 4 before the final take on bar 5.
+    opportunities = list(gate_opportunities())
+    opportunities[1] = opportunities[1].model_copy(
+        update={
+            "partial_takes": (
+                PartialTakeLegDTO(
+                    take_id="pt_1pct",
+                    ratio=0.01,
+                    fraction_of_initial=0.25,
+                    attribution=ExitAttributionDTO(
+                        rule_id="pt_1pct", component_id="pct_partial_take", exit_kind="partial_take"
+                    ),
+                ),
+            )
+        }
+    )
+    return tuple(opportunities)
+
+
+def test_ladder_content_round_trips_through_persisted_artifacts(tmp_path) -> None:
+    request, outcome = _gate_run(_laddered_opportunities())
+    store = FilesystemArtifactStore(tmp_path)
+    _persist(store, request, outcome)
+    run_dir = tmp_path / outcome.run_id
+
+    evaluation = json.loads((run_dir / "strategy_evaluation.json").read_text())
+    legs = [o.get("partial_takes") for o in evaluation["entry_opportunities"]]
+    assert legs[1] == [
+        {
+            "take_id": "pt_1pct",
+            "ratio": 0.01,
+            "fraction_of_initial": 0.25,
+            "attribution": {
+                "rule_id": "pt_1pct",
+                "component_id": "pct_partial_take",
+                "exit_kind": "partial_take",
+            },
+        }
+    ]
+    assert [leg for i, leg in enumerate(legs) if i != 1] == [None] * 5
+
+    events = json.loads((run_dir / "execution_events.json").read_text())
+    reduced = [event for event in events if event["event_type"] == "position_reduced"]
+    assert len(reduced) == 1 and reduced[0]["bar_index"] == 4
+
+    trades = json.loads((run_dir / "trades.json").read_text())
+    laddered = [trade for trade in trades if "exit_fills" in trade]
+    assert len(laddered) == 1
+    assert [fill["kind"] for fill in laddered[0]["exit_fills"]] == ["partial_take", "final"]
+    assert all("exit_fills" not in t and "average_exit_price" not in t for t in trades if t is not laddered[0])
+
+    detail = ReadResearchRuns(store).detail(outcome.run_id)
+    assert detail.result.trades == outcome.accounting.trades
+    assert detail.result.execution_events == outcome.execution.events
+    assert detail.result.strategy_evaluation == outcome.strategy_evaluation
+
+
+def test_artifacts_written_before_the_ladder_still_read(tmp_path) -> None:
+    # The no-legs gate proves these bytes equal the pre-ladder bytes
+    # (recorded on main 7a07ca5), so reading them is reading an old run.
+    request, outcome = _gate_run()
+    store = FilesystemArtifactStore(tmp_path)
+    _persist(store, request, outcome)
+    detail = ReadResearchRuns(store).detail(outcome.run_id)
+    assert detail.result.trades and all(
+        trade.exit_fills == () and trade.average_exit_price is None
+        for trade in detail.result.trades
+    )
+    assert all(o.partial_takes == () for o in detail.result.strategy_evaluation.entry_opportunities)
