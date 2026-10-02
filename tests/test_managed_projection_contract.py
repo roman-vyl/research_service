@@ -132,6 +132,85 @@ def test_atomic_rules_decode_unchanged() -> None:
         "take_action",
         "runtime_exit",
     ]
+    stop = dto.rules[2]
+    assert stop.kind == "stop_action"
+    assert stop.stop_formula == "entry_offset"
+    assert stop.trigger_distance_id is None
+    serialized = dto.model_dump(mode="json")
+    serialized_stop = serialized["rules"][2]
+    assert "stop_formula" not in serialized_stop
+    assert "trigger_distance_id" not in serialized_stop
+
+
+@pytest.mark.parametrize("formula", ["initial_r_lock", "initial_r_trailing"])
+def test_initial_r_stop_formulas_decode_with_opaque_references(formula: str) -> None:
+    wire = _wire(
+        [
+            {
+                "kind": "stop_action",
+                "rule_id": "r-stop",
+                "activation_phase": "initial_risk",
+                "distance_id": "be",
+                "stop_formula": formula,
+                "trigger_distance_id": "bars5",
+            }
+        ]
+    )
+
+    (rule,) = HistoricalManagedProjectionDTO.model_validate(wire).rules
+    assert rule.kind == "stop_action"
+    assert rule.stop_formula == formula
+    assert rule.trigger_distance_id == "bars5"
+    serialized_rule = HistoricalManagedProjectionDTO.model_validate(wire).model_dump(mode="json")[
+        "rules"
+    ][0]
+    assert serialized_rule["stop_formula"] == formula
+    assert serialized_rule["trigger_distance_id"] == "bars5"
+
+
+@pytest.mark.parametrize(
+    "rule",
+    [
+        {
+            "kind": "stop_action",
+            "rule_id": "bad",
+            "activation_phase": "initial_risk",
+            "distance_id": "be",
+            "stop_formula": "entry_offset",
+            "trigger_distance_id": "bars5",
+        },
+        {
+            "kind": "stop_action",
+            "rule_id": "bad",
+            "activation_phase": "initial_risk",
+            "distance_id": "be",
+            "stop_formula": "initial_r_lock",
+        },
+        {
+            "kind": "stop_action",
+            "rule_id": "bad",
+            "activation_phase": "initial_risk",
+            "distance_id": "be",
+            "stop_formula": "strategy_component_name",
+        },
+    ],
+)
+def test_stop_formula_field_invariants_fail_decode(rule: dict[str, Any]) -> None:
+    with pytest.raises(ValidationError):
+        HistoricalManagedProjectionDTO.model_validate(_wire([rule]))
+
+
+def test_dangling_stop_trigger_reference_fails_decode() -> None:
+    rule = {
+        "kind": "stop_action",
+        "rule_id": "r-stop",
+        "activation_phase": "initial_risk",
+        "distance_id": "be",
+        "stop_formula": "initial_r_trailing",
+        "trigger_distance_id": "missing",
+    }
+    with pytest.raises(ValidationError, match="unknown ids"):
+        HistoricalManagedProjectionDTO.model_validate(_wire([rule]))
 
 
 @pytest.mark.parametrize(

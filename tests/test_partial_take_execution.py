@@ -61,6 +61,23 @@ def _break_even_stop(bar_count: int):
     )
 
 
+def _initial_r_trailing_stop(bar_count: int):
+    return managed_projection(
+        [
+            {
+                "kind": "stop_action",
+                "rule_id": "trail",
+                "activation_phase": "initial_risk",
+                "distance_id": "trail",
+                "stop_formula": "initial_r_trailing",
+                "trigger_distance_id": "trigger",
+            }
+        ],
+        bar_count=bar_count,
+        distances={"trigger": 1.0, "trail": 0.4},
+    )
+
+
 # --- master plan §7 truth table, rows 1-16, both sides --------------------
 
 _P13 = (("p1", 0.02, 0.25), ("p2", 0.06, 0.25), ("p3", 0.08, 0.25))  # row 14 legs
@@ -191,6 +208,24 @@ def test_managed_stop_on_a_bar_touching_a_leg_closes_everything() -> None:
     result = run("long", [("100.5", "102", "99.5", "100.5"), FLAT], managed=_break_even_stop(3))
     assert fills(result) == [(1, "managed_stop", D("100.0"), D("100"))]
     assert result.positions[0].reductions == ()
+
+
+def test_initial_r_trail_executes_latest_stop_on_next_bar() -> None:
+    # Initial risk is 5 (entry 100, static stop 95). Bar 1 reaches 106,
+    # triggering a 0.4R (=2) trail at 104. Its low also crosses 104, but the
+    # decision is not executable until bar 2, where the stop is then hit.
+    result = run(
+        "long",
+        [("100", "106", "99", "105"), ("105", "105", "103", "104")],
+        managed=_initial_r_trailing_stop(3),
+        legs=(),
+        take=0.20,
+    )
+
+    assert fills(result) == [(2, "managed_stop", D("104.0"), D("100"))]
+    execution = result.positions[0]
+    assert execution.exit_fill is not None
+    assert execution.exit_fill.rule_id == "trail"
 
 
 def test_entry_bar_touching_every_level_then_a_later_bar_fills_legs() -> None:

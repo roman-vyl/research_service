@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from decimal import Decimal
+from math import isfinite
 from typing import Literal, Mapping
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -245,11 +246,17 @@ def build_managed_policy_timeline_from_projection(
         for stop_rule in stop_rules:
             if not _at_least(phase, stop_rule.activation_phase):
                 continue
-            distance = projection.distances[stop_rule.distance_id][index]
-            if distance is None:
-                continue
-            price = entry_price + distance if side == "long" else entry_price - distance
-            candidates.append((price, stop_rule.rule_id))
+            price = _stop_candidate(
+                stop_rule,
+                projection,
+                index=index,
+                side=side,
+                entry_price=entry_price,
+                mfe_price=mfe_price,
+                initial_risk=initial_risk,
+            )
+            if price is not None:
+                candidates.append((price, stop_rule.rule_id))
         if candidates:
             updated = _tightened_stop(candidates, side, active_stop_price)
             if updated is not None:
@@ -489,11 +496,17 @@ def advance_managed_trade_state(
     for stop_rule in rule_set.stop_actions:
         if not _at_least(phase, stop_rule.activation_phase):
             continue
-        distance = projection.distances[stop_rule.distance_id][bar_index]
-        if distance is None:
-            continue
-        price = entry_price + distance if side == "long" else entry_price - distance
-        candidates.append((price, stop_rule.rule_id))
+        price = _stop_candidate(
+            stop_rule,
+            projection,
+            index=bar_index,
+            side=side,
+            entry_price=entry_price,
+            mfe_price=mfe_price,
+            initial_risk=state.initial_risk,
+        )
+        if price is not None:
+            candidates.append((price, stop_rule.rule_id))
     active_stop_price = state.active_stop_price
     active_stop_rule_id = state.active_stop_rule_id
     if candidates:
@@ -696,6 +709,48 @@ def _threshold_met(
 ) -> bool:
     threshold = projection.distances[distance_id][index]
     return threshold is not None and trade_metric_values[trade_metric] >= threshold
+
+
+def _stop_candidate(
+    rule: ManagedStopActionRuleDTO,
+    projection: HistoricalManagedProjectionDTO,
+    *,
+    index: int,
+    side: ExecutionSide,
+    entry_price: float,
+    mfe_price: float,
+    initial_risk: float | None,
+) -> float | None:
+    """Resolve one closed projection stop formula for one trade/bar.
+
+    The formula enum is execution semantics, not strategy identity. Numeric
+    policy values remain behind opaque projection distance references.
+    """
+
+    distance = projection.distances[rule.distance_id][index]
+    if distance is None or not isfinite(distance):
+        return None
+    if rule.stop_formula == "entry_offset":
+        return entry_price + distance if side == "long" else entry_price - distance
+
+    if initial_risk is None or initial_risk <= 0 or not isfinite(initial_risk):
+        return None
+    assert rule.trigger_distance_id is not None
+    trigger = projection.distances[rule.trigger_distance_id][index]
+    if trigger is None or not isfinite(trigger):
+        return None
+    mfe_distance = abs(mfe_price - entry_price)
+    if _mfe_r(mfe_distance, initial_risk) < trigger:
+        return None
+
+    scaled_distance = distance * initial_risk
+    if rule.stop_formula == "initial_r_lock":
+        return (
+            entry_price + scaled_distance
+            if side == "long"
+            else entry_price - scaled_distance
+        )
+    return mfe_price - scaled_distance if side == "long" else mfe_price + scaled_distance
 
 
 def _tightened_stop(
