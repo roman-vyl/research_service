@@ -18,6 +18,8 @@ from pydantic import (
     model_validator,
 )
 
+from research_service.domain.exact_decimal import exact_sum
+
 
 class AccountingPolicy(BaseModel):
     """Research-owned accounting assumptions."""
@@ -157,7 +159,7 @@ class TradeRecord(BaseModel):
             raise ValueError("exit_fills must be partial takes followed by one final fill")
         if final.price != self.exit_price or final.bar_index != self.exit_bar_index:
             raise ValueError("the final exit fill must be the closing fill")
-        if sum((item.quantity for item in self.exit_fills), Decimal("0")) != self.quantity:
+        if exact_sum(item.quantity for item in self.exit_fills) != self.quantity:
             raise ValueError("exit fill quantities differ from quantity")
         if sum((item.notional for item in self.exit_fills), Decimal("0")) != self.exit_notional:
             raise ValueError("exit fill notionals differ from exit_notional")

@@ -19,7 +19,6 @@ tests.
 from __future__ import annotations
 
 from collections.abc import Callable
-from decimal import Decimal
 
 from research_service.domain.contracts import (
     Candle,
@@ -28,6 +27,7 @@ from research_service.domain.contracts import (
     MarketFrame,
 )
 from research_service.domain.errors import InvalidRequest, UpstreamServiceError
+from research_service.domain.exact_decimal import exact_remainder
 from research_service.domain.execution import (
     ExecutionEvent,
     ExecutionLoopResult,
@@ -438,8 +438,8 @@ def _reduction_event(
     """`position_reduced` (design D6). `reductions` already includes this
     one, so `remaining_quantity` is the quantity left after it."""
 
-    remaining = position.entry_fill.quantity - sum(
-        (item.quantity for item in reductions), Decimal("0")
+    remaining = exact_remainder(
+        position.entry_fill.quantity, (item.quantity for item in reductions)
     )
     return ExecutionEvent(
         event_id=f"event:{reduction.fill_id}",
