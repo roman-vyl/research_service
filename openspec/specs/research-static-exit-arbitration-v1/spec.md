@@ -4,9 +4,7 @@
 
 Define how Research Service arbitrates static (non-managed) exit candidates
 — initial stop, initial take, and signal exit — for an open position.
-
 ## Requirements
-
 ### Requirement: Static policy ownership
 
 Research Service SHALL consume Strategy Engine signal-exit decisions and
@@ -32,13 +30,28 @@ start of the bar. The entry bar SHALL NOT close the newly opened position.
 
 ### Requirement: Distance fill semantics
 
-A stop or take level crossed by the bar open SHALL fill at the open.
-Otherwise an intrabar touch SHALL fill at the level.
+Research SHALL assume a continuous market. A stop or take level SHALL
+fill at exactly the level whenever the bar reached it: for a long
+position the stop when `low ≤ level` and the take when `high ≥ level`;
+for a short position the stop when `high ≥ level` and the take when
+`low ≤ level`. A bar that opens beyond the level SHALL NOT fill at the
+open.
 
 #### Scenario: Gap through the stop level
 
-- **WHEN** the bar open price is already beyond the stop level
-- **THEN** the fill price is the bar open, not the stop level.
+- **WHEN** a long position has a stop at 95 and the bar opens at 90
+- **THEN** the fill price SHALL be 95, not the bar open.
+
+#### Scenario: Gap through the take level
+
+- **WHEN** a long position has a take at 108 and the bar opens at 112
+- **THEN** the fill price SHALL be 108, not the bar open.
+
+#### Scenario: Short mirror
+
+- **WHEN** a short position has a stop at 105 and a take at 92, and one
+  bar opens at 110 while another opens at 88
+- **THEN** the stop SHALL fill at 105 and the take at 92.
 
 #### Scenario: Intrabar touch
 
@@ -68,3 +81,4 @@ SHALL retain losing candidates.
   eligible on the same bar
 - **THEN** the stop-loss candidate wins and the take-profit candidate is
   retained as a losing candidate in the arbitration trace.
+

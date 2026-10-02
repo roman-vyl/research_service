@@ -4,9 +4,7 @@
 
 Define how Research Service consumes Strategy Engine's managed-replay
 policy artifacts into execution candidates.
-
 ## Requirements
-
 ### Requirement: Policy ownership
 
 Research Service MUST consume managed policy semantics from Strategy
@@ -47,14 +45,22 @@ bar N and MUST become effective only at `effective_from_time_ms`.
 
 ### Requirement: Managed stop execution
 
-A managed stop crossed at bar open MUST fill at the open. An intrabar touch
-MUST fill at the stop level.
+A managed stop MUST fill at exactly its current level whenever the bar
+reached it (`low ≤ level` for long, `high ≥ level` for short), under the
+same continuous-market model as the initial stop. A bar that opens
+beyond the managed stop MUST NOT fill at the open.
 
 #### Scenario: Managed stop gapped through at open
 
 - **WHEN** the bar open price is already beyond the current managed stop
-- **THEN** the managed-stop candidate fills at the open, not the stop
-  level.
+- **THEN** the managed-stop candidate fills at the stop level, not the
+  open.
+
+#### Scenario: Managed stop intrabar touch
+
+- **WHEN** the bar open has not crossed the managed stop but the bar's
+  range touches it
+- **THEN** the managed-stop candidate fills at the stop level.
 
 ### Requirement: Runtime exits
 
@@ -240,3 +246,4 @@ criterion.
   projection path
 - **THEN** `/managed-replay` calls stay zero
 - **AND** Engine evaluation calls per candidate stay constant.
+
