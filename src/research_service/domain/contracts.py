@@ -6,7 +6,15 @@ import math
 from decimal import Decimal
 from typing import Annotated, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from research_service.domain.errors import UpstreamServiceError
 
@@ -345,15 +353,15 @@ class ExitAttributionDTO(BaseModel):
     """Shared attribution shape across every historical execution fact.
     Canonical `exit_kind` values: `stop_loss` (on `initial_stop`),
     `take_profit` (on `initial_take`), `signal` (on a signal-exit
-    candidate). No `layer` field on the wire -- Research derives the
-    canonical constant `exit_layer = "exit_policy"` downstream (I4), it is
-    not carried here."""
+    candidate), `partial_take` (only on a `partial_takes` leg). No `layer`
+    field on the wire -- Research derives the canonical constant
+    `exit_layer = "exit_policy"` downstream (I4), it is not carried here."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     rule_id: str = Field(min_length=1)
     component_id: str = Field(min_length=1)
-    exit_kind: Literal["stop_loss", "take_profit", "signal"]
+    exit_kind: Literal["stop_loss", "take_profit", "signal", "partial_take"]
 
 
 class InitialProtectionLegDTO(BaseModel):
@@ -374,6 +382,42 @@ class InitialProtectionLegDTO(BaseModel):
         return value
 
 
+class PartialTakeLegDTO(BaseModel):
+    """One frozen partial take leg (`research-partial-take-execution-v1`
+    "Partial take decoding"): close `fraction_of_initial` of the initial
+    quantity at `anchor x (1 +/- ratio)`. `take_id` is the Engine rule's
+    `instance_id` and equals `attribution.rule_id`."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    take_id: str = Field(min_length=1)
+    ratio: float
+    fraction_of_initial: float
+    attribution: ExitAttributionDTO
+
+    @field_validator("ratio")
+    @classmethod
+    def validate_ratio(cls, value: float) -> float:
+        if not math.isfinite(value) or value <= 0:
+            raise ValueError("partial take ratio must be finite and positive")
+        return value
+
+    @field_validator("fraction_of_initial")
+    @classmethod
+    def validate_fraction(cls, value: float) -> float:
+        if not math.isfinite(value) or not 0 < value < 1:
+            raise ValueError("partial take fraction_of_initial must be in (0, 1)")
+        return value
+
+    @model_validator(mode="after")
+    def validate_attribution(self) -> "PartialTakeLegDTO":
+        if self.attribution.exit_kind != "partial_take":
+            raise ValueError("partial take attribution must have exit_kind partial_take")
+        if self.attribution.rule_id != self.take_id:
+            raise ValueError("partial take take_id must equal attribution.rule_id")
+        return self
+
+
 class ExecutableEntryOpportunityDTO(BaseModel):
     """`entry_allowed AND protection_ready`, collapsed by Engine --
     `stop_ready` never exists as its own field on this contract.
@@ -388,6 +432,9 @@ class ExecutableEntryOpportunityDTO(BaseModel):
     locked_exit_profile: str
     initial_stop: InitialProtectionLegDTO | None
     initial_take: InitialProtectionLegDTO | None
+    # Absent on the wire when there are no legs, and omitted again on dump
+    # so artifacts without legs stay byte-identical (design D4).
+    partial_takes: tuple[PartialTakeLegDTO, ...] = ()
 
     @field_validator("locked_exit_profile")
     @classmethod
@@ -402,7 +449,24 @@ class ExecutableEntryOpportunityDTO(BaseModel):
             raise ValueError("initial_stop attribution must have exit_kind stop_loss")
         if self.initial_take is not None and self.initial_take.attribution.exit_kind != "take_profit":
             raise ValueError("initial_take attribution must have exit_kind take_profit")
+        take_ids = [leg.take_id for leg in self.partial_takes]
+        if len(set(take_ids)) != len(take_ids):
+            raise ValueError("partial take take_id values must be unique")
+        fractions = sum(
+            (Decimal(str(leg.fraction_of_initial)) for leg in self.partial_takes), Decimal("0")
+        )
+        if fractions >= 1:
+            raise ValueError("partial take fractions must sum below 1")
         return self
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_partial_takes(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        data: dict[str, object] = handler(self)
+        if not self.partial_takes:
+            data.pop("partial_takes", None)
+        return data
 
 
 class SignalExitCandidateDTO(BaseModel):

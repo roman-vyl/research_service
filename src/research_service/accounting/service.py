@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from typing import Literal
 
 from research_service.accounting.contracts import (
     AccountingPolicy,
     TradeAccountingResult,
+    TradeExitFill,
     TradePathMetrics,
     TradeRecord,
 )
@@ -87,18 +89,34 @@ def account_closed_execution(
         raise InvalidRequest("exit bar is outside market frame")
 
     quantity = entry.quantity
-    if execution.position.side == "long":
-        gross = (exit_fill.fill_price - entry.fill_price) * quantity
-    else:
-        gross = (entry.fill_price - exit_fill.fill_price) * quantity
-
     entry_notional = abs(entry.fill_price * quantity)
-    exit_notional = abs(exit_fill.fill_price * quantity)
     entry_fee = entry_notional * policy.entry_fee_rate
-    exit_fee = exit_notional * policy.exit_fee_rate
+    exit_fills: tuple[TradeExitFill, ...] = ()
+    average_exit_price: Decimal | None = None
+    if not execution.reductions:
+        if execution.position.side == "long":
+            gross = (exit_fill.fill_price - entry.fill_price) * quantity
+        else:
+            gross = (entry.fill_price - exit_fill.fill_price) * quantity
+        exit_notional = abs(exit_fill.fill_price * quantity)
+        exit_fee = exit_notional * policy.exit_fee_rate
+    else:
+        exit_fills = _exit_fills(execution, policy)
+        sign = Decimal("1") if execution.position.side == "long" else Decimal("-1")
+        gross = sum(
+            ((item.price - entry.fill_price) * item.quantity * sign for item in exit_fills),
+            Decimal("0"),
+        )
+        exit_notional = sum((item.notional for item in exit_fills), Decimal("0"))
+        exit_fee = sum((item.fee for item in exit_fills), Decimal("0"))
+        average_exit_price = exit_notional / quantity
     fees = entry_fee + exit_fee
     net = gross - fees
-    path = _calculate_path(execution, market)
+    path = _calculate_path(
+        execution,
+        market,
+        realised_exit_price=exit_fill.fill_price if average_exit_price is None else average_exit_price,
+    )
     hold_bars = exit_fill.bar_index - entry.bar_index + 1
 
     equity_after = equity_before + net
@@ -145,6 +163,78 @@ def account_closed_execution(
         initial_risk_amount=initial_risk_amount,
         gross_r_multiple=gross_r_multiple,
         net_r_multiple=net_r_multiple,
+        exit_fills=exit_fills,
+        average_exit_price=average_exit_price,
+    )
+
+
+def _exit_fills(
+    execution: PositionExecution,
+    policy: AccountingPolicy,
+) -> tuple[TradeExitFill, ...]:
+    """Every exit fill of a laddered position in execution order: the
+    reductions, then the closing fill of the remainder (design D5)."""
+
+    exit_fill = execution.exit_fill
+    assert exit_fill is not None
+    fills = [
+        _ledger_fill(
+            "partial_take",
+            take_id=item.take_id,
+            bar_index=item.bar_index,
+            time_ms=item.time_ms,
+            price=item.fill_price,
+            quantity=item.quantity,
+            policy=policy,
+            rule_id=item.attribution.rule_id,
+            component_id=item.attribution.component_id,
+            exit_kind=item.attribution.exit_kind,
+        )
+        for item in execution.reductions
+    ]
+    fills.append(
+        _ledger_fill(
+            "final",
+            take_id=None,
+            bar_index=exit_fill.bar_index,
+            time_ms=exit_fill.time_ms,
+            price=exit_fill.fill_price,
+            quantity=execution.remaining_quantity,
+            policy=policy,
+            rule_id=exit_fill.rule_id,
+            component_id=exit_fill.component_id,
+            exit_kind=exit_fill.exit_kind,
+        )
+    )
+    return tuple(fills)
+
+
+def _ledger_fill(
+    kind: Literal["partial_take", "final"],
+    *,
+    take_id: str | None,
+    bar_index: int,
+    time_ms: int,
+    price: Decimal,
+    quantity: Decimal,
+    policy: AccountingPolicy,
+    rule_id: str | None,
+    component_id: str | None,
+    exit_kind: str | None,
+) -> TradeExitFill:
+    notional = abs(price * quantity)
+    return TradeExitFill(
+        kind=kind,
+        take_id=take_id,
+        bar_index=bar_index,
+        time_ms=time_ms,
+        price=price,
+        quantity=quantity,
+        notional=notional,
+        fee=notional * policy.exit_fee_rate,
+        rule_id=rule_id,
+        component_id=component_id,
+        exit_kind=exit_kind,
     )
 
 
@@ -185,7 +275,17 @@ def _initial_risk(
     return initial_risk_price, initial_risk_amount, gross_r_multiple, net_r_multiple
 
 
-def _calculate_path(execution: PositionExecution, market: MarketFrame) -> TradePathMetrics:
+def _calculate_path(
+    execution: PositionExecution,
+    market: MarketFrame,
+    *,
+    realised_exit_price: Decimal,
+) -> TradePathMetrics:
+    """MFE/MAE over entry..closing bar. Capture and giveback use
+    `realised_exit_price`: the closing fill, or the average exit price of
+    a laddered trade (`research-trade-accounting-v1` "Capture metrics on
+    the average exit price")."""
+
     exit_fill = execution.exit_fill
     assert exit_fill is not None
     entry = execution.position.entry_fill
@@ -196,11 +296,11 @@ def _calculate_path(execution: PositionExecution, market: MarketFrame) -> TradeP
     if execution.position.side == "long":
         favorable = [candle.high - entry.fill_price for candle in candles]
         adverse = [entry.fill_price - candle.low for candle in candles]
-        realised = exit_fill.fill_price - entry.fill_price
+        realised = realised_exit_price - entry.fill_price
     else:
         favorable = [entry.fill_price - candle.low for candle in candles]
         adverse = [candle.high - entry.fill_price for candle in candles]
-        realised = entry.fill_price - exit_fill.fill_price
+        realised = entry.fill_price - realised_exit_price
 
     mfe_raw = max(favorable)
     mae_raw = max(adverse)

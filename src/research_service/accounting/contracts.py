@@ -9,7 +9,14 @@ from __future__ import annotations
 from decimal import Decimal
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    SerializerFunctionWrapHandler,
+    model_serializer,
+    model_validator,
+)
 
 
 class AccountingPolicy(BaseModel):
@@ -41,8 +48,40 @@ class TradePathMetrics(BaseModel):
     bars_from_mfe_to_exit: int = Field(ge=0)
 
 
+class TradeExitFill(BaseModel):
+    """One exit fill of a laddered trade (`research-trade-accounting-v1`
+    "One trade record per strategic position"): a partial take reduction
+    or the final fill that closed the remainder."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: Literal["partial_take", "final"]
+    take_id: str | None = None
+    bar_index: int = Field(ge=0)
+    time_ms: int = Field(ge=0)
+    price: Decimal = Field(gt=0)
+    quantity: Decimal = Field(gt=0)
+    notional: Decimal = Field(gt=0)
+    fee: Decimal = Field(ge=0)
+    rule_id: str | None = None
+    component_id: str | None = None
+    exit_kind: str | None = None
+
+    @model_validator(mode="after")
+    def validate_kind(self) -> "TradeExitFill":
+        if (self.kind == "partial_take") != (self.take_id is not None):
+            raise ValueError("take_id is set exactly on partial_take fills")
+        return self
+
+
 class TradeRecord(BaseModel):
-    """Immutable realised trade record."""
+    """Immutable realised trade record.
+
+    One strategic position is one record. A position with partial take
+    reductions keeps `quantity` = Q0 and `exit_price` = the closing fill,
+    and adds `exit_fills` (every exit fill in execution order) and
+    `average_exit_price`. Both are empty for a single-fill trade and
+    omitted on dump, so such a record is unchanged."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -91,6 +130,42 @@ class TradeRecord(BaseModel):
     initial_risk_amount: Decimal | None = Field(default=None, gt=0)
     gross_r_multiple: Decimal | None = None
     net_r_multiple: Decimal | None = None
+    exit_fills: tuple[TradeExitFill, ...] = ()
+    average_exit_price: Decimal | None = Field(default=None, gt=0)
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_ladder_fields(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        data: dict[str, object] = handler(self)
+        if not self.exit_fills:
+            data.pop("exit_fills", None)
+        if self.average_exit_price is None:
+            data.pop("average_exit_price", None)
+        return data
+
+    @model_validator(mode="after")
+    def validate_exit_fills(self) -> "TradeRecord":
+        if not self.exit_fills:
+            if self.average_exit_price is not None:
+                raise ValueError("average_exit_price requires exit_fills")
+            return self
+        if self.average_exit_price is None:
+            raise ValueError("exit_fills require average_exit_price")
+        *partials, final = self.exit_fills
+        if final.kind != "final" or any(item.kind != "partial_take" for item in partials):
+            raise ValueError("exit_fills must be partial takes followed by one final fill")
+        if final.price != self.exit_price or final.bar_index != self.exit_bar_index:
+            raise ValueError("the final exit fill must be the closing fill")
+        if sum((item.quantity for item in self.exit_fills), Decimal("0")) != self.quantity:
+            raise ValueError("exit fill quantities differ from quantity")
+        if sum((item.notional for item in self.exit_fills), Decimal("0")) != self.exit_notional:
+            raise ValueError("exit fill notionals differ from exit_notional")
+        if sum((item.fee for item in self.exit_fills), Decimal("0")) != self.exit_fee:
+            raise ValueError("exit fill fees differ from exit_fee")
+        if self.average_exit_price != self.exit_notional / self.quantity:
+            raise ValueError("average_exit_price differs from exit_notional / quantity")
+        return self
 
     @model_validator(mode="after")
     def validate_arithmetic(self) -> "TradeRecord":

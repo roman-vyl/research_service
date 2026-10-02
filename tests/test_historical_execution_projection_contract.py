@@ -423,3 +423,141 @@ def test_locked_exit_profile_survives_decode_and_index_roundtrip_exactly() -> No
         opportunity = index.lookup_entry(bar_index, side)
         assert opportunity is not None
         assert opportunity.locked_exit_profile == expected_profile
+
+
+# --- partial take ladder (research-frozen-partial-take-ladder-v1 group 2) --
+
+# Strategy Engine `a4c3b02` wire scenario "Leg on an opportunity"
+# (strategy-research-execution-contract-v1), reproduced exactly.
+_ENGINE_LEG_SCENARIO = {
+    "take_id": "pt_1pct",
+    "ratio": 0.01,
+    "fraction_of_initial": 0.25,
+    "attribution": {
+        "rule_id": "pt_1pct",
+        "component_id": "pct_partial_take",
+        "exit_kind": "partial_take",
+    },
+}
+
+
+def _partial(take_id: str, ratio: float = 0.01, fraction: float = 0.25) -> dict[str, object]:
+    return {
+        "take_id": take_id,
+        "ratio": ratio,
+        "fraction_of_initial": fraction,
+        "attribution": _attribution("partial_take", rule_id=take_id, component_id="pct_partial_take"),
+    }
+
+
+def _with_legs(*legs: dict[str, object]) -> dict[str, object]:
+    body = _full_valid_body()
+    body["entry_opportunities"][0]["partial_takes"] = list(legs)  # type: ignore[index]
+    return body
+
+
+def test_valid_ladder_decodes() -> None:
+    projection = parse_historical_execution_projection(
+        _with_legs(dict(_ENGINE_LEG_SCENARIO), _partial("pt_3pct", 0.03, 0.25))
+    )
+    legs = projection.entry_opportunities[0].partial_takes
+    assert [(leg.take_id, leg.ratio, leg.fraction_of_initial) for leg in legs] == [
+        ("pt_1pct", 0.01, 0.25),
+        ("pt_3pct", 0.03, 0.25),
+    ]
+    assert legs[0].attribution.exit_kind == "partial_take"
+
+
+def test_absent_partial_takes_key_decodes_to_empty_ladder() -> None:
+    projection = parse_historical_execution_projection(_full_valid_body())
+    assert all(o.partial_takes == () for o in projection.entry_opportunities)
+
+
+@pytest.mark.parametrize(
+    "leg",
+    [
+        _partial("pt", ratio=float("nan")),
+        _partial("pt", ratio=float("inf")),
+        _partial("pt", ratio=0.0),
+        _partial("pt", ratio=-0.01),
+        _partial("pt", fraction=0.0),
+        _partial("pt", fraction=1.0),
+        _partial("pt", fraction=float("nan")),
+        {**_partial("pt"), "attribution": _attribution("take_profit", rule_id="pt")},
+        {**_partial("pt"), "attribution": _attribution("partial_take", rule_id="other")},
+        {**_partial("pt"), "unexpected": 1},
+    ],
+    ids=[
+        "nan-ratio",
+        "inf-ratio",
+        "zero-ratio",
+        "negative-ratio",
+        "zero-fraction",
+        "fraction-one",
+        "nan-fraction",
+        "wrong-leg-kind",
+        "take-id-differs-from-rule-id",
+        "extra-key",
+    ],
+)
+def test_invalid_leg_fails_closed(leg: dict[str, object]) -> None:
+    with pytest.raises((ValidationError, UpstreamServiceError)):
+        parse_historical_execution_projection(_with_legs(leg))
+
+
+def test_fractions_reaching_one_fail_closed() -> None:
+    with pytest.raises((ValidationError, UpstreamServiceError)):
+        parse_historical_execution_projection(
+            _with_legs(_partial("a", 0.01, 0.5), _partial("b", 0.02, 0.5))
+        )
+
+
+def test_fractions_below_one_decode() -> None:
+    projection = parse_historical_execution_projection(
+        _with_legs(_partial("a", 0.01, 0.25), _partial("b", 0.02, 0.25), _partial("c", 0.03, 0.49))
+    )
+    assert len(projection.entry_opportunities[0].partial_takes) == 3
+
+
+def test_duplicate_take_id_fails_closed() -> None:
+    with pytest.raises((ValidationError, UpstreamServiceError)):
+        parse_historical_execution_projection(
+            _with_legs(_partial("a", 0.01, 0.25), _partial("a", 0.02, 0.25))
+        )
+
+
+@pytest.mark.parametrize("field", ["initial_stop", "initial_take"])
+def test_partial_take_kind_on_initial_leg_fails_closed(field: str) -> None:
+    body = _full_valid_body()
+    body["entry_opportunities"][0][field] = _leg(10.0, "partial_take")  # type: ignore[index]
+    with pytest.raises((ValidationError, UpstreamServiceError)):
+        parse_historical_execution_projection(body)
+
+
+def test_partial_take_kind_on_signal_candidate_fails_closed() -> None:
+    body = _full_valid_body()
+    body["signal_exit_events"]["long"]["aligned"] = [  # type: ignore[index]
+        _event(0, [{"attribution": _attribution("partial_take")}])
+    ]
+    with pytest.raises((ValidationError, UpstreamServiceError)):
+        parse_historical_execution_projection(body)
+
+
+def test_dump_without_legs_keeps_the_pre_ladder_key_set() -> None:
+    projection = parse_historical_execution_projection(_full_valid_body())
+    for opportunity in projection.entry_opportunities:
+        dumped = opportunity.model_dump(mode="json")
+        assert set(dumped) == {
+            "bar_index",
+            "side",
+            "locked_exit_profile",
+            "initial_stop",
+            "initial_take",
+        }
+    assert "partial_takes" not in projection.model_dump_json()
+
+
+def test_dump_with_legs_reproduces_the_engine_scenario_exactly() -> None:
+    projection = parse_historical_execution_projection(_with_legs(dict(_ENGINE_LEG_SCENARIO)))
+    dumped = projection.entry_opportunities[0].model_dump(mode="json")
+    assert dumped["partial_takes"] == [_ENGINE_LEG_SCENARIO]

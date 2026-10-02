@@ -46,31 +46,14 @@ def _distance_fill_price(
     level: Decimal,
     is_loss: bool,
 ) -> Decimal | None:
-    """Mirror BBB/vectorbt gap and intrabar distance-exit semantics."""
+    """Continuous-market level fill (`research-static-exit-arbitration-v1`
+    "Distance fill semantics"): a resting stop or take fills at exactly
+    its level whenever the bar reached it, including a bar that opened
+    beyond the level. There is no fill at the open."""
 
-    if side == "long":
-        if is_loss:
-            if candle.open <= level:
-                return candle.open
-            if candle.low <= level <= candle.high:
-                return level
-        else:
-            if level <= candle.open:
-                return candle.open
-            if candle.low <= level <= candle.high:
-                return level
-    else:
-        if is_loss:
-            if level <= candle.open:
-                return candle.open
-            if candle.low <= level <= candle.high:
-                return level
-        else:
-            if candle.open <= level:
-                return candle.open
-            if candle.low <= level <= candle.high:
-                return level
-    return None
+    if (side == "long") == is_loss:
+        return level if candle.low <= level else None
+    return level if candle.high >= level else None
 
 
 def collect_static_exit_candidates(

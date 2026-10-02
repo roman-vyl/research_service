@@ -3,7 +3,7 @@
 
 Parallel to `execution/static_exits.py`, additive. Reuses
 `_distance_fill_price` (imported, not reimplemented) for the exact
-stop/take OHLC-gap fill-price mechanics -- unchanged. What I4 replaces
+stop/take level-fill mechanics. What I4 replaces
 is the *source of strategy facts*:
 
 - stop/take: no per-bar series re-read after entry -- the position's

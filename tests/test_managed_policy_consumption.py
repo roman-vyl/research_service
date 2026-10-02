@@ -153,7 +153,9 @@ def test_managed_stop_and_runtime_exit_become_execution_candidates() -> None:
     assert candidates[1].rule_id == "exit-1"
 
 
-def test_managed_stop_gap_uses_bar_open_for_long_and_short() -> None:
+def test_managed_stop_gap_fills_at_level_for_long_and_short() -> None:
+    # research-managed-policy-consumption-v1 "Managed stop execution"
+    # (research-frozen-partial-take-ladder-v1, design D8): no fill at open.
     long_state = build_managed_policy_timeline(replay(), position()).state_for_time(300_000)
     assert long_state is not None
     long_candidates = collect_managed_exit_candidates(
@@ -162,7 +164,7 @@ def test_managed_stop_gap_uses_bar_open_for_long_and_short() -> None:
         long_state,
         bar_index=1,
     )
-    assert long_candidates[0].fill_price == Decimal("99")
+    assert long_candidates[0].fill_price == long_state.active_stop_price
 
     short_position = position("short")
     short_state = build_managed_policy_timeline(replay("short"), short_position).state_for_time(
@@ -175,7 +177,7 @@ def test_managed_stop_gap_uses_bar_open_for_long_and_short() -> None:
         short_state,
         bar_index=1,
     )
-    assert short_candidates[0].fill_price == Decimal("101")
+    assert short_candidates[0].fill_price == short_state.active_stop_price
 
 
 def test_policy_is_not_recalculated_or_applied_on_source_bar() -> None:

@@ -809,17 +809,13 @@ def _managed_stop_fill(
     *,
     level: Decimal,
 ) -> Decimal | None:
+    """Continuous-market level fill (`research-managed-policy-consumption-v1`
+    "Managed stop execution"): the managed stop fills at exactly its
+    level whenever the bar reached it, never at the open."""
+
     if side == "long":
-        if candle.open <= level:
-            return candle.open
-        if candle.low <= level <= candle.high:
-            return level
-    else:
-        if level <= candle.open:
-            return candle.open
-        if candle.low <= level <= candle.high:
-            return level
-    return None
+        return level if candle.low <= level else None
+    return level if candle.high >= level else None
 
 
 def _runtime_candidate_type(

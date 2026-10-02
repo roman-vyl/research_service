@@ -252,7 +252,10 @@ def test_managed_replay_is_resolved_once_and_applied_on_next_bar() -> None:
     assert execution.exit_fill is not None
     assert execution.exit_fill.candidate_type == "managed_stop"
     assert execution.exit_fill.bar_index == 1
-    assert execution.exit_fill.fill_price == Decimal("100")
+    # The bar opens at 100, below the break-even stop at 101: a
+    # gap-through bar, filled at the level (design D8), not the open.
+    assert execution.exit_fill.reference_level == Decimal("101")
+    assert execution.exit_fill.fill_price == Decimal("101")
     assert execution.exit_fill.rule_id == "be"
     assert result.events[1].metadata["layer"] == "exit_management"
 

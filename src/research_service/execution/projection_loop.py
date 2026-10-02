@@ -19,8 +19,10 @@ tests.
 from __future__ import annotations
 
 from collections.abc import Callable
+from decimal import Decimal
 
 from research_service.domain.contracts import (
+    Candle,
     HistoricalExecutionProjectionIndex,
     ManagedReplayResult,
     MarketFrame,
@@ -31,11 +33,14 @@ from research_service.domain.execution import (
     ExecutionLoopResult,
     ExecutionPolicy,
     ExitArbitrationResult,
+    ExitCandidate,
     ExitFill,
     PositionExecution,
+    PositionReduction,
     PositionState,
 )
 from research_service.execution.managed_policy_events import ManagedPolicyEvent
+from research_service.execution.partial_takes import traverse_partial_takes
 from research_service.execution.managed_policy import (
     ManagedEffectiveState,
     ManagedPolicyTimeline,
@@ -132,6 +137,8 @@ def run_projection_execution_loop(
     current_managed_timeline: ManagedPolicyTimeline | None = None
     current_managed_trade_state: ManagedTradeState | None = None
     current_managed_effective: ManagedEffectiveState | None = None
+    # Partial take fills of the currently open position (design D2).
+    current_reductions: list[PositionReduction] = []
     completed: list[PositionExecution] = []
     events: list[ExecutionEvent] = []
 
@@ -160,9 +167,18 @@ def run_projection_execution_loop(
                 managed_state,
                 bar_index=bar_index,
             )
-            arbitration = arbitrate_unified_exit_candidates(
-                (*static_candidates, *managed_candidates)
-            )
+            candidates = (*static_candidates, *managed_candidates)
+            if current_position.initial_protection.partial_takes:
+                for reduction in _reduction_phase(
+                    current_position, candle, bar_index, candidates, current_reductions
+                ):
+                    current_reductions.append(reduction)
+                    events.append(
+                        _reduction_event(
+                            current_position, reduction, reductions=current_reductions
+                        )
+                    )
+            arbitration = arbitrate_unified_exit_candidates(candidates)
             exit_fill = execute_unified_exit(current_position, arbitration)
             if exit_fill is not None:
                 closed_execution = PositionExecution(
@@ -170,6 +186,7 @@ def run_projection_execution_loop(
                         status="closed",
                         exit_fill=exit_fill,
                         exit_arbitration=arbitration,
+                        reductions=tuple(current_reductions),
                     )
                 completed.append(closed_execution)
                 if closed_position_consumer is not None:
@@ -178,6 +195,7 @@ def run_projection_execution_loop(
                     _exit_event(current_position, exit_fill=exit_fill, arbitration=arbitration)
                 )
                 current_position = None
+                current_reductions = []
                 current_managed_timeline = None
                 current_managed_trade_state = None
                 current_managed_effective = None
@@ -235,7 +253,13 @@ def run_projection_execution_loop(
             )
 
     if current_position is not None:
-        completed.append(PositionExecution(position=current_position, status="open"))
+        completed.append(
+            PositionExecution(
+                position=current_position,
+                status="open",
+                reductions=tuple(current_reductions),
+            )
+        )
         last_candle = market_frame.candles[-1]
         events.append(
             ExecutionEvent(
@@ -260,6 +284,38 @@ def run_projection_execution_loop(
         positions=tuple(completed),
         events=tuple(events),
         final_open_position=current_position,
+    )
+
+
+_STOP_CANDIDATES = frozenset({"stop_loss", "managed_stop"})
+
+
+def _reduction_phase(
+    position: PositionState,
+    candle: Candle,
+    bar_index: int,
+    candidates: tuple[ExitCandidate, ...],
+    filled: list[PositionReduction],
+) -> tuple[PositionReduction, ...]:
+    """Design D1: a stop or managed-stop candidate means the existing
+    arbitration closes everything and no take level is traversed.
+    Otherwise touched legs fill in price order up to the final take's
+    level; arbitration afterwards is unchanged, so a touched final take
+    (`take_profit`, priority 3) closes the remainder ahead of runtime and
+    signal exits."""
+
+    if any(candidate.candidate_type in _STOP_CANDIDATES for candidate in candidates):
+        return ()
+    final_level = next(
+        (c.reference_level for c in candidates if c.candidate_type == "take_profit"),
+        None,
+    )
+    return traverse_partial_takes(
+        position,
+        candle,
+        bar_index=bar_index,
+        filled_take_ids={item.take_id for item in filled},
+        final_level=final_level,
     )
 
 
@@ -348,6 +404,62 @@ def _entry_event(position: PositionState) -> ExecutionEvent:
             "quantity": str(fill.quantity),
             "stop_loss_price": _decimal_text(position.initial_protection.stop_loss_price),
             "take_profit_price": _decimal_text(position.initial_protection.take_profit_price),
+            "locked_exit_profile": position.locked_exit_profile,
+            # Only when legs exist, so events without legs stay
+            # byte-identical (design D4).
+            **_entry_partial_takes(position),
+        },
+    )
+
+
+def _entry_partial_takes(position: PositionState) -> dict[str, object]:
+    legs = position.initial_protection.partial_takes
+    if not legs:
+        return {}
+    return {
+        "partial_takes": [
+            {
+                "take_id": leg.take_id,
+                "level": str(leg.level),
+                "quantity": str(leg.quantity),
+                "fraction_of_initial": str(leg.fraction_of_initial),
+            }
+            for leg in legs
+        ]
+    }
+
+
+def _reduction_event(
+    position: PositionState,
+    reduction: PositionReduction,
+    *,
+    reductions: list[PositionReduction],
+) -> ExecutionEvent:
+    """`position_reduced` (design D6). `reductions` already includes this
+    one, so `remaining_quantity` is the quantity left after it."""
+
+    remaining = position.entry_fill.quantity - sum(
+        (item.quantity for item in reductions), Decimal("0")
+    )
+    return ExecutionEvent(
+        event_id=f"event:{reduction.fill_id}",
+        event_type="position_reduced",
+        instance_id=position.instance_id,
+        position_id=position.position_id,
+        side=position.side,
+        bar_index=reduction.bar_index,
+        time_ms=reduction.time_ms,
+        fill_id=reduction.fill_id,
+        metadata={
+            "take_id": reduction.take_id,
+            "level": str(reduction.level),
+            "fill_price": str(reduction.fill_price),
+            "quantity": str(reduction.quantity),
+            "fraction_of_initial": str(reduction.fraction_of_initial),
+            "remaining_quantity": str(remaining),
+            "rule_id": reduction.attribution.rule_id,
+            "component_id": reduction.attribution.component_id,
+            "exit_kind": reduction.attribution.exit_kind,
             "locked_exit_profile": position.locked_exit_profile,
         },
     )

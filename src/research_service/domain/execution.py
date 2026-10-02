@@ -66,8 +66,33 @@ class InitialProtectionAttribution(BaseModel):
 
     rule_id: str = Field(min_length=1)
     component_id: str = Field(min_length=1)
-    exit_kind: Literal["stop_loss", "take_profit", "signal"]
+    exit_kind: Literal["stop_loss", "take_profit", "signal", "partial_take"]
     layer: Literal["exit_policy"] = "exit_policy"
+
+
+class ResolvedPartialTake(BaseModel):
+    """One partial take leg frozen at entry (`research-partial-take-
+    execution-v1` "Frozen leg levels and quantities"): the absolute
+    `level` (`anchor x (1 +/- ratio)`, the final take's formula) and the
+    physical `quantity` (`fraction_of_initial x Q0`, not rounded). Never
+    recalculated after entry."""
+
+    model_config = ConfigDict(frozen=True)
+
+    take_id: str = Field(min_length=1)
+    ratio: Decimal = Field(gt=0)
+    fraction_of_initial: Decimal = Field(gt=0, lt=1)
+    level: Decimal = Field(gt=0)
+    quantity: Decimal = Field(gt=0)
+    attribution: InitialProtectionAttribution
+
+    @model_validator(mode="after")
+    def validate_attribution(self) -> "ResolvedPartialTake":
+        if self.attribution.exit_kind != "partial_take":
+            raise ValueError("partial take attribution must have exit_kind partial_take")
+        if self.attribution.rule_id != self.take_id:
+            raise ValueError("partial take take_id must equal attribution.rule_id")
+        return self
 
 
 class InitialProtection(BaseModel):
@@ -94,6 +119,8 @@ class InitialProtection(BaseModel):
     take_profit_price: Decimal | None = Field(default=None, gt=0)
     stop_loss_attribution: InitialProtectionAttribution | None = None
     take_profit_attribution: InitialProtectionAttribution | None = None
+    # Wire order; Research orders by level at execution time (design D3).
+    partial_takes: tuple[ResolvedPartialTake, ...] = ()
     ready: Literal[True] = True
 
     @model_validator(mode="after")
@@ -108,6 +135,9 @@ class InitialProtection(BaseModel):
                 raise ValueError("short stop loss must not be below its anchor")
             if self.take_profit_price is not None and self.take_profit_price > self.anchor_price:
                 raise ValueError("short take profit must not exceed its anchor")
+        for leg in self.partial_takes:
+            if (self.side == "long") != (leg.level > self.anchor_price):
+                raise ValueError("partial take level must be on the profit side of its anchor")
         return self
 
 
@@ -213,6 +243,7 @@ class ExecutionEvent(BaseModel):
     event_id: str = Field(min_length=1)
     event_type: Literal[
         "entry_filled",
+        "position_reduced",
         "exit_filled",
         "position_left_open",
     ]
@@ -225,8 +256,42 @@ class ExecutionEvent(BaseModel):
     metadata: dict[str, object] = Field(default_factory=dict)
 
 
+class PositionReduction(BaseModel):
+    """One partial take fill (`research-partial-take-execution-v1`
+    "Reduction facts"): `fraction_of_initial x Q0` closed at exactly the
+    leg's frozen level. The position stays open for the remainder."""
+
+    model_config = ConfigDict(frozen=True)
+
+    fill_id: str = Field(min_length=1)
+    position_id: str = Field(min_length=1)
+    instance_id: str = Field(min_length=1)
+    side: ExecutionSide
+    take_id: str = Field(min_length=1)
+    bar_index: int = Field(ge=0)
+    time_ms: int = Field(ge=0)
+    level: Decimal = Field(gt=0)
+    fill_price: Decimal = Field(gt=0)
+    quantity: Decimal = Field(gt=0)
+    fraction_of_initial: Decimal = Field(gt=0, lt=1)
+    attribution: InitialProtectionAttribution
+
+    @model_validator(mode="after")
+    def validate_fill(self) -> "PositionReduction":
+        if self.fill_price != self.level:
+            raise ValueError("partial take fills at exactly its level")
+        if self.attribution.exit_kind != "partial_take":
+            raise ValueError("reduction attribution must have exit_kind partial_take")
+        return self
+
+
 class PositionExecution(BaseModel):
-    """Execution facts for one position, before fees/PnL accounting."""
+    """Execution facts for one position, before fees/PnL accounting.
+
+    `reductions` are the partial take fills in bar and traversal order;
+    `exit_fill` keeps its meaning, the fill that closes what remains.
+    The remaining quantity is derived (`remaining_quantity`), never
+    stored."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -234,9 +299,30 @@ class PositionExecution(BaseModel):
     status: Literal["open", "closed"]
     exit_fill: ExitFill | None = None
     exit_arbitration: ExitArbitrationResult | None = None
+    reductions: tuple[PositionReduction, ...] = ()
+
+    @property
+    def remaining_quantity(self) -> Decimal:
+        """Q0 minus every reduction: the quantity the closing fill closes,
+        or the quantity still open."""
+
+        reduced = sum((item.quantity for item in self.reductions), Decimal("0"))
+        return self.position.entry_fill.quantity - reduced
 
     @model_validator(mode="after")
     def validate_status(self) -> "PositionExecution":
+        take_ids = [item.take_id for item in self.reductions]
+        if len(set(take_ids)) != len(take_ids):
+            raise ValueError("a partial take fills at most once per position")
+        for item in self.reductions:
+            if item.position_id != self.position.position_id:
+                raise ValueError("reduction belongs to another position")
+            if item.bar_index <= self.position.entry_fill.bar_index:
+                raise ValueError("a partial take never fills on the entry bar")
+            if self.exit_fill is not None and item.bar_index > self.exit_fill.bar_index:
+                raise ValueError("reduction after the closing fill")
+        if self.reductions and self.remaining_quantity <= 0:
+            raise ValueError("reductions must leave a positive remaining quantity")
         if self.status == "closed":
             if self.exit_fill is None or self.exit_arbitration is None:
                 raise ValueError("closed execution requires exit fill and arbitration")

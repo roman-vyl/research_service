@@ -22,6 +22,7 @@ from research_service.domain.contracts import (
 )
 from research_service.domain.execution import ExecutionPolicy
 from research_service.execution.loop import run_unified_execution_loop
+from partial_take_harness import FLAT as _FLAT, frame as _ladder_frame, run as _ladder_run
 
 
 def frame() -> MarketFrame:
@@ -288,3 +289,26 @@ def test_r_eligible_trade_count_zero_when_no_trades_have_initial_stop() -> None:
     assert summary.r_eligible_trade_count == 0
     assert summary.cumulative_gross_r == Decimal("0")
     assert summary.cumulative_net_r == Decimal("0")
+
+
+# --- R of a laddered trade (research-frozen-partial-take-ladder-v1 6.2) ----
+
+
+
+def _laddered(bars):
+    result = _ladder_run("long", bars[1:], entry_bar=bars[0])
+    (trade,) = account_execution_loop(result, _ladder_frame(bars), AccountingPolicy(initial_equity=Decimal("100000"))).trades
+    return trade
+
+
+def test_laddered_trade_r_is_measured_on_the_initial_quantity() -> None:
+    trade = _laddered([_FLAT, ("100", "109", "99.5", "100")])
+    assert trade.initial_risk_amount == Decimal("100") * Decimal("5.00")
+    assert trade.gross_r_multiple == Decimal("1")
+
+
+def test_stop_after_a_leg_r() -> None:
+    trade = _laddered([_FLAT, ("100", "101.5", "99.5", "100"), ("100", "100", "94", "95")])
+    # 25 x +1 at 101, 75 x -5 at the stop: 25 - 375 = -350 over 500 risk.
+    assert trade.gross_pnl == Decimal("-350")
+    assert trade.gross_r_multiple == Decimal("-0.7")
