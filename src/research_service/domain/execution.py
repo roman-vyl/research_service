@@ -6,6 +6,7 @@ from decimal import Decimal
 from typing import Literal
 
 from research_service.domain.contracts import MarketRange
+from research_service.domain.exact_decimal import exact_remainder
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -306,8 +307,9 @@ class PositionExecution(BaseModel):
         """Q0 minus every reduction: the quantity the closing fill closes,
         or the quantity still open."""
 
-        reduced = sum((item.quantity for item in self.reductions), Decimal("0"))
-        return self.position.entry_fill.quantity - reduced
+        return exact_remainder(
+            self.position.entry_fill.quantity, (item.quantity for item in self.reductions)
+        )
 
     @model_validator(mode="after")
     def validate_status(self) -> "PositionExecution":

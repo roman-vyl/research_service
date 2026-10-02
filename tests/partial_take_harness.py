@@ -157,6 +157,7 @@ def run(
     stop: float | None = 0.05,
     signal_bars: Sequence[int] = (),
     managed: HistoricalManagedProjectionDTO | None = None,
+    quantity: Decimal = Q0,
 ) -> ExecutionLoopResult:
     all_bars = [entry_bar, *bars]
     dto = projection(
@@ -171,7 +172,7 @@ def run(
         HistoricalExecutionProjectionIndex.build(dto),
         frame(all_bars),
         ExecutionPolicy(),
-        entry_quantity_provider=lambda _decision, _price: Q0,
+        entry_quantity_provider=lambda _decision, _price: quantity,
         managed_replay_provider=(lambda _position: None) if managed is not None else None,
     )
 
