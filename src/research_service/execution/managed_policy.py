@@ -207,6 +207,7 @@ def build_managed_policy_timeline_from_projection(
     active_take_rule_id: str | None = None
     best_price = entry_price
     worst_price = entry_price
+    initial_risk = _initial_risk(position, entry_price)
 
     states: list[ManagedEffectiveState] = []
     for index in range(entry_index, target_index + 1):
@@ -230,6 +231,7 @@ def build_managed_policy_timeline_from_projection(
             "bars_since_entry": float(bars_in_trade),
             "mfe_pct": mfe_pct,
             "mfe_distance": mfe_distance,
+            "mfe_r": _mfe_r(mfe_distance, initial_risk),
         }
 
         for rule in phase_rules:
@@ -356,6 +358,9 @@ class ManagedTradeState:
     active_take_rule_id: str | None = None
     best_price: float = 0.0
     worst_price: float = 0.0
+    # mfe-r-phase-threshold-v1: |entry - initial stop|, frozen at entry; None
+    # without an initial stop (the `mfe_r` metric is then NaN -> never met).
+    initial_risk: float | None = None
     # rule_id -> consecutive true-bar count of that rule's condition,
     # since entry. Equivalent to (and replaces) recomputing "all true in
     # the trailing confirm_bars window" from scratch every bar: a count
@@ -377,7 +382,19 @@ def initialize_managed_trade_state(position: PositionState) -> ManagedTradeState
         entry_price=entry_price,
         best_price=entry_price,
         worst_price=entry_price,
+        initial_risk=_initial_risk(position, entry_price),
     )
+
+
+def _initial_risk(position: PositionState, entry_price: float) -> float | None:
+    stop = position.initial_protection.stop_loss_price
+    return None if stop is None else abs(entry_price - float(stop))
+
+
+def _mfe_r(mfe_distance: float, initial_risk: float | None) -> float:
+    if initial_risk is None or initial_risk <= 0:
+        return float("nan")
+    return mfe_distance / initial_risk
 
 
 def advance_managed_trade_state(
@@ -442,6 +459,7 @@ def advance_managed_trade_state(
         "bars_since_entry": float(bars_in_trade),
         "mfe_pct": mfe_pct,
         "mfe_distance": mfe_distance,
+        "mfe_r": _mfe_r(mfe_distance, state.initial_risk),
     }
 
     phase = state.phase
@@ -566,6 +584,7 @@ def advance_managed_trade_state(
         best_price=best_price,
         worst_price=worst_price,
         confirmation_counts=confirmation_counts,
+        initial_risk=state.initial_risk,
     )
 
     if next_time_ms is None:

@@ -538,7 +538,7 @@ class ManagedConditionSeriesDTO(BaseModel):
     short: tuple[bool, ...]
 
 
-TradeMetric = Literal["bars_since_entry", "mfe_pct", "mfe_distance"]
+TradeMetric = Literal["bars_since_entry", "mfe_pct", "mfe_distance", "mfe_r"]
 
 
 class ManagedTransitionThresholdDTO(BaseModel):
