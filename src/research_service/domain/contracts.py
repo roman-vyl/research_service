@@ -649,6 +649,29 @@ class ManagedStopActionRuleDTO(BaseModel):
     rule_id: str = Field(min_length=1)
     activation_phase: str
     distance_id: str = Field(min_length=1)
+    stop_formula: Literal["entry_offset", "initial_r_lock", "initial_r_trailing"] = (
+        "entry_offset"
+    )
+    trigger_distance_id: str | None = None
+
+    @model_validator(mode="after")
+    def validate_formula_references(self) -> "ManagedStopActionRuleDTO":
+        if self.stop_formula == "entry_offset":
+            if self.trigger_distance_id is not None:
+                raise ValueError("entry_offset stop action must not set trigger_distance_id")
+        elif self.trigger_distance_id is None:
+            raise ValueError("initial-R stop action requires trigger_distance_id")
+        return self
+
+    @model_serializer(mode="wrap")
+    def _preserve_legacy_stop_action_wire(
+        self, handler: SerializerFunctionWrapHandler
+    ) -> dict[str, object]:
+        data: dict[str, object] = handler(self)
+        if self.stop_formula == "entry_offset":
+            data.pop("stop_formula", None)
+            data.pop("trigger_distance_id", None)
+        return data
 
 
 class ManagedRuntimeExitRuleDTO(BaseModel):
@@ -710,6 +733,8 @@ class HistoricalManagedProjectionDTO(BaseModel):
                             distance_ids.add(term.distance_id)
             elif rule.kind == "stop_action":
                 distance_ids.add(rule.distance_id)
+                if rule.trigger_distance_id is not None:
+                    distance_ids.add(rule.trigger_distance_id)
             elif rule.kind == "runtime_exit":
                 condition_ids.add(rule.condition_id)
         missing_conditions = sorted(condition_ids - self.conditions.keys())
