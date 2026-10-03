@@ -178,37 +178,44 @@ second root, recursive discovery, symlink handling, snapshot, refresh, root
 ranking or hash qualifier. Publishing an Experiment never moves a run. Runs
 referenced by no Experiment are an ordinary state of the same store.
 
-### D5. Experiment API (read-only)
+### D5. Experiment API (read-only, three routes)
 
-- `GET /api/research/experiments` → registry entries plus `row_count` and
-  `valid` (with violation text when invalid).
+- `GET /api/research/experiments` → the contents of `experiments.json`, nothing
+  else (no table reads, no validation, no row counts).
 - `GET /api/research/experiments/{experiment_id}` → the manifest.
 - `GET /api/research/experiments/{experiment_id}/results` → columnar JSON
   `{ "columns": [...], "rows": N, "data": [[...per column...]] }`. The API speaks
   the manifest's semantic ids: filters are `<dimension id>=<value>` (repeatable,
-  equality, for example `sl=5`, `grid=R`, `trigger=7`) and `columns=` selects
-  metric/dimension ids; the backend translates ids to physical CSV columns
-  through `result_schema`, including every unit column of a multi-grid
-  dimension, the grid selector, the arm, `run_id` and provenance. Response
-  `columns` are semantic ids (with unit and grid stated by the manifest), so
-  the frontend never uses physical column names. Float columns are rounded for
+  equality, for example `sl=5`, `grid=R`, `trigger=7`) and `columns=` selects ids;
+  the backend translates ids to physical CSV columns through `result_schema`
+  (every unit column of a multi-grid dimension, the grid selector, the arm,
+  `run_id`, provenance). Response columns are semantic ids, so the frontend never
+  uses physical column names. An unknown id is HTTP 400. Floats are rounded for
   transport; the table on disk is authoritative.
-- `GET /api/research/experiments/{experiment_id}/findings` → the findings lines.
 
-No cells endpoint, no aggregates endpoint, no backend axis semantics beyond
-equality filtering. Justification for a compact filterable results endpoint: the
-trailing table is 53 MB as CSV and 34 MB / 6.4 MB gzip as columnar JSON for all
-rows, 6.7 MB / 1.3 MB for one SL, so the frontend requests one SL (or one SL
-and grid) at a time; slicing, filters and geometry aggregates then run in the
-browser. The table is cached per file mtime and size.
+That is the whole new backend: read `experiments.json`, read `manifest.json`,
+read `runs.csv` through a small filter/project adapter (cached by file mtime and
+size). Justification for a filterable columnar results route: the trailing table
+is 53 MB as CSV and 34 MB / 6.4 MB gzip as columnar JSON for all rows, 6.7 MB /
+1.3 MB for one SL, so the frontend requests one SL at a time and does slicing,
+filters and aggregates in the browser.
 
-A filter on an unknown dimension id or a value type mismatch is HTTP 400.
+Errors are reported where they occur: a malformed manifest or table returns a
+stable error naming the problem when that experiment is opened; there is no
+validation cascade, no catalog `valid` flag, and a `run_id` whose bundle is
+missing does not invalidate anything. `run_id` is optional drill-down: "Open run"
+calls the existing run API, which returns 404 for a missing bundle.
 
-Validation (lazily, cached by mtime): registry and manifest parse; `result_schema`
-well formed; the table header contains every declared column; dimension keys are
-unique per arm; every non-empty `run_id` exists as
-`<artifacts_root>/<run_id>/manifest.json`. An invalid experiment stays listed
-as invalid and its data routes return a stable error naming the violation.
+Findings stay as `findings.jsonl` next to the manifest and are not served by
+this change. No Surface, cells, aggregates or findings route exists.
+
+**Root setting.** No new setting. The data root already holds
+`runs/` (`artifacts_root`) and `configs/` (`configs_root`) under one mount
+(`/data` in the compose stack); the analysis root is `artifacts_root.parent /
+"analysis"`, so `runs/` and `analysis/` come from one configured root and cannot
+drift apart. Checked in `runtime/settings.py` and `bbb_stack/docker-compose.yml`:
+the whole research data directory is mounted at `/data`, so `/data/analysis` is
+available without a deployment change.
 
 ### D6. Workbench frontend (kept deliberately small)
 
@@ -263,53 +270,54 @@ App
   cache, overlay default and re-seeds trade/bar focus; the Surface tab neither
   adds nor writes any of it.
 
-### D7. Migration (specified here, executed later)
+### D7. One-time preparation of historical data (not runtime)
 
-Phases, each stopping on failure and none destructive until the last:
+This is a controlled, one-time preparation of existing artifacts, not a Research
+Service capability. After it, runtime code knows only: registry, manifest,
+result table with optional `run_id`. Steps, each stopping on failure, nothing
+destructive until the last:
 
-1. **Inventory** of all bundles under the research data root: path, `run_id`,
-   `manifest.run_id`, size, manifest hash, references from registered result
-   tables.
-2. **Dry-run plan** (report only): target `research/runs/<run_id>` per
-   referenced run; identical copies collapse to one; copies with different
-   manifests STOP; run id and folder name mismatch STOP.
-3. **Validation** before any move: files and sizes per manifest, same volume,
-   no target collision with a different manifest.
-4. **Normalization**: `rename` into `research/runs/<run_id>` with a rollback
-   journal; identical duplicates are left in place for phase 7.
-5. **Data edits**: nullable `run_id` column added to the trailing `runs.csv`
-   (backup kept); `result_schema` added to both manifests; `experiments.json`
-   created.
-6. **Parity validation**: every non-empty `run_id` resolves to
-   `research/runs/<run_id>`; every linked run's metrics equal its row (net PnL
-   or return, trade count, PF, drawdown, long/short) and its market hash
-   matches the row's; table metrics equal the existing HTML data.
-7. **Cleanup** (separate, last, only after phase 6 passes and after explicit
-   approval): remove identical duplicate copies, historical symlinks, and
-   emptied folders.
+1. **Inventory and dry-run.** Report of all bundles (path, `run_id`, folder name
+   vs `manifest.run_id`, size, manifest hash, references from the two result
+   tables) and the planned moves into `<artifacts_root>/<run_id>`; identical
+   copies collapse; conflicting copies, or a folder name different from
+   `manifest.run_id`, STOP. Nothing is moved.
+2. **Normalize** the referenced historical bundles into
+   `<artifacts_root>/<run_id>` by rename with a rollback journal. Run ids do not
+   change.
+3. **Prepare the two EMA500 datasets.** Add `result_schema` (with `view`) to both
+   manifests; create `analysis/experiments.json`; add the nullable `run_id`
+   column to the trailing table with the confirmed links (below).
+4. **Verify.** Table metrics unchanged; table equals the existing HTML data
+   where it exists (ratio_4d); every non-null `run_id` has a bundle at the
+   canonical location.
+5. **Cleanup** of identical duplicates and historical symlinks, separately and
+   only after explicit approval.
 
-Trailing `run_id` linking rule. A false link is worse than a missing one, so
-the migration classifies every candidate (run, row) pair as:
+Link algorithm for the trailing table (migration-only vocabulary, absent from
+the runtime model and from the manifest). A false link is worse than a missing
+one, so each candidate (run, row) pair is classified:
 
-- **CONFIRMED**: the run's own recorded strategy spec (its `request.json`)
-  declares the row's dimension values (width, lookback, SL, trigger, distance
-  and grid), the run's recorded metrics equal the row's (trade count, net PnL,
-  PF, drawdown, long/short), and, only when the row carries an authoritative
-  `market_data_hash` (`row_columns`), `run.market_data_hash ==
-  row.market_data_hash`;
-- **POSSIBLE**: it matches only by dimensions and numbers, or more than one run
-  is CONFIRMED for the same row;
-- **NO LINK**: no row, or the numbers differ (for example a later market window
-  or lock-then-trail variants).
+- CONFIRMED: the run's own `request.json` declares the row's dimension values
+  (width, lookback, SL, trigger, distance, grid), the run's recorded metrics equal
+  the row's, and, only if the row has an authoritative `market_data_hash`, the
+  run's market hash equals it;
+- POSSIBLE: matches only by dimensions and numbers, or several runs are CONFIRMED
+  for one row;
+- NO LINK: no row, or the numbers differ (later market window, lock-then-trail
+  variants).
 
-`run_id` is written only for CONFIRMED pairs with exactly one run per row.
-Metric equality alone never confirms. There is no tie-break by market hash
-when the row has no market column (the trailing table has none), and the
-migration never invents a table-wide market window; rows with several
-CONFIRMED runs and all POSSIBLE pairs stay without `run_id` and are listed in
-the report. Losing a historical drill-down is acceptable; a false link is not.
+`run_id` is written only for CONFIRMED pairs with exactly one run per row; there
+is no market-hash tie-break and no table-wide market window is assumed; all
+other pairs are listed in the report. Losing a drill-down is acceptable.
 
 ## Obsolete after this model (checked against dependencies)
+
+Also removed in the reduction pass: eager run validation, catalog `valid` and
+violation text, `row_count`, the findings route, the `RESEARCH_ANALYSIS_ROOT`
+setting, the publisher and HTML-generator tasks, and CONFIRMED/POSSIBLE/NO LINK
+as part of any contract.
+
 
 Multi-root run index, recursive discovery, symlink and `realpath` handling,
 background build, snapshot, directory-mtime refresh, root ranking,
@@ -323,14 +331,13 @@ canonical-location rule.
 
 ## Risks / Trade-offs
 
-- Startup without a run changes behaviour pinned by several frontend tests;
-  they are updated deliberately (task group 5) rather than kept alive through a
-  hidden default.
-- Until the migration runs, historical runs are not at the canonical location;
-  rows with such `run_id` fail validation and the experiment is reported
-  invalid, which is intended.
+- Startup without a run changes behaviour pinned by several frontend tests; they
+  are updated deliberately (task group 4) rather than kept alive through a hidden
+  default.
+- Until the one-time preparation runs, historical runs are not at the canonical
+  location; "Open run" for them returns 404 (nothing else breaks).
 - Only 350 of 415 known Engine runs of the trailing experiment match their row
-  exactly; the rest stay unlinked, so drill-down covers few trailing rows until
-  Engine runs are produced for more rows (later request).
-- Whole-table results responses are large without a filter; the frontend
-  always filters (at least by SL).
+  exactly and not every one may be confirmed; drill-down covers few trailing rows
+  until Engine runs are produced for more rows (later request).
+- Whole-table results responses are large without a filter; the frontend always
+  filters (at least by SL).

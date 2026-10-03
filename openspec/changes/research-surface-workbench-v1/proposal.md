@@ -47,8 +47,8 @@ Facts established on the local research data (2026-10-03):
   `experiment.json`, no new cells table, no rename of `runs.csv`.
 - Add an explicit registry `research/analysis/experiments.json` listing the
   available Experiments and their manifest paths.
-- Add a minimal read-only **Experiment API**: list, definition (manifest),
-  results (columnar, filterable by dimension equality), findings.
+- Add a minimal read-only **Experiment API** of three routes: the registry as is,
+  the manifest, and results (columnar, filtered by semantic dimension ids).
 - Make `research/runs/<run_id>/` the only physical location of a run. Research
   Service needs no run index, resolver, second root or fallback.
 - Add the **Surface tab** (`Chart | Surface | Reports | Strategy Composer`): a
@@ -61,11 +61,10 @@ Facts established on the local research data (2026-10-03):
   shown). Workbench starts with `selectedRunId = null` and an explicit idle
   state; an optional `?run=<run_id>` URL value sets the initial selection.
   `/api/research/runs` is no longer called at startup and is kept unchanged.
-- Define a controlled, staged **migration** of existing artifacts (inventory,
-  dry-run, validation, normalization of referenced runs into
-  `research/runs/<run_id>`, trailing `run_id` column, manifest schema,
-  registry, parity validation, separate cleanup phase). The change specifies the
-  migration; it moves nothing itself.
+- Specify a **one-time preparation** of the two EMA500 datasets and their runs
+  (inventory and dry-run, normalization into `research/runs/<run_id>`, manifest
+  and registry, trailing `run_id` links, verification, separate cleanup). It is
+  not runtime behaviour; this change moves nothing itself.
 
 ## Capabilities
 
@@ -73,7 +72,7 @@ Facts established on the local research data (2026-10-03):
 
 - `research-experiments-v1`: Experiment bundle contract (manifest
   `result_schema`, result table, provenance, canonical run location),
-  Experiment registry, read-only Experiment API, controlled migration.
+  Experiment registry, read-only Experiment API, one-time preparation of historical data.
 - `research-workbench-surface-view-v1`: Surface tab, point details with an explicit
   run action, legacy run dropdown, startup without a run.
 
@@ -95,11 +94,11 @@ Facts established on the local research data (2026-10-03):
 ## Impact
 
 - Research Service: experiment registry/manifest/results reader, Experiment
-  router, validation, settings `RESEARCH_ANALYSIS_ROOT` (read-only), migration
-  tooling.
+  router, validation, no new setting (analysis root derived from the research data root), one-time
+  preparation scripts.
 - Research data: additive manifest block, nullable `run_id` column in the
   trailing `runs.csv`, `analysis/experiments.json`, runs normalized to
-  `research/runs/<run_id>` (all in the later migration phase).
+  `research/runs/<run_id>` (all in the later one-time preparation).
 - Research Frontend (`research_frontend`): Surface tab, API client,
   context-bar change, startup change, tests.
 - No Strategy Engine change.

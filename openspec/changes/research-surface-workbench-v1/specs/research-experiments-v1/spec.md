@@ -53,7 +53,7 @@ the frontend SHALL NOT derive views from the dimension list.
 #### Scenario: Missing unit
 
 - **WHEN** a dimension has neither a unit nor grids with units
-- **THEN** the Experiment is reported invalid.
+- **THEN** requests for that Experiment return a stable error naming the missing unit.
 
 ### Requirement: Provenance is stored, not inferred
 
@@ -122,19 +122,22 @@ Experiment absent from the registry SHALL NOT be served.
 
 ### Requirement: Read-only Experiment API
 
-Research Service SHALL serve
-`GET /api/research/experiments`,
-`GET /api/research/experiments/{experiment_id}` (the manifest),
-`GET /api/research/experiments/{experiment_id}/results` and
-`GET /api/research/experiments/{experiment_id}/findings`. The results route
-SHALL return columnar JSON (`columns`, `rows`, `data`), SHALL accept an optional
-column selection, and SHALL filter by equality on dimension ids given as query
-parameters. The route SHALL use the semantic ids declared in `result_schema`
-(dimension and metric ids), SHALL translate them to physical table columns
-including every unit column of a multi-grid dimension, and SHALL NOT require or
-return physical column names. An unknown dimension id SHALL be HTTP 400. The service SHALL NOT write to Experiment folders and SHALL
-NOT expose a backend entity or route named Surface, a cells route or an
-aggregates route.
+Research Service SHALL serve exactly three experiment routes:
+`GET /api/research/experiments` (the registry contents, read without touching any
+manifest, table or run), `GET /api/research/experiments/{experiment_id}` (the
+manifest) and `GET /api/research/experiments/{experiment_id}/results`. The results
+route SHALL return columnar JSON (`columns`, `rows`, `data`), SHALL accept an
+optional column selection, and SHALL filter by equality on dimension ids given as
+query parameters. It SHALL use the semantic ids declared in `result_schema`,
+SHALL translate them to physical table columns including every unit column of a
+multi-grid dimension, and SHALL NOT require or return physical column names. An
+unknown id SHALL be HTTP 400. The service SHALL NOT write to Experiment folders
+and SHALL NOT expose a Surface, cells, aggregates or findings route.
+
+#### Scenario: Registry read is cheap
+
+- **WHEN** the experiment list is requested
+- **THEN** only `experiments.json` is read.
 
 #### Scenario: Slice by initial stop
 
@@ -153,75 +156,75 @@ aggregates route.
 - **WHEN** an unregistered `experiment_id` is requested
 - **THEN** the response is HTTP 404.
 
-### Requirement: Experiment validation
+#### Scenario: Malformed table
 
-Research Service SHALL validate each registered Experiment (cached by file
-modification time and size): the manifest and `result_schema` are well formed,
-the table header contains every declared column, dimension keys are unique per
-arm, and every non-empty `run_id` exists as `<artifacts_root>/<run_id>/manifest.json`.
-An invalid Experiment SHALL remain in the list marked invalid, and its data
-routes SHALL return a stable error naming the violation.
+- **WHEN** a requested experiment's manifest or table is malformed
+- **THEN** that request returns a stable error naming the problem and other
+  experiments are unaffected.
 
-#### Scenario: Run id without a bundle
+### Requirement: Run id is optional drill-down
 
-- **WHEN** a row names a `run_id` that has no bundle at the canonical location
-- **THEN** the Experiment is reported invalid with that run id.
+A missing run bundle SHALL NOT invalidate an Experiment, a registry entry or any
+result row. Opening a run whose bundle is missing SHALL fail through the existing
+run API as HTTP 404.
 
-### Requirement: Controlled migration of existing artifacts
+#### Scenario: Missing bundle
 
-Existing artifacts SHALL be brought to this contract by a staged migration that
-moves nothing until its validation phases pass: inventory; dry-run report;
-validation; normalization of referenced runs into `<artifacts_root>/<run_id>/`
-by rename with a rollback journal; data edits; parity validation; and a
-separate, last cleanup phase requiring explicit approval. Identical copies of a
-run SHALL collapse to one; copies with different manifests, or a folder name
-different from `manifest.run_id`, SHALL stop the migration. Run ids SHALL NOT
-change. The migration SHALL NOT delete anything before parity validation passes.
+- **WHEN** a row's `run_id` has no bundle and the user opens it
+- **THEN** the existing run API returns 404 and nothing else is affected.
+
+### Requirement: Registry and data root
+
+The experiment registry SHALL be read from `analysis/experiments.json` under the
+analysis root, which SHALL be derived from the configured research data root
+(`<artifacts_root>/../analysis`) and SHALL NOT have its own setting.
+
+#### Scenario: One root
+
+- **WHEN** the artifacts root is configured
+- **THEN** the analysis root is its sibling `analysis` directory.
+
+### Requirement: One-time preparation of historical data
+
+Existing historical artifacts SHALL be prepared once, outside runtime, in
+stages that stop on failure and move nothing until the dry-run report has been
+reviewed: inventory and dry-run; normalization of referenced run bundles into
+`<artifacts_root>/<run_id>` by rename with a rollback journal; preparation of the
+two EMA500 datasets (manifest `result_schema` with `view`, `experiments.json`,
+nullable `run_id` column in the trailing table); verification (table metrics
+unchanged, equal to existing HTML data where it exists, every non-null `run_id`
+has a bundle at the canonical location); and a separate cleanup requiring explicit
+approval. Identical copies of a run SHALL collapse to one; conflicting copies, or a
+folder name different from `manifest.run_id`, SHALL stop the preparation. Run ids
+SHALL NOT change and nothing SHALL be deleted before verification passes.
 
 #### Scenario: Conflicting duplicate
 
 - **WHEN** two copies of one `run_id` have different manifests
-- **THEN** the migration stops and reports the run id for a manual decision.
+- **THEN** the preparation stops and reports the run id for a manual decision.
 
 #### Scenario: Dry run
 
-- **WHEN** the migration is run in dry-run mode
+- **WHEN** the preparation is run in dry-run mode
 - **THEN** it writes a plan and report and changes no file.
 
-### Requirement: Trailing result table run links
+### Requirement: Trailing run links
 
-The migration SHALL add a nullable `run_id` column to the trailing geometry
-result table without changing any existing value. Every candidate (run, row)
-pair SHALL be classified CONFIRMED, POSSIBLE or NO LINK. A pair is CONFIRMED
-only if the run's own recorded strategy spec declares the row's dimension
-values, the run's recorded metrics equal the row's, and, when the row carries an
-authoritative `market_data_hash`, the run's market hash equals that row value.
-Metric equality alone SHALL NOT confirm a pair. `run_id` SHALL be written only
-for CONFIRMED pairs with exactly one CONFIRMED run for the row. Market hash
-SHALL NOT be used as a tie-break when the row has no market identity column, and
-no table-wide market window SHALL be assumed. Rows with several CONFIRMED runs,
-POSSIBLE pairs and NO LINK pairs SHALL remain without `run_id` and be listed in
-the migration report.
+The preparation SHALL add `run_id` to a trailing row only when a run is
+confirmed for it: the run's own recorded strategy spec declares the row's
+dimension values, the run's recorded metrics equal the row's, and, only when the
+row carries an authoritative `market_data_hash`, the run's market hash equals it.
+Metric equality alone SHALL NOT link a run. A row with more than one such run, and
+every other candidate pair, SHALL remain without `run_id` and be listed in the
+report. No market-hash tie-break and no table-wide market window SHALL be used.
 
-#### Scenario: Two confirmed runs for one row
+#### Scenario: Two runs for one row
 
-- **WHEN** two runs are CONFIRMED for one row
-- **THEN** no `run_id` is written for that row
-- **AND** the report names both runs.
+- **WHEN** two runs satisfy the confirmation for one row
+- **THEN** no `run_id` is written for that row and the report names both runs.
 
 #### Scenario: Numbers match but the spec differs
 
 - **WHEN** a run's metrics equal a row's but its recorded spec does not declare
   the row's dimension values
-- **THEN** the pair is POSSIBLE and no `run_id` is written.
-
-### Requirement: Parity of migrated data
-
-After migration, every non-empty `run_id` SHALL resolve to
-`<artifacts_root>/<run_id>/`, every linked run's metrics SHALL equal its row,
-and the result tables SHALL match the data of the existing HTML presentations.
-
-#### Scenario: Historical HTML parity
-
-- **WHEN** parity validation runs on ratio_4d
-- **THEN** all 12 672 rows equal the data embedded in its existing HTML.
+- **THEN** no `run_id` is written.
