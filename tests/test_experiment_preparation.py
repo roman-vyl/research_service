@@ -102,10 +102,10 @@ def test_two_confirmed_runs_for_one_row_stay_unlinked(tmp_path: Path) -> None:
 def test_prepare_is_dry_by_default_and_apply_backs_up(tmp_path: Path) -> None:
     root = _research_root(tmp_path)
     before = (root / "analysis" / prepare.TRAIL / "runs.csv").read_text()
-    dry = prepare.prepare(root, {"confirmed": {"0": RID_A}}, apply=False)
+    dry = prepare.prepare(root, {"confirmed": {"0": RID_A}, "summary": {}}, apply=False)
     assert dry["actions"] and not (root / "analysis" / "experiments.json").exists()
     assert (root / "analysis" / prepare.TRAIL / "runs.csv").read_text() == before
-    prepare.prepare(root, {"confirmed": {"0": RID_A}}, apply=True)
+    prepare.prepare(root, {"confirmed": {"0": RID_A}, "summary": {}}, apply=True)
     table = list(csv.DictReader((root / "analysis" / prepare.TRAIL / "runs.csv").open()))
     assert [r["run_id"] for r in table] == [RID_A, "", ""]
     assert all(r["net_pnl"] for r in table)  # existing values untouched
