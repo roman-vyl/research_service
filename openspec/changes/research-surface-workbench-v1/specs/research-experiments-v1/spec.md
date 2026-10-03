@@ -34,8 +34,8 @@ comparison rows are matched to treatment rows.
 The block SHALL also carry a `view` descriptor listing one or more views; each
 view SHALL declare its x and y dimension ids, the dimension ids exposed as
 controls, the default metric, and, for an aggregated map, the dimension ids it
-aggregates over. The descriptor tells the frontend how the Experiment is shown;
-the frontend SHALL NOT derive views from the dimension list.
+aggregates over. The descriptor states how the Experiment is meant to be shown, so that consumers do
+not derive views from the dimension list.
 
 #### Scenario: Trailing dual grid
 

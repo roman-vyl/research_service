@@ -3,7 +3,8 @@
 Research results live in analysis folders under the research data root
 (`manifest.json`, `runs.csv`, `findings.jsonl`, README, standalone HTML) with the
 Engine run bundles they were produced from stored elsewhere. The workbench can
-show neither, and a result row cannot be opened as a run.
+be served by Research Service, and a result row cannot be traced to its run
+bundle.
 
 The domain model this change fixes:
 
@@ -12,8 +13,8 @@ The domain model this change fixes:
 - **Run** is the detailed execution artifact of one materialized point of an
   Experiment, stored once at `research/runs/<run_id>/`.
 - **Surface** is only the name of the workbench's interactive view over an
-  Experiment (the user fixes some dimensions and sees a two-dimensional
-  projection).
+  Experiment; it is specified separately in `research_frontend` and is not a
+  Research Service entity.
 - **HTML** is a standalone presentation artifact generated from the same data;
   it is never parsed and never part of identity or resolution.
 
@@ -27,9 +28,9 @@ Facts established on the local research data (2026-10-03):
   (`run_` + uuid4 hex) have no conflicting copies; 4 060 identical copies exist.
 - Research Service already reads a run at `<artifacts_root>/<run_id>/`; only the
   historical bundles that sit elsewhere are unreachable.
-- `GET /api/research/runs` is called by the frontend only for the startup
-  "newest run" selection and the run dropdown (and by Composer after a
-  backtest to refresh that list); it reads and hashes every bundle in the root.
+- `GET /api/research/runs` reads and hashes every bundle in the root; its only
+  frontend uses are startup newest-run selection and the run dropdown, which the
+  frontend change stops relying on. It stays unchanged here.
 - ratio_4d is assembled from 7 batches with 7 different market windows and
   `market_data_hash` values (recorded per row); an Experiment can therefore
   hold several market snapshots.
@@ -51,20 +52,6 @@ Facts established on the local research data (2026-10-03):
   the manifest, and results (columnar, filtered by semantic dimension ids).
 - Make `research/runs/<run_id>/` the only physical location of a run. Research
   Service needs no run index, resolver, second root or fallback.
-- Add the **Surface tab** (`Chart | Surface | Reports | Strategy Composer`): a
-  visualisation of an Experiment's ready-made result table, with views declared
-  by the manifest `view` descriptor, filters and a details panel per point; all
-  state is local to the tab. Its only link to the workbench is the existing
-  `setSelectedRunId(run_id)`, triggered by an explicit "Open run" action on a
-  point that has a `run_id`; points without one show their metrics only.
-- Make the context-bar run dropdown legacy (hidden, code kept, read-only run id
-  shown). Workbench starts with `selectedRunId = null` and an explicit idle
-  state. `/api/research/runs` is no longer called at startup and is kept
-  unchanged. Existing Composer behaviour stays functional.
-- This is a **cross-repository change**. `research_service` owns the Experiment
-  contract, API and the one-time preparation tooling; `research_frontend` owns
-  the Surface UI and the Workbench integration. Apply works in both repositories,
-  in the matching task groups.
 - Specify a **one-time preparation** of the two EMA500 datasets and their runs
   (inventory and dry-run, normalization into `research/runs/<run_id>`, manifest
   and registry, trailing `run_id` links, verification, separate cleanup). It is
@@ -77,8 +64,6 @@ Facts established on the local research data (2026-10-03):
 - `research-experiments-v1`: Experiment bundle contract (manifest
   `result_schema`, result table, provenance, canonical run location),
   Experiment registry, read-only Experiment API, one-time preparation of historical data.
-- `research-workbench-surface-view-v1`: Surface tab, point details with an explicit
-  run action, legacy run dropdown, startup without a run.
 
 ### Modified Capabilities
 
@@ -90,10 +75,19 @@ Facts established on the local research data (2026-10-03):
 - Any run index, resolver, `run_store`, second run root, symlink handling,
   background or snapshot index, root ranking, manifest-hash qualifier, run
   ambiguity API.
-- A backend entity or API named Surface; a geometry-aggregates endpoint; a
+- A backend entity or API named Surface; any frontend implementation; a geometry-aggregates endpoint; a
   parallel cells table; changing `/api/research/runs`; changing the chart
   runtime or report loading dependencies.
 - Running Engine backtests for result rows that have no run.
+
+## Dependency and boundary
+
+Research Frontend is a consumer of the Experiment API. Its Surface tab is
+specified by a separate change in `research_frontend`
+(`research-workbench-surface-view-v1`) and is not part of this change; this change
+contains no frontend implementation requirements. `run_id` in a result row is an
+optional reference to a run that the existing run API reads at
+`<artifacts_root>/<run_id>/`.
 
 ## Impact
 
@@ -103,6 +97,4 @@ Facts established on the local research data (2026-10-03):
 - Research data: additive manifest block, nullable `run_id` column in the
   trailing `runs.csv`, `analysis/experiments.json`, runs normalized to
   `research/runs/<run_id>` (all in the later one-time preparation).
-- Research Frontend (`research_frontend`): Surface tab, API client,
-  context-bar change, startup change, tests.
 - No Strategy Engine change.

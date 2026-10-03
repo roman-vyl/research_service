@@ -17,22 +17,12 @@
 
 ## 3. Out of Scope (recorded)
 
+Frontend implementation (separate `research_frontend` change).
+
 Publisher, HTML generator (including restoring the ratio_4d HTML generator),
 findings API, catalog validation, run materialization for replay-only rows.
 
-## 4. Surface Tab and Workbench Integration (research_frontend)
+## 4. Verification
 
-- [ ] 4.1 Types and API client for the Experiment list, manifest, results (filtered by semantic ids).
-- [ ] 4.2 `WorkbenchTab` `"surface"`; order `Chart | Surface | Reports | Strategy Composer`; Surface pane mounted-and-hidden like Chart, rendered outside `WorkbenchGate`.
-- [ ] 4.3 `SurfaceView` with local state only (experiment, metric, view, controls, filters, selected point); no provider, no global state.
-- [ ] 4.4 Components: ExperimentSelector, SurfaceControls (units and ATR↔R conversion), SurfacePlot (heatmap, aggregated map and the declared trigger filmstrip from the manifest `view`), AND-filters with greyed points, CellDetails; baseline/difference only with `arms`.
-- [ ] 4.5 CellDetails: with `run_id` an "Open run" action calling `setSelectedRunId(run_id)` and `setActiveTab("chart")`; without it the metrics and an "Engine run not available" note; provenance from the declared provenance; no use of `selectedRunId` as point identity.
-- [ ] 4.6 Context bar: run `<select>` behind a legacy flag (off) with a deprecation comment; selected run id as read-only text.
-- [ ] 4.7 Startup: initial `selectedRunId` null, idle report status and idle Chart/Reports messages, no `/api/research/runs` call at startup; keep Composer working (change its selection flow only if needed for that).
-- [ ] 4.8 Update the tests that pin the old startup behaviour (`workbenchLoad`, `App`, `chartEventsDisplayLoad`, `chartEventsDistantTradeDisplay`, `ComposerPanel.runBacktest`) and the Playwright suites so that they set a run through the existing fixture/helper mechanism instead of relying on the automatic newest-run selection; no new URL contract.
-- [ ] 4.9 New tests: static guard that `src/features/surface/**` imports nothing from `features/chart/**` or `features/workbenchChartRuntime/**`; no `/api/research/runs` call at startup; a point without `run_id` never calls `setSelectedRunId`; "Open run" calls it once with the `run_id`; Retry keeps the selected run; Surface state survives Chart ↔ Surface ↔ Reports; existing `workbenchChartRuntime` unit tests pass unchanged.
-
-## 5. Verification
-
-- [ ] 5.1 After approved migration: open a sample of ratio_4d rows end to end (row → Chart → Reports) and the linked trailing rows.
-- [ ] 5.2 Confirm `/api/research/runs*` behaviour and tests are unchanged.
+- [ ] 4.1 After the approved one-time preparation: every non-null `run_id` of the two datasets reads through the existing run API.
+- [ ] 4.2 Confirm `/api/research/runs*` behaviour and tests are unchanged.

@@ -7,19 +7,6 @@ See `proposal.md`. Facts the design relies on:
   hashes every bundle in the root. In the compose stack the research data root is
   mounted at `/data` (`artifacts_root=/data/runs`, so `/data/analysis` is
   available).
-- Frontend: one `selectedRunId` in `WorkbenchContext`; report loading depends on
-  `selectedRunId` and `reloadToken` only; `reportLoadStatus` starts as
-  `"loading"` and `WorkbenchGate` shows a loading view until a run loads;
-  bootstrap fetches `/runs`, keeps the previous selection only if listed, else
-  picks the first entry; the context bar renders a run `<select>` from `/runs`;
-  Composer calls `refreshRunsAndSelectRun`. Tests that pin the startup behaviour:
-  `workbenchLoad.test.tsx` ("selects the first entry from GET /runs"),
-  `App.test.tsx`, `chartEventsDisplayLoad.test.tsx`,
-  `chartEventsDistantTradeDisplay.test.tsx`, and the Playwright suites
-  (`trade-focus*`, `diagnostics-acceptance`).
-- Run-change lifecycle already resets the previous run's state: market owner,
-  trace generation, run-keyed trace display cache, context overlay default, and
-  trade/bar focus re-seeded to the new run's last closed trade.
 - Existing result tables: ratio_4d `runs.csv` (26 columns, 12 672 rows,
   `run_id` and `instance_id` per row, per-row `market_data_hash`, `return_pct`
   and `max_drawdown_pct` as fractions, no `net_pnl`); trailing geometry
@@ -33,18 +20,18 @@ See `proposal.md`. Facts the design relies on:
   0.8 MB for one SL without the ATR grid. The existing standalone HTML embeds
   14.5 MB.
 
-## Ownership
+## Boundary
 
-Cross-repository change. `research_service`: Experiment contract and API,
-one-time preparation tooling (task groups 1–2). `research_frontend`: Surface tab
-and Workbench integration (task group 4). Apply works in both repositories.
+Research Frontend consumes the Experiment API; its Surface tab is specified in a
+separate `research_frontend` change (`research-workbench-surface-view-v1`) and is
+not specified or applied here. `run_id` in a result row is an optional reference
+to a run read by the existing run API.
 
 ## Goals / Non-Goals
 
 **Goals:** one persisted Experiment model; one physical run location; no run
-resolution machinery; frontend renders the manifest-declared Experiment views
-from the result table; `selectedRunId` stays the only selected-run identity; chart runtime
-untouched.
+resolution machinery; a small read-only API over manifest and result table;
+the frontend (specified separately) needs no storage knowledge.
 
 **Non-Goals:** see proposal.
 
@@ -223,60 +210,7 @@ drift apart. Checked in `runtime/settings.py` and `bbb_stack/docker-compose.yml`
 the whole research data directory is mounted at `/data`, so `/data/analysis` is
 available without a deployment change.
 
-### D6. Workbench frontend (kept deliberately small)
-
-Boundary: the Surface tab visualises ready-made metrics; its only link to the
-workbench is the existing `setSelectedRunId(run_id)`.
-
-```
-App
-├── Chart                existing
-├── Surface              new: ExperimentSelector, SurfaceControls, SurfacePlot, CellDetails
-├── Reports              existing
-└── Strategy Composer    existing
-```
-
-- **State.** All Surface state (experiment, metric, view, controls, filters,
-  selected point) is local to `SurfaceView`. No provider and no global state: the
-  Surface pane is mounted-and-hidden like the Chart pane, so its state survives
-  Chart/Surface/Reports switches. As with Chart today, visiting the Composer
-  (which `App` renders instead of the tab panes) discards it.
-- **Placement.** The Surface pane renders outside `WorkbenchGate`, because the
-  gate shows loading/error while no run is selected and Surface must work then.
-- **Point model.** One model for the frontend: coordinates, metrics, optional
-  `run_id`; no separate kinds for replay or Engine points. Provenance is a label
-  taken from the declared provenance.
-- **Click.** A point click only opens local CellDetails. With a `run_id` the
-  details offer "Open run", which calls `setSelectedRunId(run_id)` and
-  `setActiveTab("chart")`; without one it says no detailed Engine run is
-  available. `selectedRunId` is never used as the identity of a point and no
-  highlight is derived from it.
-- **Views.** The manifest `view` descriptor declares each view (x, y, control
-  dimensions, default metric, optional aggregation dimensions); the frontend does
-  not offer arbitrary axes. Trailing: a width × lookback view (controls SL,
-  trigger, distance, grid) and an aggregated trigger × distance map (aggregates
-  over width and lookback); ratio: one width × lookback view (controls SL and
-  TP ratio). Aggregates (median, counts, share passing, difference to the
-  baseline arm) are plain operations over table columns. The trailing
-  width × lookback view declares `"filmstrip": "trigger"`: a row of small
-  copies of the heatmap, one per trigger value at the selected distance, which
-  helps read the geometry; it is declared per view, not derived, and no other
-  presentation is added to the descriptor (no layouts, widgets, formulas or
-  expressions).
-- **Legacy dropdown.** The run `<select>` moves behind a flag (off), marked
-  legacy; the context bar shows the selected run id as text.
-- **Startup.** `selectedRunId = null` with an explicit idle report status;
-  Chart and Reports show an idle message. `/api/research/runs` is not called at
-  startup (route and client function unchanged). No URL contract for the
-  selected run is introduced. Existing Composer behaviour must remain functional
-  after startup `/runs` loading is removed; its selection flow is changed only if
-  that compatibility requires it.
-- **Existing behaviour relied on, no new code.** On a run change the existing
-  path already drops the previous run's market owner, trace generation, trace
-  cache, overlay default and re-seeds trade/bar focus; the Surface tab neither
-  adds nor writes any of it.
-
-### D7. One-time preparation of historical data (not runtime)
+### D6. One-time preparation of historical data (not runtime)
 
 This is a controlled, one-time preparation of existing artifacts, not a Research
 Service capability. After it, runtime code knows only: registry, manifest,
@@ -337,9 +271,6 @@ canonical-location rule.
 
 ## Risks / Trade-offs
 
-- Startup without a run changes behaviour pinned by several frontend tests; they
-  are updated deliberately (task group 4) rather than kept alive through a hidden
-  default.
 - Until the one-time preparation runs, historical runs are not at the canonical
   location; "Open run" for them returns 404 (nothing else breaks).
 - Only 350 of 415 known Engine runs of the trailing experiment match their row
