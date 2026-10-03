@@ -127,10 +127,8 @@ selected run id as read-only text. Historical runs SHALL NOT be added to
 The workbench SHALL start with `selectedRunId` equal to null and SHALL NOT call
 `/api/research/runs` at startup. Chart and Reports SHALL show an explicit idle
 state ("Open a run from the Surface tab") instead of the loading view while no
-run is selected. A `run` query parameter in the page URL SHALL set the initial
-`selectedRunId`, and the URL SHALL be updated when the selected run changes. The
-Composer SHALL select the run returned by a backtest directly, without re-reading
-the run list.
+run is selected. Existing Composer behaviour SHALL remain functional after the
+removal of startup `/api/research/runs` loading.
 
 #### Scenario: Fresh start
 
@@ -138,10 +136,10 @@ the run list.
 - **THEN** no run is selected, no run list is requested, and Chart and Reports
   show the idle state.
 
-#### Scenario: Reload keeps the run
+#### Scenario: Composer after a backtest
 
-- **WHEN** a run was selected and the page is reloaded
-- **THEN** the same `run_id` is selected from the URL and loaded.
+- **WHEN** the user runs a backtest from the Composer
+- **THEN** the resulting run is selected and shown as before.
 
 #### Scenario: Failed load stays selected
 

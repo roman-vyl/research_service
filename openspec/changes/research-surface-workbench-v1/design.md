@@ -33,11 +33,17 @@ See `proposal.md`. Facts the design relies on:
   0.8 MB for one SL without the ATR grid. The existing standalone HTML embeds
   14.5 MB.
 
+## Ownership
+
+Cross-repository change. `research_service`: Experiment contract and API,
+one-time preparation tooling (task groups 1–2). `research_frontend`: Surface tab
+and Workbench integration (task group 4). Apply works in both repositories.
+
 ## Goals / Non-Goals
 
 **Goals:** one persisted Experiment model; one physical run location; no run
-resolution machinery; frontend renders a generic Experiment from manifest plus
-result table; `selectedRunId` stays the only selected-run identity; chart runtime
+resolution machinery; frontend renders the manifest-declared Experiment views
+from the result table; `selectedRunId` stays the only selected-run identity; chart runtime
 untouched.
 
 **Non-Goals:** see proposal.
@@ -261,10 +267,10 @@ App
   legacy; the context bar shows the selected run id as text.
 - **Startup.** `selectedRunId = null` with an explicit idle report status;
   Chart and Reports show an idle message. `/api/research/runs` is not called at
-  startup (route and client function unchanged). A `?run=<run_id>` URL value is
-  the initial `selectedRunId` and the URL follows later selections, so reload
-  keeps the run and tests get a deterministic run. Composer selects the
-  backtest's run directly.
+  startup (route and client function unchanged). No URL contract for the
+  selected run is introduced. Existing Composer behaviour must remain functional
+  after startup `/runs` loading is removed; its selection flow is changed only if
+  that compatibility requires it.
 - **Existing behaviour relied on, no new code.** On a run change the existing
   path already drops the previous run's market owner, trace generation, trace
   cache, overlay default and re-seeds trade/bar focus; the Surface tab neither

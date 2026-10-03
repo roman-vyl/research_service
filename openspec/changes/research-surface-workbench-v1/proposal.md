@@ -59,8 +59,12 @@ Facts established on the local research data (2026-10-03):
   point that has a `run_id`; points without one show their metrics only.
 - Make the context-bar run dropdown legacy (hidden, code kept, read-only run id
   shown). Workbench starts with `selectedRunId = null` and an explicit idle
-  state; an optional `?run=<run_id>` URL value sets the initial selection.
-  `/api/research/runs` is no longer called at startup and is kept unchanged.
+  state. `/api/research/runs` is no longer called at startup and is kept
+  unchanged. Existing Composer behaviour stays functional.
+- This is a **cross-repository change**. `research_service` owns the Experiment
+  contract, API and the one-time preparation tooling; `research_frontend` owns
+  the Surface UI and the Workbench integration. Apply works in both repositories,
+  in the matching task groups.
 - Specify a **one-time preparation** of the two EMA500 datasets and their runs
   (inventory and dry-run, normalization into `research/runs/<run_id>`, manifest
   and registry, trailing `run_id` links, verification, separate cleanup). It is
