@@ -116,3 +116,23 @@ class ManagedPolicyTraceUnavailable(ResearchServiceError):
             status_code=404,
             details={"run_id": run_id},
         )
+
+
+class ExperimentNotFound(ResearchServiceError):
+    def __init__(self, experiment_id: str) -> None:
+        super().__init__(
+            code="experiment_not_found",
+            message=f"experiment not found: {experiment_id}",
+            status_code=404,
+            details={"experiment_id": experiment_id},
+        )
+
+
+class InvalidExperiment(ResearchServiceError):
+    def __init__(self, experiment_id: str, problem: str) -> None:
+        super().__init__(
+            code="experiment_invalid",
+            message=f"experiment {experiment_id} is not readable: {problem}",
+            status_code=500,
+            details={"experiment_id": experiment_id, "problem": problem},
+        )
