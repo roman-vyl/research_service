@@ -66,6 +66,7 @@ One additive block in the existing manifest; existing keys (`test_id`,
 stay as they are and are not interpreted by the frontend.
 
 ```json
+"experiment_id": "btcusdt_p.ema500.ratio_4d",
 "result_schema": {
   "contract_version": "research_experiment_result_schema.v1",
   "table": "runs.csv",
@@ -152,11 +153,15 @@ object may list the snapshots.
       "manifest": "BTCUSDT.P/ema500/width_x_untouched_x_stop_x_ratio_4d/manifest.json" } ] }
 ```
 
-Only what the selector needs: `experiment_id` (unique key in the registry),
-`title`, `ticker`, `anchor` (grouping), relative `manifest` path. The manifest
-`test_id` stays an experiment identity inside its folder and is not the
-registry key (it is not unique across anchors). The registry never copies
-manifest content. An experiment absent from the registry is simply not served.
+Only what the selector needs: `experiment_id`, `title`, `ticker`, `anchor`
+(grouping), relative `manifest` path. `experiment_id` is the one identity of an
+Experiment in the new system (for example `btcusdt_p.ema500.trailing_geometry_4d`)
+and is also recorded in the manifest. `test_id` in the existing manifest is only
+the legacy domain test name (for example
+`width_x_untouched_x_stop_x_trailing_geometry_4d`); it is not unique across
+anchors, is not an identity, and no route or registry key uses it. The registry
+never copies manifest content. An experiment absent from the registry is not
+served.
 
 ### D4. Canonical run location
 
@@ -172,10 +177,15 @@ referenced by no Experiment are an ordinary state of the same store.
   `valid` (with violation text when invalid).
 - `GET /api/research/experiments/{experiment_id}` → the manifest.
 - `GET /api/research/experiments/{experiment_id}/results` → columnar JSON
-  `{ "columns": [...], "rows": N, "data": [[...per column...]] }`. Optional
-  `columns=` limits the columns; any dimension column given as
-  `<column>=<value>` (repeatable) filters by equality. Float columns are
-  rounded for transport; the table on disk is authoritative.
+  `{ "columns": [...], "rows": N, "data": [[...per column...]] }`. The API speaks
+  the manifest's semantic ids: filters are `<dimension id>=<value>` (repeatable,
+  equality, for example `sl=5`, `grid=R`, `trigger=7`) and `columns=` selects
+  metric/dimension ids; the backend translates ids to physical CSV columns
+  through `result_schema`, including every unit column of a multi-grid
+  dimension, the grid selector, the arm, `run_id` and provenance. Response
+  `columns` are semantic ids (with unit and grid stated by the manifest), so
+  the frontend never uses physical column names. Float columns are rounded for
+  transport; the table on disk is authoritative.
 - `GET /api/research/experiments/{experiment_id}/findings` → the findings lines.
 
 No cells endpoint, no aggregates endpoint, no backend axis semantics beyond
@@ -184,6 +194,8 @@ trailing table is 53 MB as CSV and 34 MB / 6.4 MB gzip as columnar JSON for all
 rows, 6.7 MB / 1.3 MB for one SL, so the frontend requests one SL (or one SL
 and grid) at a time; slicing, filters and geometry aggregates then run in the
 browser. The table is cached per file mtime and size.
+
+A filter on an unknown dimension id or a value type mismatch is HTTP 400.
 
 Validation (lazily, cached by mtime): registry and manifest parse; `result_schema`
 well formed; the table header contains every declared column; dimension keys are
@@ -213,6 +225,12 @@ as invalid and its data routes return a stable error naming the violation.
 - Run-specific transient state is already reset by the existing run-change path;
   the Surface view writes none of it and never carries bar or trade focus
   between runs.
+- Capabilities follow the manifest, not trailing geometry: any Experiment gets
+  the generic two-dimensional projection (two chosen dimensions, the others
+  fixed, metric selection, filters); comparison/delta controls appear only when
+  the manifest declares `arms`; the geometry map and trigger filmstrip appear only
+  when it declares compatible multi-grid trigger/distance dimensions. A ratio
+  experiment shows neither.
 - Mounting: the Surface pane sits outside `WorkbenchGate`; the Chart pane stays
   mounted (hidden) while the Surface view is shown. Surface code imports nothing
   from chart or chart-runtime modules and never enables chart heavy I/O;
@@ -243,13 +261,26 @@ Phases, each stopping on failure and none destructive until the last:
    approval): remove identical duplicate copies, historical symlinks, and
    emptied folders.
 
-Trailing `run_id` linking rule (needed because the mapping is not name-unique):
-a run is linked to a row only if it matches the row by all dimension values and
-its recorded metrics equal the row's. If several runs satisfy this, prefer the
-run whose market hash equals the table's market window, then the lowest
-`run_id`; the choice is written to the migration report. Runs that match a row
-by dimensions but not by metrics (for example a later market window) and runs
-with no row (lock-then-trail variants) are not linked.
+Trailing `run_id` linking rule. A false link is worse than a missing one, so
+the migration classifies every candidate (run, row) pair as:
+
+- **CONFIRMED**: the run's own recorded strategy spec (its `request.json`)
+  declares the row's dimension values (width, lookback, SL, trigger, distance
+  and grid), the run's recorded metrics equal the row's (trade count, net PnL,
+  PF, drawdown, long/short), and, only when the row carries an authoritative
+  `market_data_hash` (`row_columns`), `run.market_data_hash ==
+  row.market_data_hash`;
+- **POSSIBLE**: it matches only by dimensions and numbers, or more than one run
+  is CONFIRMED for the same row;
+- **NO LINK**: no row, or the numbers differ (for example a later market window
+  or lock-then-trail variants).
+
+`run_id` is written only for CONFIRMED pairs with exactly one run per row.
+Metric equality alone never confirms. There is no tie-break by market hash
+when the row has no market column (the trailing table has none), and the
+migration never invents a table-wide market window; rows with several
+CONFIRMED runs and all POSSIBLE pairs stay without `run_id` and are listed in
+the report. Losing a historical drill-down is acceptable; a false link is not.
 
 ## Obsolete after this model (checked against dependencies)
 

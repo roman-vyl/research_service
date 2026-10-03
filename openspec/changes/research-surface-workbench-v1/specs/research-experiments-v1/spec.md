@@ -89,6 +89,19 @@ qualifier, and publishing an Experiment SHALL NOT move a run.
 - **WHEN** a run bundle exists in the artifacts root and no Experiment refers to it
 - **THEN** it remains readable at the same location.
 
+### Requirement: Experiment identity
+
+An Experiment SHALL be identified by `experiment_id`, recorded both in the
+registry and in the manifest and unique within the registry. The manifest
+`test_id` SHALL be treated only as a legacy domain test name; it SHALL NOT be
+used as an identity, registry key or route parameter.
+
+#### Scenario: Same test name under two anchors
+
+- **WHEN** the EMA500 and EMA1000 folders both carry `test_id`
+  `width_x_untouched_x_stop_x_ratio_4d`
+- **THEN** they have different `experiment_id` values and are served separately.
+
 ### Requirement: Experiment registry
 
 Available Experiments SHALL be listed in `analysis/experiments.json` with, per
@@ -109,15 +122,25 @@ Research Service SHALL serve
 `GET /api/research/experiments/{experiment_id}/results` and
 `GET /api/research/experiments/{experiment_id}/findings`. The results route
 SHALL return columnar JSON (`columns`, `rows`, `data`), SHALL accept an optional
-column selection, and SHALL filter by equality on any dimension column given as
-query parameters. The service SHALL NOT write to Experiment folders and SHALL
+column selection, and SHALL filter by equality on dimension ids given as query
+parameters. The route SHALL use the semantic ids declared in `result_schema`
+(dimension and metric ids), SHALL translate them to physical table columns
+including every unit column of a multi-grid dimension, and SHALL NOT require or
+return physical column names. An unknown dimension id SHALL be HTTP 400. The service SHALL NOT write to Experiment folders and SHALL
 NOT expose a backend entity or route named Surface, a cells route or an
 aggregates route.
 
 #### Scenario: Slice by initial stop
 
-- **WHEN** results are requested with `sl_atr_multiplier=5`
-- **THEN** only rows with that value are returned, in columnar form.
+- **WHEN** results are requested with `sl=5`
+- **THEN** only rows with that value are returned, in columnar form, with
+  semantic column ids.
+
+#### Scenario: Multi-grid dimension
+
+- **WHEN** results are requested with `grid=R` and `trigger=7`
+- **THEN** the backend filters on the grid column and on the R-unit trigger
+  column named by the manifest, and the client never sees those column names.
 
 #### Scenario: Unknown experiment
 
@@ -162,18 +185,29 @@ change. The migration SHALL NOT delete anything before parity validation passes.
 ### Requirement: Trailing result table run links
 
 The migration SHALL add a nullable `run_id` column to the trailing geometry
-result table without changing any existing value. A run SHALL be linked to a
-row only if it matches the row by all dimension values and its recorded metrics
-equal the row's; when several runs qualify, the run whose market hash equals the
-table's market window SHALL be preferred, then the lowest `run_id`, and the
-choice SHALL be reported. Runs that match by dimensions but not by metrics, and
-runs without a row, SHALL NOT be linked.
+result table without changing any existing value. Every candidate (run, row)
+pair SHALL be classified CONFIRMED, POSSIBLE or NO LINK. A pair is CONFIRMED
+only if the run's own recorded strategy spec declares the row's dimension
+values, the run's recorded metrics equal the row's, and, when the row carries an
+authoritative `market_data_hash`, the run's market hash equals that row value.
+Metric equality alone SHALL NOT confirm a pair. `run_id` SHALL be written only
+for CONFIRMED pairs with exactly one CONFIRMED run for the row. Market hash
+SHALL NOT be used as a tie-break when the row has no market identity column, and
+no table-wide market window SHALL be assumed. Rows with several CONFIRMED runs,
+POSSIBLE pairs and NO LINK pairs SHALL remain without `run_id` and be listed in
+the migration report.
 
-#### Scenario: Two Engine runs for one row
+#### Scenario: Two confirmed runs for one row
 
-- **WHEN** two runs match one row exactly
-- **THEN** exactly one `run_id` is written for that row
-- **AND** the report names both runs and the tie-break used.
+- **WHEN** two runs are CONFIRMED for one row
+- **THEN** no `run_id` is written for that row
+- **AND** the report names both runs.
+
+#### Scenario: Numbers match but the spec differs
+
+- **WHEN** a run's metrics equal a row's but its recorded spec does not declare
+  the row's dimension values
+- **THEN** the pair is POSSIBLE and no `run_id` is written.
 
 ### Requirement: Parity of migrated data
 

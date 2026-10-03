@@ -10,18 +10,30 @@ for the declared dimensions with the remaining dimensions fixed, a two-dimension
 heatmap, treatment/comparison/difference views over declared arms, metric
 selection, filters, and aggregates computed in the frontend. It SHALL render any
 Experiment generically from its manifest `result_schema` and result table and
-SHALL NOT read HTML or the filesystem layout of runs. The view SHALL NOT require
-a selected run.
+SHALL NOT read HTML or the filesystem layout of runs. Its controls SHALL follow
+what the manifest declares: every Experiment gets the generic two-dimensional
+projection over any two declared dimensions with the others fixed, metric
+selection and filters; baseline/difference views appear only when the manifest
+declares `arms`; the geometry map and trigger filmstrip appear only when it
+declares compatible multi-grid trigger/distance dimensions. An Experiment
+without such declarations SHALL NOT be shown those controls. The view SHALL NOT
+require a selected run.
 
 #### Scenario: Open the tab without a run
 
 - **WHEN** the user opens the Surface view and no run is selected
 - **THEN** the Experiment selector and the projection are shown.
 
+#### Scenario: Ratio experiment
+
+- **WHEN** an Experiment declares ordinary dimensions and no arms or multi-grid
+  dimensions
+- **THEN** only the generic projection, metric selection and filters are shown.
+
 #### Scenario: Request only what is displayed
 
 - **WHEN** the user fixes an initial stop
-- **THEN** the results request is filtered to that value and the full table is
+- **THEN** the results request is filtered by the dimension id (`sl`) to that value and the full table is
   not requested.
 
 ### Requirement: Explicit units
