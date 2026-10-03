@@ -100,6 +100,6 @@ Facts established on the local research data (2026-10-03):
 - Research data: additive manifest block, nullable `run_id` column in the
   trailing `runs.csv`, `analysis/experiments.json`, runs normalized to
   `research/runs/<run_id>` (all in the later migration phase).
-- Research Frontend (`research_frontend`): Surface view and provider, API client,
+- Research Frontend (`research_frontend`): Surface tab, API client,
   context-bar change, startup change, tests.
 - No Strategy Engine change.
