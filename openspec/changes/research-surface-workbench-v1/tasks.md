@@ -12,7 +12,7 @@
 - [x] 2.1 Inventory and dry-run script: report of bundles and planned moves into `<artifacts_root>/<run_id>`; identical-copy collapse; STOP on conflicting copies or folder/`run_id` mismatch; same-volume check; rollback journal. Run it and attach the report to the PR; nothing is moved.
 - [x] 2.2 Normalization step (`prepare.py normalize`, dry-run by default, `--apply` renames with a rollback journal and refuses on STOP/missing/other volume) (rename with journal) for the runs referenced by the two EMA500 tables; not executed in this change.
 - [x] 2.3 Dataset preparation: manifest `result_schema` with `view` for both EMA500 experiments, `analysis/experiments.json`, nullable `run_id` column in the trailing table with a backup; trailing link algorithm (confirmed by recorded spec and metrics, row market hash only if present, one run per row, report of every other pair); not executed in this change.
-- [x] 2.4 Verification: table metrics unchanged, equal to the existing ratio_4d HTML data, every non-null `run_id` has a canonical bundle.
+- [x] 2.4 Verification command (`prepare.py verify`): manifests carry `result_schema` and every non-null `run_id` has a canonical bundle. Table metrics unchanged (preparation only adds a column) and equality of ratio_4d with its existing HTML data (12 672 / 12 672 rows) were checked separately by hand, not by this command.
 - [ ] 2.5 Cleanup of identical duplicates and historical symlinks as a separate step after explicit approval.
 
 ## 3. Out of Scope (recorded)
