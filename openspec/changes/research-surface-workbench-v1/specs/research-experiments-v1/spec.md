@@ -31,6 +31,12 @@ is a fraction. Arms SHALL declare the arm column, a role (`treatment` or
 `comparison`) per arm value, the baseline arm, and the dimensions on which
 comparison rows are matched to treatment rows.
 
+The block SHALL also carry a `view` descriptor listing one or more views; each
+view SHALL declare its x and y dimension ids, the dimension ids exposed as
+controls, the default metric, and, for an aggregated map, the dimension ids it
+aggregates over. The descriptor tells the frontend how the Experiment is shown;
+the frontend SHALL NOT derive views from the dimension list.
+
 #### Scenario: Trailing dual grid
 
 - **WHEN** the trailing experiment declares trigger and distance

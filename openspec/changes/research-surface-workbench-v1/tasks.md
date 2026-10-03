@@ -31,23 +31,17 @@
 - [ ] 4.2 Publication writes the Experiment folder (manifest with `result_schema`, result table, findings, README, HTML), validates referenced runs exist, then adds the registry entry.
 - [ ] 4.3 HTML is generated from the manifest and result table; restore the generator of the ratio_4d HTML (not present in any repository).
 
-## 5. Surface View (research_frontend)
+## 5. Surface Tab (research_frontend)
 
-- [ ] 5.1 Types and API client for the Experiment list, manifest, results (filtered), findings.
-- [ ] 5.2 `WorkbenchTab` `"surface"`; order `Chart | Surface | Reports | Strategy Composer`; Surface pane outside `WorkbenchGate`; gated Chart/Reports subtree kept mounted and hidden.
-- [ ] 5.3 Provider above the tabs for `selectedExperiment` and controls; no selected-run or selected-row state.
-- [ ] 5.4 Components driven by `result_schema`: Experiment selector, generic 2D projection over any two dimensions, metric selection, AND-filters with greyed rows; capability-gated parts: arm/baseline/difference only with `arms`, grid switch, filmstrip and geometry map (frontend aggregates) only with compatible multi-grid trigger/distance dimensions. Components use semantic ids only.
-- [ ] 5.5 Row click: with `run_id` call `setSelectedRunId` (no-op if equal); without it show the note; highlight by `run_id === selectedRunId`; provenance label from the declared provenance.
+- [ ] 5.1 Types and API client for the Experiment list, manifest, results (filtered by semantic ids), findings.
+- [ ] 5.2 `WorkbenchTab` `"surface"`; order `Chart | Surface | Reports | Strategy Composer`; Surface pane mounted-and-hidden like Chart, rendered outside `WorkbenchGate`.
+- [ ] 5.3 `SurfaceView` with local state only (experiment, metric, view, controls, filters, selected point); no provider, no global state.
+- [ ] 5.4 Components: ExperimentSelector, SurfaceControls (units and ATR↔R conversion), SurfacePlot (heatmap, aggregated map from the manifest `view`), AND-filters with greyed points, CellDetails; baseline/difference only with `arms`.
+- [ ] 5.5 CellDetails: with `run_id` an "Open run" action calling `setSelectedRunId(run_id)` and `setActiveTab("chart")`; without it the metrics and an "Engine run not available" note; provenance from the declared provenance; no use of `selectedRunId` as point identity.
 - [ ] 5.6 Context bar: run `<select>` behind a legacy flag (off) with a deprecation comment; selected run id as read-only text.
-- [ ] 5.7 Startup: initial `selectedRunId` null (or from `?run=`), idle report status and idle Chart/Reports states, URL kept in sync, no `/api/research/runs` call at startup; Composer selects the backtest run directly.
+- [ ] 5.7 Startup: initial `selectedRunId` null (or from `?run=`), idle report status and idle Chart/Reports messages, URL kept in sync, no `/api/research/runs` call at startup; Composer selects the backtest run directly.
 - [ ] 5.8 Update the tests that pin the old startup behaviour (`workbenchLoad`, `App`, `chartEventsDisplayLoad`, `chartEventsDistantTradeDisplay`, `ComposerPanel.runBacktest`) and the Playwright suites to select a run through `?run=`.
-- [ ] 5.9 New tests:
-  - static guard: `src/features/surface/**` imports nothing from `features/chart/**` or `features/workbenchChartRuntime/**`;
-  - selection before Chart was opened makes only detail, trades, metrics and managed-policy-events requests;
-  - selection through Surface and through the URL produce the same request sequence and the same trade/bar defaults;
-  - Chart → Surface → Chart without a run change does not remount the Chart pane and makes no extra market requests;
-  - Retry keeps the selected run; a row without `run_id` never calls `setSelectedRunId`; no `/runs` call at startup;
-  - existing `workbenchChartRuntime` unit tests pass unchanged.
+- [ ] 5.9 New tests: static guard that `src/features/surface/**` imports nothing from `features/chart/**` or `features/workbenchChartRuntime/**`; no `/api/research/runs` call at startup; a point without `run_id` never calls `setSelectedRunId`; "Open run" calls it once with the `run_id`; Retry keeps the selected run; Surface state survives Chart ↔ Surface ↔ Reports; existing `workbenchChartRuntime` unit tests pass unchanged.
 
 ## 6. Verification
 

@@ -51,11 +51,12 @@ Facts established on the local research data (2026-10-03):
   results (columnar, filterable by dimension equality), findings.
 - Make `research/runs/<run_id>/` the only physical location of a run. Research
   Service needs no run index, resolver, second root or fallback.
-- Add the **Surface view** to the workbench (`Chart | Surface | Reports |
-  Strategy Composer`): Experiment selector, controls over dimensions, heatmap,
-  filters, geometry map; slicing, filtering and aggregates are computed in the
-  frontend. Clicking a row with a `run_id` calls the existing run selection;
-  rows without one never change the selected run.
+- Add the **Surface tab** (`Chart | Surface | Reports | Strategy Composer`): a
+  visualisation of an Experiment's ready-made result table, with views declared
+  by the manifest `view` descriptor, filters and a details panel per point; all
+  state is local to the tab. Its only link to the workbench is the existing
+  `setSelectedRunId(run_id)`, triggered by an explicit "Open run" action on a
+  point that has a `run_id`; points without one show their metrics only.
 - Make the context-bar run dropdown legacy (hidden, code kept, read-only run id
   shown). Workbench starts with `selectedRunId = null` and an explicit idle
   state; an optional `?run=<run_id>` URL value sets the initial selection.
@@ -73,9 +74,8 @@ Facts established on the local research data (2026-10-03):
 - `research-experiments-v1`: Experiment bundle contract (manifest
   `result_schema`, result table, provenance, canonical run location),
   Experiment registry, read-only Experiment API, controlled migration.
-- `research-workbench-surface-view-v1`: Surface view, Experiment selector,
-  single selected-run identity, legacy run dropdown, startup without a run,
-  chart isolation.
+- `research-workbench-surface-view-v1`: Surface tab, point details with an explicit
+  run action, legacy run dropdown, startup without a run.
 
 ### Modified Capabilities
 

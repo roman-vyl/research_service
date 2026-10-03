@@ -79,6 +79,9 @@ stay as they are and are not interpreted by the frontend.
     { "id": "sl",       "label": "Initial SL",         "column": "sl_atr_multiplier",     "unit": "ATR" },
     { "id": "tp_ratio", "label": "TP / SL",            "column": "tp_sl_ratio",           "unit": "R" }
   ],
+  "view": [
+    { "id": "main", "x": "lookback", "y": "width", "controls": ["sl", "tp_ratio"], "default_metric": "return_pct" }
+  ],
   "metrics": [
     { "column": "return_pct",       "label": "Return",  "format": "fraction" },
     { "column": "profit_factor",    "label": "PF",      "format": "number" },
@@ -116,6 +119,10 @@ constant provenance):
     "baseline": "control_tp5r",
     "match_on": ["width", "lookback", "sl"]
   },
+  "view": [
+    { "id": "cells", "x": "lookback", "y": "width", "controls": ["sl", "grid", "trigger", "distance"], "default_metric": "net_pnl" },
+    { "id": "geometry", "x": "distance", "y": "trigger", "controls": ["sl", "grid"], "aggregate_over": ["width", "lookback"], "default_metric": "net_pnl" }
+  ],
   "metrics": [ { "column": "net_pnl", "label": "Net PnL", "format": "number", "unit": "USDT" },
                { "column": "return_pct", "label": "Return", "format": "fraction" } ]
 }
@@ -203,38 +210,54 @@ unique per arm; every non-empty `run_id` exists as
 `<artifacts_root>/<run_id>/manifest.json`. An invalid experiment stays listed
 as invalid and its data routes return a stable error naming the violation.
 
-### D6. Workbench state and startup
+### D6. Workbench frontend (kept deliberately small)
 
-- `selectedRunId` (existing) remains the only selected-run identity.
-- `selectedExperiment` and the Surface controls live in a provider above the
-  tabs, not in `WorkbenchContext`, and survive tab switches.
-- Row click with `run_id` → `setSelectedRunId(run_id)` and nothing else; clicking
-  the already selected run changes nothing. A row is shown selected iff its
-  `run_id === selectedRunId`; there is no selected-row state. A row without
-  `run_id` never changes the selection and shows that no detailed Engine run is
-  available.
-- Legacy run dropdown: behind a flag, off in production, marked as legacy and a
-  candidate for removal; the context bar shows the selected run id as text.
-- Startup (E1): `selectedRunId = null` and an explicit idle report status;
-  Chart and Reports show "Select a row in the Surface view". `/api/research/runs`
-  is not called at startup; it stays in the backend and the client unchanged.
-  An optional `?run=<run_id>` URL value is the initial `selectedRunId`; the URL
-  is updated when the selection changes, so reload keeps the run and tests get a
-  deterministic run without a "newest run" default. Composer selects the run
-  returned by a backtest directly, without re-reading the run list.
-- Run-specific transient state is already reset by the existing run-change path;
-  the Surface view writes none of it and never carries bar or trade focus
-  between runs.
-- Capabilities follow the manifest, not trailing geometry: any Experiment gets
-  the generic two-dimensional projection (two chosen dimensions, the others
-  fixed, metric selection, filters); comparison/delta controls appear only when
-  the manifest declares `arms`; the geometry map and trigger filmstrip appear only
-  when it declares compatible multi-grid trigger/distance dimensions. A ratio
-  experiment shows neither.
-- Mounting: the Surface pane sits outside `WorkbenchGate`; the Chart pane stays
-  mounted (hidden) while the Surface view is shown. Surface code imports nothing
-  from chart or chart-runtime modules and never enables chart heavy I/O;
-  selecting a run before Chart was ever opened loads only the report requests.
+Boundary: the Surface tab visualises ready-made metrics; its only link to the
+workbench is the existing `setSelectedRunId(run_id)`.
+
+```
+App
+├── Chart                existing
+├── Surface              new: ExperimentSelector, SurfaceControls, SurfacePlot, CellDetails
+├── Reports              existing
+└── Strategy Composer    existing
+```
+
+- **State.** All Surface state (experiment, metric, view, controls, filters,
+  selected point) is local to `SurfaceView`. No provider and no global state: the
+  Surface pane is mounted-and-hidden like the Chart pane, so its state survives
+  Chart/Surface/Reports switches. As with Chart today, visiting the Composer
+  (which `App` renders instead of the tab panes) discards it.
+- **Placement.** The Surface pane renders outside `WorkbenchGate`, because the
+  gate shows loading/error while no run is selected and Surface must work then.
+- **Point model.** One model for the frontend: coordinates, metrics, optional
+  `run_id`; no separate kinds for replay or Engine points. Provenance is a label
+  taken from the declared provenance.
+- **Click.** A point click only opens local CellDetails. With a `run_id` the
+  details offer "Open run", which calls `setSelectedRunId(run_id)` and
+  `setActiveTab("chart")`; without one it says no detailed Engine run is
+  available. `selectedRunId` is never used as the identity of a point and no
+  highlight is derived from it.
+- **Views.** The manifest `view` descriptor declares each view (x, y, control
+  dimensions, default metric, optional aggregation dimensions); the frontend does
+  not offer arbitrary axes. Trailing: a width × lookback view (controls SL,
+  trigger, distance, grid) and an aggregated trigger × distance map (aggregates
+  over width and lookback); ratio: one width × lookback view (controls SL and
+  TP ratio). Aggregates (median, counts, share passing, difference to the
+  baseline arm) are plain operations over table columns. The trigger filmstrip
+  of the old HTML is dropped.
+- **Legacy dropdown.** The run `<select>` moves behind a flag (off), marked
+  legacy; the context bar shows the selected run id as text.
+- **Startup.** `selectedRunId = null` with an explicit idle report status;
+  Chart and Reports show an idle message. `/api/research/runs` is not called at
+  startup (route and client function unchanged). A `?run=<run_id>` URL value is
+  the initial `selectedRunId` and the URL follows later selections, so reload
+  keeps the run and tests get a deterministic run. Composer selects the
+  backtest's run directly.
+- **Existing behaviour relied on, no new code.** On a run change the existing
+  path already drops the previous run's market owner, trace generation, trace
+  cache, overlay default and re-seeds trade/bar focus; the Surface tab neither
+  adds nor writes any of it.
 
 ### D7. Migration (specified here, executed later)
 
