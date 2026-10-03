@@ -9,8 +9,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from research_service.adapters.config import FilesystemConfigStore
+from research_service.adapters.experiments import FilesystemExperiments
 from research_service.api.errors import install_error_handlers
-from research_service.api.routers import market, research, system
+from research_service.api.routers import experiments, market, research, system
 from research_service.application.backtests import (
     MaterializeBacktestProjectionOutcome,
     PersistSingleInstanceRun,
@@ -59,6 +60,7 @@ def create_app(
     app.include_router(system.router)
     app.include_router(market.router)
     app.include_router(research.router)
+    app.include_router(experiments.router)
     return app
 
 
@@ -102,4 +104,5 @@ def _build_services(settings: Settings, container: Container) -> AppServices:
             persist_single_instance_run,
         ),
         persist_batch_experiment=PersistBatchExperiment(container.artifacts),
+        experiments=FilesystemExperiments(settings.analysis_root),
     )

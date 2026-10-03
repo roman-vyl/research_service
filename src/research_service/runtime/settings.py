@@ -21,3 +21,8 @@ class Settings(BaseSettings):
         "http://127.0.0.1:5173",
         "http://localhost:5173",
     )
+
+    @property
+    def analysis_root(self) -> Path:
+        """Research analysis root: sibling `analysis` of the artifacts root (one data root)."""
+        return self.artifacts_root.parent / "analysis"
