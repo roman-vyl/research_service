@@ -135,7 +135,7 @@ def test_normalize_dry_run_apply_and_rollback(tmp_path: Path) -> None:
     src = _bundle(ratio / "runs" / "b1", RID_A, {}, 1, "1")
     dry = prepare.normalize(root, apply=False)
     assert dry["moves"] == 1 and src.exists() and not (root / "runs" / RID_A).exists()
-    journal = root / "j.json"
+    journal = root / "j.jsonl"
     prepare.normalize(root, apply=True, journal=journal)
     assert (root / "runs" / RID_A / "manifest.json").is_file() and not src.exists()
     assert prepare.rollback(journal) == 1 and src.exists() and not (root / "runs" / RID_A).exists()
@@ -149,3 +149,67 @@ def test_normalize_refuses_when_inventory_has_a_stop(tmp_path: Path) -> None:
     _bundle(ratio / "runs" / "b2", RID_A, {"x": 1}, 1, "1", market="other")
     assert prepare.normalize(root, apply=True)["refused"] is True
     assert not (root / "runs" / RID_A).exists()
+
+
+def _two_run_root(tmp_path: Path) -> tuple[Path, Path, Path]:
+    root = _research_root(tmp_path)
+    ratio = root / "analysis" / prepare.RATIO
+    (ratio / "runs.csv").write_text(f"run_id\n{RID_A}\n{RID_B}\n")
+    a = _bundle(ratio / "runs" / "b1", RID_A, {}, 1, "1")
+    b = _bundle(ratio / "runs" / "b1", RID_B, {}, 1, "1")
+    return root, a, b
+
+
+def test_normalize_failure_midway_leaves_a_recoverable_journal(tmp_path: Path, monkeypatch) -> None:
+    import os
+
+    import pytest
+
+    root, a, b = _two_run_root(tmp_path)
+    real = os.rename
+    calls = {"n": 0}
+
+    def flaky(src, dst):  # type: ignore[no-untyped-def]
+        calls["n"] += 1
+        if calls["n"] == 2:
+            raise OSError("boom")
+        return real(src, dst)
+
+    monkeypatch.setattr(prepare.os, "rename", flaky)
+    journal = root / "j.jsonl"
+    with pytest.raises(OSError):
+        prepare.normalize(root, apply=True, journal=journal)
+    monkeypatch.setattr(prepare.os, "rename", real)
+    assert len(journal.read_text().splitlines()) == 1  # the first move was journaled
+    assert prepare.rollback(journal) == 1
+    assert a.exists() and b.exists()
+    assert not (root / "runs" / RID_A).exists() and not (root / "runs" / RID_B).exists()
+
+
+def test_normalize_preflight_refuses_when_a_target_exists(tmp_path: Path) -> None:
+    root, a, _ = _two_run_root(tmp_path)
+    (root / "runs" / RID_B).mkdir()
+    out = prepare.normalize(root, apply=True)
+    assert out["refused"] is True and a.exists()
+    assert not (root / "normalize_journal.jsonl").exists()
+
+
+def _snapshot(root: Path) -> dict[str, str]:
+    return {str(p): p.read_text() for p in sorted((root / "analysis").rglob("*")) if p.is_file()}
+
+
+def test_prepare_apply_refuses_without_or_with_bad_links_report(tmp_path: Path) -> None:
+    root = _research_root(tmp_path)
+    before = _snapshot(root)
+    for bad in (None, {}, {"confirmed": {}}, {"confirmed": {"0": "nope"}, "summary": {}},
+                {"confirmed": {"99": RID_A}, "summary": {}},
+                {"confirmed": {"2": RID_A}, "summary": {}}):  # row 2 is a control row
+        out = prepare.prepare(root, bad, apply=True)  # type: ignore[arg-type]
+        assert out["refused"] is True
+        assert _snapshot(root) == before
+    assert prepare.prepare(root, None, apply=False)["actions"]  # dry-run stays allowed
+
+
+def test_prepare_cli_exits_nonzero_when_refused(tmp_path: Path) -> None:
+    root = _research_root(tmp_path)
+    assert prepare.main(["prepare", "--data-root", str(root), "--apply"]) == 2

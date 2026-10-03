@@ -97,31 +97,40 @@ def inventory(data_root: Path, artifacts_root: Path | None = None) -> dict[str, 
 
 
 def normalize(data_root: Path, apply: bool, journal: Path | None = None) -> dict[str, Any]:
-    """Rename referenced bundles into <artifacts_root>/<run_id> (journal for rollback).
+    """Rename referenced bundles into <artifacts_root>/<run_id> with a recoverable journal.
 
-    Dry-run unless `apply`; refuses to run when the inventory says STOP/missing/other volume.
-    Identical duplicates stay in place (they are removed only by the separate cleanup step).
+    Dry-run unless `apply`.  Refuses when the inventory says STOP/missing/other volume.  All
+    sources and targets are checked before the first rename; the journal (one JSON line per
+    move) is created before the first rename and flushed after every successful move, so a
+    failure after N moves leaves a journal that `rollback` can use.  Identical duplicates stay
+    in place (removed only by the separate cleanup step).
     """
     report = inventory(data_root)
     if not report["ok_to_proceed"]:
         return {"refused": True, "reason": "inventory is not clean", "stop": report["stop"][:20],
                 "missing": report["referenced_missing_everywhere"][:20]}
-    moves = report["planned_moves"]
-    done: list[dict[str, str]] = []
+    moves = [(Path(m["copies"][0]), Path(m["target"])) for m in report["planned_moves"]]
+    bad = [str(d) for s, d in moves if not s.is_dir() or d.exists()]
+    if bad:
+        return {"refused": True, "reason": "preflight failed (source missing or target exists)",
+                "examples": bad[:20]}
+    path = journal or data_root / "normalize_journal.jsonl"
     if apply:
-        for m in moves:
-            src, dst = Path(m["copies"][0]), Path(m["target"])
-            if dst.exists():
-                raise SystemExit(f"target exists, stopping: {dst}")
-            os.rename(src, dst)
-            done.append({"from": str(src), "to": str(dst)})
-        target = journal or data_root / "normalize_journal.json"
-        target.write_text(json.dumps(done, indent=1))
-    return {"applied": apply, "moves": len(moves), "journal": str(journal) if journal else None}
+        if path.exists():
+            return {"refused": True, "reason": f"journal already exists: {path}"}
+        with path.open("w") as fh:
+            fh.flush()
+            os.fsync(fh.fileno())
+            for src, dst in moves:
+                os.rename(src, dst)
+                fh.write(json.dumps({"from": str(src), "to": str(dst)}) + "\n")
+                fh.flush()
+                os.fsync(fh.fileno())
+    return {"applied": apply, "moves": len(moves), "journal": str(path) if apply else None}
 
 
 def rollback(journal: Path) -> int:
-    done = json.loads(journal.read_text())
+    done = [json.loads(line) for line in journal.read_text().splitlines() if line.strip()]
     for m in reversed(done):
         os.rename(m["to"], m["from"])
     return len(done)
@@ -294,7 +303,31 @@ SCHEMAS: dict[str, dict[str, Any]] = {
 }
 
 
+def check_links_report(links: Any, table: Path) -> str | None:
+    """Return a problem description, or None when the report can be written into the table."""
+    if not isinstance(links, dict) or not isinstance(links.get("confirmed"), dict) \
+            or "summary" not in links:
+        return "links report is not the output of the links command"
+    with table.open(newline="") as fh:
+        rows = {i: r for i, r in enumerate(csv.DictReader(fh))}
+    for key, rid in links["confirmed"].items():
+        if not (isinstance(key, str) and key.isdigit() and int(key) in rows):
+            return f"links report has an invalid row index: {key!r}"
+        if not (isinstance(rid, str) and RUN_DIR.match(rid)):
+            return f"links report has an invalid run id: {rid!r}"
+        if rows[int(key)].get("arm") != "trailing_no_tp":
+            return f"links report points at a non-treatment row: {key}"
+    return None
+
+
 def prepare(data_root: Path, links: dict[str, Any] | None, apply: bool) -> dict[str, Any]:
+    tpath0 = data_root / "analysis" / TRAIL / "runs.csv"
+    with tpath0.open(newline="") as fh:
+        needs_links = "run_id" not in next(csv.reader(fh))
+    if apply and needs_links:
+        problem = "no links report given" if links is None else check_links_report(links, tpath0)
+        if problem:
+            return {"refused": True, "reason": problem, "applied": False}
     analysis = data_root / "analysis"
     actions: list[str] = []
     for rel, spec in SCHEMAS.items():
@@ -372,10 +405,11 @@ def main(argv: list[str] | None = None) -> int:
     else:
         out = verify(args.data_root)
     text = json.dumps(out, indent=2)
+    refused = bool(out.get("refused"))
     if args.out:
         args.out.write_text(text + "\n")
     print(text if len(text) < 4000 else text[:4000] + "\n... (truncated; use --out)")
-    return 0
+    return 2 if refused else 0
 
 
 if __name__ == "__main__":
