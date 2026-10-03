@@ -1,44 +1,55 @@
-## 1. Run Index (Research Service)
+## 1. Experiment Contract and Registry (Research Service)
 
-- [ ] 1.1 Add settings `RESEARCH_RUN_INDEX_EXTRA_ROOTS` (ordered, read-only) and document them; default empty.
-- [ ] 1.2 Implement discovery of `run_<32 hex>/manifest.json` at any depth with symlink following, `realpath` de-duplication and `manifest_sha256` hashing.
-- [ ] 1.3 Implement resolution (single manifest hash → lowest root rank, then smallest real path; several hashes → ambiguous) and qualified lookup by `manifest_sha256`.
-- [ ] 1.4 Persist and reload the snapshot under `<artifacts_root>/.run_index/`; rescan roots whose directory mtimes changed; add bundles at publish time.
-- [ ] 1.5 Background build at start; readiness states; `GET /api/research/run-index` report; `POST /api/research/run-index/refresh`.
-- [ ] 1.6 Tests: symlinked copy, identical copies across roots, conflicting copies, qualifier mismatch, build-in-progress error, publish-time insertion, extra roots never written.
+- [ ] 1.1 Setting `RESEARCH_ANALYSIS_ROOT` (read-only, default `/data/analysis`).
+- [ ] 1.2 Models and validation for the manifest `result_schema` (dimensions with units or grids, arms, metrics with formats, provenance constant or column, `row_columns`, `run_id_column`).
+- [ ] 1.3 Registry reader for `analysis/experiments.json` (unique `experiment_id`, relative manifest path); unregistered folders are not served.
+- [ ] 1.4 Validation cached by file mtime and size: header columns, dimension-key uniqueness per arm, every non-empty `run_id` has `<artifacts_root>/<run_id>/manifest.json`; invalid experiments stay listed as invalid.
+- [ ] 1.5 Tests on small fixture experiments: dual grid with arms, single-grid with per-row market hash, constant and column provenance, missing unit, missing run bundle, duplicate keys.
 
-## 2. Index-backed Run Reads
+## 2. Experiment API
 
-- [ ] 2.1 Route `RunArtifactReader.read_run_file` and every `/api/research/runs/{run_id}*` route through the index, with optional `manifest_sha256`.
-- [ ] 2.2 HTTP 409 `run_ambiguous` and 503 `run_index_building` error contracts.
-- [ ] 2.3 Keep `/runs` and `/runs/latest` limited to the primary root.
-- [ ] 2.4 Tests: canonical-folder run detail, trades, metrics, chart events and managed-policy events identical to the same bundle placed in the primary root.
+- [ ] 2.1 `GET /api/research/experiments` (registry entries, `row_count`, validity).
+- [ ] 2.2 `GET /api/research/experiments/{experiment_id}` (manifest).
+- [ ] 2.3 `GET /api/research/experiments/{experiment_id}/results`: columnar `{columns, rows, data}`, optional `columns`, equality filters on dimension columns, rounded floats, mtime-keyed cache.
+- [ ] 2.4 `GET /api/research/experiments/{experiment_id}/findings`.
+- [ ] 2.5 Tests: slice by SL, column selection, 404, invalid-experiment error; assert no Surface, cells or aggregates routes exist and `/api/research/runs*` is unchanged.
+- [ ] 2.6 Measure and record response size and time for the trailing experiment unfiltered, per SL, and per SL without the ATR grid.
 
-## 3. Surface Contract and API
+## 3. Migration Tooling (written and dry-run only until approved)
 
-- [ ] 3.1 Pydantic models for `surface.json` (`research_surface.v1`) and contract validation (units, grids, arms, required columns, `cell_id` uniqueness, provenance/run consistency, linked runs resolve).
-- [ ] 3.2 Setting `RESEARCH_SURFACES_ROOT`; discovery of `surface.json`; cached columnar loading of the cells table keyed by mtime and size.
-- [ ] 3.3 Routes: surfaces list, surface definition, cells slice, geometry aggregates, findings; 404 and `surface_invalid` errors.
-- [ ] 3.4 Tests on a small fixture surface with both grids and two arms, including aggregate values checked against a hand computation.
+- [ ] 3.1 Inventory script: all bundles under the research data root with run id, folder name, `manifest.run_id`, size, manifest hash, references from registered result tables.
+- [ ] 3.2 Dry-run planner and report: target `<artifacts_root>/<run_id>` per referenced run, identical-copy collapse, STOP on conflicting copies or folder/`run_id` mismatch, same-volume check, rollback journal format.
+- [ ] 3.3 Trailing link planner: match Engine runs to rows by dimensions and metric equality, tie-break (market hash equal to the table window, then lowest `run_id`), report ambiguities and unlinked runs.
+- [ ] 3.4 Data-edit step (manifest `result_schema` for both EMA500 experiments, nullable `run_id` column in the trailing table with backup, `experiments.json`), not executed in this change.
+- [ ] 3.5 Parity validator: every non-empty `run_id` resolves, linked-run metrics equal rows, market hash matches, table equals existing HTML data.
+- [ ] 3.6 Cleanup as a separate step requiring explicit approval after parity passes.
+- [ ] 3.7 Run phases 1–2 as dry runs and attach the reports to the PR; no file is moved.
 
-## 4. Migration of the EMA500 Surfaces
+## 4. Future Generator / Publisher
 
-- [ ] 4.1 `scripts/surfaces/migrate_research_surface_v1.py`: write `surface.json`, back up `runs.csv`, add `cell_id`, `provenance`, `run_id`, `run_manifest_sha256`.
-- [ ] 4.2 Ratio surface: link all 12 672 rows to their indexed bundles; report any row that does not resolve.
-- [ ] 4.3 Trailing surface: link the Engine runs from `engine_runs.csv` and `engine_runs_parity_samples.csv` to matching replay rows (metrics within tolerance) or add them as `engine` rows; all other rows `replay`.
-- [ ] 4.4 Idempotency check (second run byte-identical) and a validation report written next to each surface.
+- [ ] 4.1 Runs are created at `<artifacts_root>/<run_id>` and never moved by publication.
+- [ ] 4.2 Publication writes the Experiment folder (manifest with `result_schema`, result table, findings, README, HTML), validates referenced runs exist, then adds the registry entry.
+- [ ] 4.3 HTML is generated from the manifest and result table; restore the generator of the ratio_4d HTML (not present in any repository).
 
-## 5. Surface Tab (research_frontend)
+## 5. Surface View (research_frontend)
 
-- [ ] 5.1 Types and API client for surfaces, cells slices, geometry aggregates, run reads with `manifest_sha256`.
-- [ ] 5.2 `WorkbenchTab` `"surface"`, `TabNav` entry, tab outside `WorkbenchGate`.
-- [ ] 5.3 Components: surface picker, heatmap, axis sliders with units and conversion, grid/metric/arm/comparison selectors, filmstrip, geometry map.
-- [ ] 5.4 AND-filters with greyed cells, passing counter, "% cells passing filters" aggregate, persisted per browser.
-- [ ] 5.5 Cell click: engine-linked cells select the run and open Chart; replay cells show the replay note; provenance marks.
-- [ ] 5.6 Tests: vitest for slicing, unit conversion, filters and click handling; Playwright for engine-cell navigation and replay-cell note.
+- [ ] 5.1 Types and API client for the Experiment list, manifest, results (filtered), findings.
+- [ ] 5.2 `WorkbenchTab` `"surface"`; order `Chart | Surface | Reports | Strategy Composer`; Surface pane outside `WorkbenchGate`; gated Chart/Reports subtree kept mounted and hidden.
+- [ ] 5.3 Provider above the tabs for `selectedExperiment` and controls; no selected-run or selected-row state.
+- [ ] 5.4 Generic components driven by `result_schema`: Experiment selector, dimension controls with units and conversion, grid switch, arm/baseline selection, metric selection, heatmap, filmstrip, geometry map with frontend aggregates, AND-filters with greyed rows.
+- [ ] 5.5 Row click: with `run_id` call `setSelectedRunId` (no-op if equal); without it show the note; highlight by `run_id === selectedRunId`; provenance label from the declared provenance.
+- [ ] 5.6 Context bar: run `<select>` behind a legacy flag (off) with a deprecation comment; selected run id as read-only text.
+- [ ] 5.7 Startup: initial `selectedRunId` null (or from `?run=`), idle report status and idle Chart/Reports states, URL kept in sync, no `/api/research/runs` call at startup; Composer selects the backtest run directly.
+- [ ] 5.8 Update the tests that pin the old startup behaviour (`workbenchLoad`, `App`, `chartEventsDisplayLoad`, `chartEventsDistantTradeDisplay`, `ComposerPanel.runBacktest`) and the Playwright suites to select a run through `?run=`.
+- [ ] 5.9 New tests:
+  - static guard: `src/features/surface/**` imports nothing from `features/chart/**` or `features/workbenchChartRuntime/**`;
+  - selection before Chart was opened makes only detail, trades, metrics and managed-policy-events requests;
+  - selection through Surface and through the URL produce the same request sequence and the same trade/bar defaults;
+  - Chart → Surface → Chart without a run change does not remount the Chart pane and makes no extra market requests;
+  - Retry keeps the selected run; a row without `run_id` never calls `setSelectedRunId`; no `/runs` call at startup;
+  - existing `workbenchChartRuntime` unit tests pass unchanged.
 
-## 6. Verification and Rollout
+## 6. Verification
 
-- [ ] 6.1 Run the index against the local research data root and record totals, duplicates and conflicts.
-- [ ] 6.2 Open a sample of historical ratio-surface cells end to end (cell → Chart → Reports).
-- [ ] 6.3 Keep the static HTML visualisations as exports generated from the same surface contract.
+- [ ] 6.1 After approved migration: open a sample of ratio_4d rows end to end (row → Chart → Reports) and the linked trailing rows.
+- [ ] 6.2 Confirm `/api/research/runs*` behaviour and tests are unchanged.

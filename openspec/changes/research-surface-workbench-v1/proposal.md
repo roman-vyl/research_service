@@ -1,88 +1,105 @@
 ## Why
 
-Research results for parameter surfaces (for example BTCUSDT.P / EMA500
-`width_x_untouched_x_stop_x_ratio_4d` and `width_x_untouched_x_stop_x_trailing_geometry_4d`)
-exist only as canonical folders under the research data root (`manifest.json`,
-`runs.csv`, `findings.jsonl`, copied run bundles) plus static local HTML
-visualisations. The workbench cannot show them, and a surface cell cannot be
-opened as a run:
+Research results live in analysis folders under the research data root
+(`manifest.json`, `runs.csv`, `findings.jsonl`, README, standalone HTML) with the
+Engine run bundles they were produced from stored elsewhere. The workbench can
+show neither, and a result row cannot be opened as a run.
 
-- The HTML cells carry no run identity at all.
-- Research Service reads run bundles only from the flat `<artifacts_root>/<run_id>/`
-  layout. 12 672 historical runs referenced by `width_x_untouched_x_stop_x_ratio_4d/runs.csv`
-  live only inside the canonical folder (`runs/<batch>/candidates/<run_id>/`)
-  and are unreachable through `/api/research/runs/{run_id}`.
-- Copies of the same run exist in several places. A scan on 2026-10-03 found
-  78 842 run bundle directories for 68 485 distinct `run_id`s: 4 060 run ids
-  have a byte-identical copy in both `<artifacts_root>` and a canonical folder,
-  and 6 297 more resolve to one directory through symlinks. No run id currently
-  has two different manifests, but nothing prevents it.
-- Most rows of the trailing-geometry surface are Engine-exact replay results
-  without any Engine run bundle (only 415 Engine runs exist for that
-  surface, against 240 120 rows), so they must be shown
-  honestly as replay rows, not as runs.
+The domain model this change fixes:
 
-The goal is a workbench tab where one surface cell maps to exactly one run
-when a run exists, without copying the existing data.
+- **Experiment** is the persisted research dataset: a frozen research setup plus
+  its materialized result table. It is not an HTML file and not a UI view.
+- **Run** is the detailed execution artifact of one materialized point of an
+  Experiment, stored once at `research/runs/<run_id>/`.
+- **Surface** is only the name of the workbench's interactive view over an
+  Experiment (the user fixes some dimensions and sees a two-dimensional
+  projection).
+- **HTML** is a standalone presentation artifact generated from the same data;
+  it is never parsed and never part of identity or resolution.
+
+Facts established on the local research data (2026-10-03):
+
+- Both existing EMA500 `runs.csv` files are already canonical result tables:
+  ratio_4d has 12 672 rows, each with a unique `run_id`; trailing geometry has
+  240 120 rows with no `run_id` column. Neither has duplicate dimension keys.
+  The ratio_4d HTML data equals its `runs.csv` row for row.
+- `research/runs` and `research/analysis` are on one volume; run ids
+  (`run_` + uuid4 hex) have no conflicting copies; 4 060 identical copies exist.
+- Research Service already reads a run at `<artifacts_root>/<run_id>/`; only the
+  historical bundles that sit elsewhere are unreachable.
+- `GET /api/research/runs` is called by the frontend only for the startup
+  "newest run" selection and the run dropdown (and by Composer after a
+  backtest to refresh that list); it reads and hashes every bundle in the root.
+- ratio_4d is assembled from 7 batches with 7 different market windows and
+  `market_data_hash` values (recorded per row); an Experiment can therefore
+  hold several market snapshots.
+- Of the 415 Engine runs known for the trailing experiment, 15 have no row in
+  the table (lock-then-trail variants), 400 map to a row by dimensions, 5 rows
+  are hit by two runs, and only 350 match their row's metrics exactly (the 360
+  SL3 confirmation runs used a later market window, 38 differ in trade count).
+  `run_id` linking therefore needs an explicit parity rule, not a name match.
 
 ## What Changes
 
-- Add a read-only **run index** over the primary artifacts root and configured
-  additional roots (canonical research folders). It discovers run bundles in
-  place without copying, deduplicates symlinked and byte-identical copies,
-  identifies a run by `run_id` plus manifest SHA-256, and reports conflicts
-  instead of guessing.
-- Resolve every `/api/research/runs/{run_id}*` read route through the index, so
-  historical batch and canonical runs open like any published run. The `/runs`
-  list keeps its current scope (primary root only).
-- Define a **research surface contract** (`research_surface.v1`): a
-  `surface.json` beside an existing canonical test folder declaring market,
-  axes and units, arms, and the cells table. Each cell row carries a
-  deterministic `cell_id`, an optional `run_id` with `run_manifest_sha256`, and
-  a `provenance` (`engine`, `replay`, `engine_confirmed_replay`).
-- Add a read-only **surfaces API**: list surfaces, surface definition, cell
-  slices, geometry aggregates, findings.
-- Add a **Surface tab** to the Research Workbench frontend: width × lookback
-  heatmap, axis sliders with explicit units, arm and comparison selection,
-  AND-filters, geometry map, and click-through from a cell to its run in the
-  Chart and Reports tabs.
-- Provide a one-time migration script that adds `cell_id`, `run_id`,
-  `run_manifest_sha256` and `provenance` to the two existing BTCUSDT.P / EMA500
-  surfaces and writes their `surface.json`.
+- Extend the existing `manifest.json` of an Experiment with one machine-readable
+  block `result_schema` (result table, run id column, provenance, row-level
+  columns, dimensions with units and grids, arms, metrics with formats). No new
+  `experiment.json`, no new cells table, no rename of `runs.csv`.
+- Add an explicit registry `research/analysis/experiments.json` listing the
+  available Experiments and their manifest paths.
+- Add a minimal read-only **Experiment API**: list, definition (manifest),
+  results (columnar, filterable by dimension equality), findings.
+- Make `research/runs/<run_id>/` the only physical location of a run. Research
+  Service needs no run index, resolver, second root or fallback.
+- Add the **Surface view** to the workbench (`Chart | Surface | Reports |
+  Strategy Composer`): Experiment selector, controls over dimensions, heatmap,
+  filters, geometry map; slicing, filtering and aggregates are computed in the
+  frontend. Clicking a row with a `run_id` calls the existing run selection;
+  rows without one never change the selected run.
+- Make the context-bar run dropdown legacy (hidden, code kept, read-only run id
+  shown). Workbench starts with `selectedRunId = null` and an explicit idle
+  state; an optional `?run=<run_id>` URL value sets the initial selection.
+  `/api/research/runs` is no longer called at startup and is kept unchanged.
+- Define a controlled, staged **migration** of existing artifacts (inventory,
+  dry-run, validation, normalization of referenced runs into
+  `research/runs/<run_id>`, trailing `run_id` column, manifest schema,
+  registry, parity validation, separate cleanup phase). The change specifies the
+  migration; it moves nothing itself.
 
 ## Capabilities
 
 ### New Capabilities
 
-- `research-run-index-v1`: read-only, multi-root, copy-free run bundle index
-  with exact identity and conflict reporting.
-- `research-surfaces-v1`: research surface contract and read-only surfaces API.
-- `research-workbench-surface-tab-v1`: frontend Surface tab and cell-to-run
-  navigation.
+- `research-experiments-v1`: Experiment bundle contract (manifest
+  `result_schema`, result table, provenance, canonical run location),
+  Experiment registry, read-only Experiment API, controlled migration.
+- `research-workbench-surface-view-v1`: Surface view, Experiment selector,
+  single selected-run identity, legacy run dropdown, startup without a run,
+  chart isolation.
 
 ### Modified Capabilities
 
-- `research-results-bff-v1`: run read routes resolve run bundles through the
-  run index.
+- None.
 
 ## Non-Goals
 
-- Running Engine backtests for replay-only cells (materialization). Replay
-  cells are shown as replay without drill-down; producing real runs for them is
-  a later, explicit request and a separate change.
-- Deleting, moving or rewriting existing run bundles or canonical folders.
-  Cleanup of unreferenced copies is left to a later decision informed by the
-  index report.
-- Changing run bundle contents, batch execution, or the `/runs` list scope.
+- Moving, deleting or rewriting any existing file as part of this specification.
+- Any run index, resolver, `run_store`, second run root, symlink handling,
+  background or snapshot index, root ranking, manifest-hash qualifier, run
+  ambiguity API.
+- A backend entity or API named Surface; a geometry-aggregates endpoint; a
+  parallel cells table; changing `/api/research/runs`; changing the chart
+  runtime or report loading dependencies.
+- Running Engine backtests for result rows that have no run.
 
 ## Impact
 
-- Research Service: new run index adapter and settings, index-backed run
-  reads, new surfaces router and application service, readiness/diagnostics
-  reporting of index state.
-- Research data: additive `surface.json` and four additive columns in the
-  existing `runs.csv` of the two EMA500 surfaces (written by the migration
-  script; previous files kept as backups).
-- Research Frontend (separate repository `research_frontend`): new tab,
-  API client functions and types, components, tests.
+- Research Service: experiment registry/manifest/results reader, Experiment
+  router, validation, settings `RESEARCH_ANALYSIS_ROOT` (read-only), migration
+  tooling.
+- Research data: additive manifest block, nullable `run_id` column in the
+  trailing `runs.csv`, `analysis/experiments.json`, runs normalized to
+  `research/runs/<run_id>` (all in the later migration phase).
+- Research Frontend (`research_frontend`): Surface view and provider, API client,
+  context-bar change, startup change, tests.
 - No Strategy Engine change.

@@ -1,184 +1,278 @@
 ## Context
 
-See `proposal.md`. Facts the design relies on (checked 2026-10-03 on the local
-research data root `BBB_data/research`):
+See `proposal.md`. Facts the design relies on:
 
-- Primary artifacts root (`settings.artifacts_root`, here `BBB_data/research/runs`):
-  32 990 flat run bundles `<root>/<run_id>/manifest.json`; batch outputs in
-  `<root>/batches/<experiment_id>/{manifest,request,summary}.json` whose
-  candidate `artifact_path` values are container paths (`/data/runs/run_…`),
-  not host paths.
-- Canonical research folders under `BBB_data/research/analysis/<ticker>/<anchor>/<test>/`:
-  copied run bundles at `runs/<batch_id>/candidates/<run_id>/` (26 659), plus
-  other analysis run copies (19 193 paths, 6 297 of them reachable only via
-  symlinks created when folders were reorganised).
-- Run ids follow `run_[0-9a-f]{32}` (`_SAFE_ID_RE` in
-  `adapters/artifacts/filesystem.py`).
-- `ReadResearchRuns` reads through `RunArtifactReader.read_run_file(run_id, name)`
-  and verifies manifest hashes in `_documents()`.
-- Frontend selection is a single `selectedRunId` in `WorkbenchContext`; report
-  and chart data load from `/api/research/runs/{run_id}*`.
+- Research Service reads a run via `FilesystemArtifactStore.read_run_file` at
+  `<artifacts_root>/<run_id>/<file>`; `ReadResearchRuns.list_runs` reads and
+  hashes every bundle in the root. In the compose stack the research data root is
+  mounted at `/data` (`artifacts_root=/data/runs`, so `/data/analysis` is
+  available).
+- Frontend: one `selectedRunId` in `WorkbenchContext`; report loading depends on
+  `selectedRunId` and `reloadToken` only; `reportLoadStatus` starts as
+  `"loading"` and `WorkbenchGate` shows a loading view until a run loads;
+  bootstrap fetches `/runs`, keeps the previous selection only if listed, else
+  picks the first entry; the context bar renders a run `<select>` from `/runs`;
+  Composer calls `refreshRunsAndSelectRun`. Tests that pin the startup behaviour:
+  `workbenchLoad.test.tsx` ("selects the first entry from GET /runs"),
+  `App.test.tsx`, `chartEventsDisplayLoad.test.tsx`,
+  `chartEventsDistantTradeDisplay.test.tsx`, and the Playwright suites
+  (`trade-focus*`, `diagnostics-acceptance`).
+- Run-change lifecycle already resets the previous run's state: market owner,
+  trace generation, run-keyed trace display cache, context overlay default, and
+  trade/bar focus re-seeded to the new run's last closed trade.
+- Existing result tables: ratio_4d `runs.csv` (26 columns, 12 672 rows,
+  `run_id` and `instance_id` per row, per-row `market_data_hash`, `return_pct`
+  and `max_drawdown_pct` as fractions, no `net_pnl`); trailing geometry
+  `runs.csv` (34 columns, 240 120 rows, `arm`, `geometry_grid_unit`, trigger and
+  distance in both ATR and R, `net_pnl`, fractions for return and drawdown, no
+  `run_id`). `test_id` is not globally unique (ema500 and ema1000 both carry
+  `width_x_untouched_x_stop_x_ratio_4d`).
+- Size of the trailing results: CSV 53 MB. A columnar JSON with 10 dimension
+  and 13 metric columns is 34 MB raw / 6.4 MB gzip for all 240 120 rows (parsed
+  in about 70 ms in Node), 6.7 MB / 1.3 MB for one SL (48 024 rows), 4.1 MB /
+  0.8 MB for one SL without the ATR grid. The existing standalone HTML embeds
+  14.5 MB.
 
 ## Goals / Non-Goals
 
-**Goals**
+**Goals:** one persisted Experiment model; one physical run location; no run
+resolution machinery; frontend renders a generic Experiment from manifest plus
+result table; `selectedRunId` stays the only selected-run identity; chart runtime
+untouched.
 
-- Open any existing run by `run_id` regardless of where its bundle lives, with
-  no copying and an exact, verifiable identity.
-- Serve surfaces from the folders where they already live.
-- One surface cell maps to at most one run; replay rows are labelled as such.
-- Units of every axis are explicit in the contract and in the UI.
-
-**Non-Goals**
-
-- Materializing runs for replay cells, deleting copies, changing `/runs` list
-  scope (see proposal).
+**Non-Goals:** see proposal.
 
 ## Decisions
 
-### D1. Run index: discovery, identity, precedence
+### D1. Experiment bundle
 
-- Roots: `artifacts_root` (primary, rank 0) followed by
-  `RESEARCH_RUN_INDEX_EXTRA_ROOTS` (ordered list, rank 1..n). Extra roots are
-  read-only to Research Service.
-- Discovery: any directory named `run_<32 hex>` that contains `manifest.json`,
-  at any depth under a root, following symlinks. The `batches/` subtree of the
-  primary root is scanned too (it contains no run bundles today but may later).
-- Each discovered location is canonicalised with `realpath`; locations that
-  resolve to the same real directory are one copy.
-- Identity of a copy: `(run_id, manifest_sha256)` where `manifest_sha256` is
-  the SHA-256 of the `manifest.json` bytes. Because the manifest lists every
-  other file with its SHA-256, equal manifest hashes mean equal bundles.
-- Resolution of a bare `run_id`:
-  - one distinct `manifest_sha256` among all copies → resolved; the copy with
-    the lowest root rank, then the lexicographically smallest real path, is the
-    read location; all other locations are recorded as `duplicates`;
-  - more than one distinct `manifest_sha256` → `ambiguous`; bare-id reads fail
-    with HTTP 409 `run_ambiguous`. A caller may pass `manifest_sha256` to pick
-    one copy exactly.
-- Manifest hash verification on read stays as today; the index never
-  substitutes for it.
+```
+research/analysis/<ticker>/<anchor>/<experiment>/
+  manifest.json      authoritative machine-readable description (extended)
+  runs.csv           authoritative materialized result table (name kept)
+  findings.jsonl     interpretation, not data
+  README.md          human notes, never needed by a program
+  report.html        standalone presentation, never parsed
+```
 
-Alternatives considered: importing (copying or hard-linking) all bundles into
-`artifacts_root` was rejected by the owner (no copying, 22+ GB, double
-bookkeeping). Trusting batch `artifact_path` was rejected because those are
-container paths.
+Names of folders and of the HTML are organisation only. Everything a program
+needs is in `manifest.json` and the result table. `runs.csv` is not renamed:
+the manifest names it (`result_schema.table`).
 
-### D2. Index lifecycle
+### D2. Manifest extension `result_schema`
 
-- Built on service start in the background; readiness reports
-  `run_index: building | ready | failed` with counts. Read routes for runs in
-  the primary root keep working while it builds; lookups that need an extra
-  root return HTTP 503 `run_index_building` until ready.
-- Persisted snapshot at `<artifacts_root>/.run_index/index.jsonl` (one line per
-  copy: `run_id`, `manifest_sha256`, `root_rank`, `real_path`,
-  `manifest_mtime_ns`, `manifest_size`) so restarts are fast; a root is rescanned
-  when its directory mtimes changed, and on `POST /api/research/run-index/refresh`.
-- `GET /api/research/run-index` returns totals, per-root counts, duplicate and
-  conflict counts, and the list of ambiguous run ids.
-- New bundles published through the normal path are added to the index at
-  publish time.
+One additive block in the existing manifest; existing keys (`test_id`,
+`varied_params`, `search_space`, `fixed_params`, `metric_columns`, history, …)
+stay as they are and are not interpreted by the frontend.
 
-### D3. Surface contract `research_surface.v1`
+```json
+"result_schema": {
+  "contract_version": "research_experiment_result_schema.v1",
+  "table": "runs.csv",
+  "run_id_column": "run_id",
+  "provenance": { "value": "engine" },
+  "row_columns": { "market_data_hash": "market_data_hash" },
+  "dimensions": [
+    { "id": "width",    "label": "Stack width",        "column": "min_current_width_atr", "unit": "ATR" },
+    { "id": "lookback", "label": "Untouched lookback", "column": "untouched_lookback",    "unit": "bars" },
+    { "id": "sl",       "label": "Initial SL",         "column": "sl_atr_multiplier",     "unit": "ATR" },
+    { "id": "tp_ratio", "label": "TP / SL",            "column": "tp_sl_ratio",           "unit": "R" }
+  ],
+  "metrics": [
+    { "column": "return_pct",       "label": "Return",  "format": "fraction" },
+    { "column": "profit_factor",    "label": "PF",      "format": "number" },
+    { "column": "max_drawdown_pct", "label": "Max DD",  "format": "fraction" },
+    { "column": "cumulative_net_r", "label": "Cum. R",  "format": "number", "unit": "R" }
+  ]
+}
+```
 
-A surface is an existing canonical test folder plus a new `surface.json`:
+Trailing geometry (dual grid, arms, row-level provenance column absent, a
+constant provenance):
 
-- `contract_version: "research_surface.v1"`, `surface_id`, `title`.
-- `market`: `ticker`, `timeframe`, `from_ms`, `to_ms`, `market_data_hash`.
-- `cells_table`: relative path (default `runs.csv`) and its column mapping.
-- `axes`: ordered list; each axis has `column`, `label`, `unit`
-  (`ATR`, `R`, `bars`, …), and either explicit `values` or `discover: true`.
-  Grid-dependent axes (trailing T/D) declare `grids`, each with its unit and
-  the columns that hold the value in that unit, plus a `grid_column`
-  (`geometry_grid_unit`).
-- `arms`: arm ids present in the `arm` column, their role
-  (`treatment` | `comparison`), and which comparison arm is the matched
-  baseline (`control_tp5r`).
-- `metrics`: column, label, unit, and display scaling (`return_pct` and
-  `max_drawdown_pct` are fractions).
-- `findings`: relative path of `findings.jsonl` (optional).
+```json
+"result_schema": {
+  "contract_version": "research_experiment_result_schema.v1",
+  "table": "runs.csv",
+  "run_id_column": "run_id",
+  "provenance": { "value": "replay" },
+  "dimensions": [
+    { "id": "width",    "column": "min_current_width_atr", "unit": "ATR" },
+    { "id": "lookback", "column": "untouched_lookback",    "unit": "bars" },
+    { "id": "sl",       "column": "sl_atr_multiplier",     "unit": "ATR" },
+    { "id": "trigger",  "label": "Trigger T", "grid_column": "geometry_grid_unit",
+      "grids": { "ATR": { "column": "trail_trigger_atr",  "unit": "ATR" },
+                 "R":   { "column": "trigger_r",          "unit": "R" } } },
+    { "id": "distance", "label": "Trail D",   "grid_column": "geometry_grid_unit",
+      "grids": { "ATR": { "column": "trail_distance_atr", "unit": "ATR" },
+                 "R":   { "column": "trail_distance_r",   "unit": "R" } } }
+  ],
+  "arms": {
+    "column": "arm",
+    "roles": { "trailing_no_tp": "treatment", "control_tp5r": "comparison",
+               "fixed_tp_6r": "comparison", "fixed_tp_7r": "comparison",
+               "fixed_tp_8r": "comparison", "fixed_tp_10r": "comparison" },
+    "baseline": "control_tp5r",
+    "match_on": ["width", "lookback", "sl"]
+  },
+  "metrics": [ { "column": "net_pnl", "label": "Net PnL", "format": "number", "unit": "USDT" },
+               { "column": "return_pct", "label": "Return", "format": "fraction" } ]
+}
+```
 
-Required cell columns: `cell_id`, `arm`, every axis column, `provenance`,
-`run_id` (may be empty), `run_manifest_sha256` (empty when `run_id` is empty).
+Rules: dimensions that exist in several units declare each grid and its
+columns, and the frontend never infers a relation from column names; the
+`geometry_grid_unit` column states which grid defined the row (both unit
+columns are filled for every treatment row); `format: "fraction"` means the
+stored value is a fraction (0.25 = 25 %), never inferred from a `_pct` suffix;
+comparison rows are matched to treatment rows on `match_on`.
 
-`cell_id` = `"cell_" + first 24 hex of SHA-256(canonical JSON)` of
-`{surface_market_data_hash, arm, axis values in their declared units}`. It is
-stable across regenerations of the same surface and unique within a surface.
-(A cross-surface strategy-spec hash was considered; it needs the full spec per
-replay row, which does not exist, so it is out of scope.)
+`provenance` is `{ "value": <origin> }` for a constant origin or
+`{ "column": <name> }` for a per-row origin. Allowed origins: `engine`,
+`replay`, extendable by later changes. Provenance is stored data; it is
+**never** derived from whether `run_id` is present. `run_id` only says whether a
+materialized Engine run exists for drill-down, which is orthogonal to how the
+row's metrics were produced.
 
-`provenance`:
-- `engine`: the row's metrics come from the referenced Engine run;
-- `engine_confirmed_replay`: replay row whose run was also executed by Engine
-  and matched (the run is linked);
-- `replay`: replay row, no run.
+Row-level market provenance: a table may carry its own market columns
+(`row_columns`), declared by the manifest and treated as authoritative;
+ratio_4d keeps its per-row `market_data_hash` (7 values). The manifest does not
+claim one experiment-wide hash or window. An optional informational `market`
+object may list the snapshots.
 
-### D4. Surfaces API (read-only)
+### D3. Experiment registry
 
-- `GET /api/research/surfaces` → `[{surface_id, title, ticker, timeframe, anchor, row_count, arms, axes}]`
-  from every `surface.json` under `RESEARCH_SURFACES_ROOT`.
-- `GET /api/research/surfaces/{surface_id}` → the `surface.json` content plus
-  discovered axis values.
-- `GET /api/research/surfaces/{surface_id}/cells` with axis filters as query
-  parameters (`sl_atr_multiplier=5&geometry_grid_unit=R&trigger_r=7&trail_distance_r=0.5`)
-  and `arm` (repeatable) → columnar JSON
-  `{columns: [...], rows: [[...], ...]}` limited to the requested slice.
-- `GET /api/research/surfaces/{surface_id}/geometry-aggregates?sl_atr_multiplier=…&grid=…&comparison_arm=…`
-  → per (T, D) aggregates against the comparison arm (median Δ net, median
-  multiple on profitable comparison cells, share better on net+PF+DD, median
-  Δ PF, median Δ DD, median Δ R, median net).
-- `GET /api/research/surfaces/{surface_id}/findings` → findings lines.
-- The cells table is loaded once per surface and cached keyed by file mtime and
-  size; malformed tables return a stable 500 `surface_invalid` naming the
-  violation.
+`research/analysis/experiments.json`:
 
-### D5. Frontend Surface tab
+```json
+{ "registry_version": 1,
+  "experiments": [
+    { "experiment_id": "btcusdt_p.ema500.ratio_4d", "title": "Fixed SL × TP ratio",
+      "ticker": "BTCUSDT.P", "anchor": "EMA500",
+      "manifest": "BTCUSDT.P/ema500/width_x_untouched_x_stop_x_ratio_4d/manifest.json" } ] }
+```
 
-- `WorkbenchTab` gains `"surface"`; `TabNav` adds "Surface". The tab is outside
-  `WorkbenchGate` (it does not need a selected run).
-- Port of the verified HTML behaviour: surface picker; SL / T / D sliders whose
-  readout always shows the unit and the conversion to the other unit at the
-  selected SL; grid switch (ATR / R); metric and arm toggles; comparison arm
-  selector; AND-filters on metrics and comparison deltas (failing cells grey);
-  T filmstrip; T × D geometry map with aggregates including "% cells passing
-  filters".
-- Cell click:
-  - `run_id` present → `setSelectedRunId(run_id)` (passing
-    `run_manifest_sha256` through the API as a qualifier) and switch to Chart;
-  - `provenance=replay` → an inline panel "replay result, no Engine run yet"
-    with the cell's coordinates and metrics; no navigation.
-- Each cell shows a provenance mark; the tooltip lists both units of T and D.
+Only what the selector needs: `experiment_id` (unique key in the registry),
+`title`, `ticker`, `anchor` (grouping), relative `manifest` path. The manifest
+`test_id` stays an experiment identity inside its folder and is not the
+registry key (it is not unique across anchors). The registry never copies
+manifest content. An experiment absent from the registry is simply not served.
 
-### D6. Migration of existing surfaces
+### D4. Canonical run location
 
-`scripts/surfaces/migrate_research_surface_v1.py` (Research Service repo,
-offline, idempotent):
-- writes `surface.json` for the two EMA500 surfaces;
-- backs up `runs.csv` as `runs.pre_surface_v1.csv`, then adds `cell_id`,
-  `provenance`, `run_id`, `run_manifest_sha256`;
-- historical ratio surface: `provenance=engine`, `run_id` from the existing
-  column, `run_manifest_sha256` from the bundle found through the index;
-- trailing surface: `provenance=replay` except rows matched to the 415 Engine
-  runs in `engine_runs.csv` / `engine_runs_parity_samples.csv`
-  (`engine_confirmed_replay`, linked); rows of those Engine runs that lie
-  outside the replay grid are appended with `provenance=engine`;
-- validates uniqueness of `cell_id`, that every linked run resolves in the
-  index, and that linked metrics match the run's `metrics.json` within
-  tolerance.
+`run_id → <artifacts_root>/<run_id>/` is the only physical resolution rule and
+what Research Service already implements. No index, resolver, fallback root,
+second root, recursive discovery, symlink handling, snapshot, refresh, root
+ranking or hash qualifier. Publishing an Experiment never moves a run. Runs
+referenced by no Experiment are an ordinary state of the same store.
+
+### D5. Experiment API (read-only)
+
+- `GET /api/research/experiments` → registry entries plus `row_count` and
+  `valid` (with violation text when invalid).
+- `GET /api/research/experiments/{experiment_id}` → the manifest.
+- `GET /api/research/experiments/{experiment_id}/results` → columnar JSON
+  `{ "columns": [...], "rows": N, "data": [[...per column...]] }`. Optional
+  `columns=` limits the columns; any dimension column given as
+  `<column>=<value>` (repeatable) filters by equality. Float columns are
+  rounded for transport; the table on disk is authoritative.
+- `GET /api/research/experiments/{experiment_id}/findings` → the findings lines.
+
+No cells endpoint, no aggregates endpoint, no backend axis semantics beyond
+equality filtering. Justification for a compact filterable results endpoint: the
+trailing table is 53 MB as CSV and 34 MB / 6.4 MB gzip as columnar JSON for all
+rows, 6.7 MB / 1.3 MB for one SL, so the frontend requests one SL (or one SL
+and grid) at a time; slicing, filters and geometry aggregates then run in the
+browser. The table is cached per file mtime and size.
+
+Validation (lazily, cached by mtime): registry and manifest parse; `result_schema`
+well formed; the table header contains every declared column; dimension keys are
+unique per arm; every non-empty `run_id` exists as
+`<artifacts_root>/<run_id>/manifest.json`. An invalid experiment stays listed
+as invalid and its data routes return a stable error naming the violation.
+
+### D6. Workbench state and startup
+
+- `selectedRunId` (existing) remains the only selected-run identity.
+- `selectedExperiment` and the Surface controls live in a provider above the
+  tabs, not in `WorkbenchContext`, and survive tab switches.
+- Row click with `run_id` → `setSelectedRunId(run_id)` and nothing else; clicking
+  the already selected run changes nothing. A row is shown selected iff its
+  `run_id === selectedRunId`; there is no selected-row state. A row without
+  `run_id` never changes the selection and shows that no detailed Engine run is
+  available.
+- Legacy run dropdown: behind a flag, off in production, marked as legacy and a
+  candidate for removal; the context bar shows the selected run id as text.
+- Startup (E1): `selectedRunId = null` and an explicit idle report status;
+  Chart and Reports show "Select a row in the Surface view". `/api/research/runs`
+  is not called at startup; it stays in the backend and the client unchanged.
+  An optional `?run=<run_id>` URL value is the initial `selectedRunId`; the URL
+  is updated when the selection changes, so reload keeps the run and tests get a
+  deterministic run without a "newest run" default. Composer selects the run
+  returned by a backtest directly, without re-reading the run list.
+- Run-specific transient state is already reset by the existing run-change path;
+  the Surface view writes none of it and never carries bar or trade focus
+  between runs.
+- Mounting: the Surface pane sits outside `WorkbenchGate`; the Chart pane stays
+  mounted (hidden) while the Surface view is shown. Surface code imports nothing
+  from chart or chart-runtime modules and never enables chart heavy I/O;
+  selecting a run before Chart was ever opened loads only the report requests.
+
+### D7. Migration (specified here, executed later)
+
+Phases, each stopping on failure and none destructive until the last:
+
+1. **Inventory** of all bundles under the research data root: path, `run_id`,
+   `manifest.run_id`, size, manifest hash, references from registered result
+   tables.
+2. **Dry-run plan** (report only): target `research/runs/<run_id>` per
+   referenced run; identical copies collapse to one; copies with different
+   manifests STOP; run id and folder name mismatch STOP.
+3. **Validation** before any move: files and sizes per manifest, same volume,
+   no target collision with a different manifest.
+4. **Normalization**: `rename` into `research/runs/<run_id>` with a rollback
+   journal; identical duplicates are left in place for phase 7.
+5. **Data edits**: nullable `run_id` column added to the trailing `runs.csv`
+   (backup kept); `result_schema` added to both manifests; `experiments.json`
+   created.
+6. **Parity validation**: every non-empty `run_id` resolves to
+   `research/runs/<run_id>`; every linked run's metrics equal its row (net PnL
+   or return, trade count, PF, drawdown, long/short) and its market hash
+   matches the row's; table metrics equal the existing HTML data.
+7. **Cleanup** (separate, last, only after phase 6 passes and after explicit
+   approval): remove identical duplicate copies, historical symlinks, and
+   emptied folders.
+
+Trailing `run_id` linking rule (needed because the mapping is not name-unique):
+a run is linked to a row only if it matches the row by all dimension values and
+its recorded metrics equal the row's. If several runs satisfy this, prefer the
+run whose market hash equals the table's market window, then the lowest
+`run_id`; the choice is written to the migration report. Runs that match a row
+by dimensions but not by metrics (for example a later market window) and runs
+with no row (lock-then-trail variants) are not linked.
+
+## Obsolete after this model (checked against dependencies)
+
+Multi-root run index, recursive discovery, symlink and `realpath` handling,
+background build, snapshot, directory-mtime refresh, root ranking,
+`manifest_sha256` qualifier, `run_ambiguous` and `run_index_building` errors,
+modified `research-results-bff-v1` run-route requirements, Surface as a backend
+entity and `/surfaces` naming, the geometry-aggregates endpoint, `run_links.csv`
+and any parallel cells table, mandatory `cell_id`, `run_store` or any
+movement of runs between roots, `empty run_id = replay`. Checked: nothing else
+in this change depends on them; the run-read routes already satisfy the
+canonical-location rule.
 
 ## Risks / Trade-offs
 
-- Scanning ~80 000 bundle directories on start: mitigated by the persisted
-  snapshot and mtime-based rescans; reads of primary-root runs never wait.
-- Extra roots are mutable outside the service: the index can be stale between
-  refreshes; reads still verify manifests and a missing file yields 404, not
-  wrong data.
-- `runs.csv` of the trailing surface is 51 MB; served only as slices.
-- A future second copy with a different manifest makes a bare run id
-  ambiguous; the 409 and the index report make it visible instead of silently
-  choosing.
-
-## Open Questions
-
-- None blocking. Cleanup policy for unreferenced copies will be decided from
-  the index report after rollout.
+- Startup without a run changes behaviour pinned by several frontend tests;
+  they are updated deliberately (task group 5) rather than kept alive through a
+  hidden default.
+- Until the migration runs, historical runs are not at the canonical location;
+  rows with such `run_id` fail validation and the experiment is reported
+  invalid, which is intended.
+- Only 350 of 415 known Engine runs of the trailing experiment match their row
+  exactly; the rest stay unlinked, so drill-down covers few trailing rows until
+  Engine runs are produced for more rows (later request).
+- Whole-table results responses are large without a filter; the frontend
+  always filters (at least by SL).
