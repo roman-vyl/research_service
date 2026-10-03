@@ -26,10 +26,18 @@ and SHALL be reachable while no run is selected.
 ### Requirement: Manifest-declared views
 
 The Surface tab SHALL build its views from the manifest `view` descriptor
-(x and y dimension ids, the dimensions exposed as controls, default metric, and
-for an aggregated map the dimensions aggregated over) and SHALL NOT offer
+(x and y dimension ids, the dimensions exposed as controls, default metric,
+optionally one dimension id for a filmstrip of small heatmap copies, and for an
+aggregated map the dimensions aggregated over) and SHALL NOT offer
 arbitrary choice of axes. An Experiment without a `view` descriptor SHALL be
 reported as not viewable.
+
+#### Scenario: Trailing filmstrip
+
+- **WHEN** the trailing width × lookback view declares a filmstrip over the
+  trigger dimension
+- **THEN** a row of small heatmaps, one per trigger value at the selected
+  distance, is shown and selecting one sets the trigger control.
 
 #### Scenario: Ratio experiment
 

@@ -36,7 +36,7 @@
 - [ ] 5.1 Types and API client for the Experiment list, manifest, results (filtered by semantic ids), findings.
 - [ ] 5.2 `WorkbenchTab` `"surface"`; order `Chart | Surface | Reports | Strategy Composer`; Surface pane mounted-and-hidden like Chart, rendered outside `WorkbenchGate`.
 - [ ] 5.3 `SurfaceView` with local state only (experiment, metric, view, controls, filters, selected point); no provider, no global state.
-- [ ] 5.4 Components: ExperimentSelector, SurfaceControls (units and ATR↔R conversion), SurfacePlot (heatmap, aggregated map from the manifest `view`), AND-filters with greyed points, CellDetails; baseline/difference only with `arms`.
+- [ ] 5.4 Components: ExperimentSelector, SurfaceControls (units and ATR↔R conversion), SurfacePlot (heatmap, aggregated map and the declared trigger filmstrip from the manifest `view`), AND-filters with greyed points, CellDetails; baseline/difference only with `arms`.
 - [ ] 5.5 CellDetails: with `run_id` an "Open run" action calling `setSelectedRunId(run_id)` and `setActiveTab("chart")`; without it the metrics and an "Engine run not available" note; provenance from the declared provenance; no use of `selectedRunId` as point identity.
 - [ ] 5.6 Context bar: run `<select>` behind a legacy flag (off) with a deprecation comment; selected run id as read-only text.
 - [ ] 5.7 Startup: initial `selectedRunId` null (or from `?run=`), idle report status and idle Chart/Reports messages, URL kept in sync, no `/api/research/runs` call at startup; Composer selects the backtest run directly.

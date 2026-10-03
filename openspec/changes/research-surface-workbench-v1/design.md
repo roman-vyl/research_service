@@ -120,7 +120,7 @@ constant provenance):
     "match_on": ["width", "lookback", "sl"]
   },
   "view": [
-    { "id": "cells", "x": "lookback", "y": "width", "controls": ["sl", "grid", "trigger", "distance"], "default_metric": "net_pnl" },
+    { "id": "cells", "x": "lookback", "y": "width", "controls": ["sl", "grid", "trigger", "distance"], "default_metric": "net_pnl", "filmstrip": "trigger" },
     { "id": "geometry", "x": "distance", "y": "trigger", "controls": ["sl", "grid"], "aggregate_over": ["width", "lookback"], "default_metric": "net_pnl" }
   ],
   "metrics": [ { "column": "net_pnl", "label": "Net PnL", "format": "number", "unit": "USDT" },
@@ -244,8 +244,12 @@ App
   trigger, distance, grid) and an aggregated trigger × distance map (aggregates
   over width and lookback); ratio: one width × lookback view (controls SL and
   TP ratio). Aggregates (median, counts, share passing, difference to the
-  baseline arm) are plain operations over table columns. The trigger filmstrip
-  of the old HTML is dropped.
+  baseline arm) are plain operations over table columns. The trailing
+  width × lookback view declares `"filmstrip": "trigger"`: a row of small
+  copies of the heatmap, one per trigger value at the selected distance, which
+  helps read the geometry; it is declared per view, not derived, and no other
+  presentation is added to the descriptor (no layouts, widgets, formulas or
+  expressions).
 - **Legacy dropdown.** The run `<select>` moves behind a flag (off), marked
   legacy; the context bar shows the selected run id as text.
 - **Startup.** `selectedRunId = null` with an explicit idle report status;
