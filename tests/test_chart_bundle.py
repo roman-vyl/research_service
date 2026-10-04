@@ -6,8 +6,11 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from research_service.api.app import create_app
-from research_service.domain.contracts import Candle, MarketFrame, MarketRange
-from research_service.ports.strategy_engine import IndicatorSeriesResult
+from research_service.domain.contracts import Candle, MarketFrame, MarketRange, StreamBounds
+from research_service.ports.strategy_engine import (
+    IndicatorSeriesResult,
+    MultiIndicatorSeriesResult,
+)
 from research_service.runtime.settings import Settings
 from research_service.runtime.wiring import Container
 
@@ -15,6 +18,7 @@ from research_service.runtime.wiring import Container
 class FakeMarketData:
     def __init__(self) -> None:
         self.calls: list[MarketRange] = []
+        self.bounds_calls: list[tuple[str, str]] = []
 
     def health(self) -> bool:
         return True
@@ -34,10 +38,21 @@ class FakeMarketData:
         )
         return MarketFrame(market=market, candles=candles)
 
+    def get_bounds(self, *, ticker: str, timeframe: str) -> StreamBounds:
+        self.bounds_calls.append((ticker, timeframe))
+        return StreamBounds(
+            ticker=ticker,
+            timeframe=timeframe,
+            earliest_open_time_ms=0,
+            latest_open_time_ms=300_000,
+            stream_state="ready",
+        )
+
 
 class FakeStrategyEngine:
     def __init__(self) -> None:
         self.calls: list[tuple[MarketRange, int]] = []
+        self.multi_calls: list[tuple[MarketRange, tuple[int, ...]]] = []
 
     def health(self) -> bool:
         return True
@@ -47,6 +62,24 @@ class FakeStrategyEngine:
         times = tuple(range(market.from_ms, market.to_ms, market.step_ms))
         values = tuple(str(period + index / 10) for index, _ in enumerate(times))
         return IndicatorSeriesResult(times, values, f"plan-{period}", "market")
+
+    def evaluate_emas(
+        self,
+        market: MarketRange,
+        *,
+        periods: tuple[int, ...],
+    ) -> MultiIndicatorSeriesResult:
+        self.multi_calls.append((market, periods))
+        times = tuple(range(market.from_ms, market.to_ms, market.step_ms))
+        return MultiIndicatorSeriesResult(
+            times,
+            {
+                period: tuple(str(period + index / 10) for index, _ in enumerate(times))
+                for period in periods
+            },
+            "multi-plan",
+            "market",
+        )
 
 
 class ArtifactStore:
@@ -91,7 +124,8 @@ def test_chart_bundle_preserves_legacy_dto_and_composes_downstream_services(
     assert response.status_code == 200
     assert len(market.calls) == 1
     assert market.calls[0].ticker == "BTCUSDT.P"
-    assert [period for _, period in strategy.calls] == [20, 50, 200]
+    assert [period for _, period in strategy.calls] == [20, 50]
+    assert all(periods == (200, 500, 1000) for _, periods in strategy.multi_calls)
     assert response.json() == {
         "candles": [
             {
@@ -140,7 +174,7 @@ def test_chart_bundle_preserves_legacy_dto_and_composes_downstream_services(
     }
 
 
-def test_chart_bundle_reuses_ema_cache_across_repeated_requests(tmp_path: Path) -> None:
+def test_chart_bundle_reuses_stack_entry_across_repeated_requests(tmp_path: Path) -> None:
     market = FakeMarketData()
     strategy = FakeStrategyEngine()
     client = make_client(tmp_path, market, strategy)
@@ -156,7 +190,8 @@ def test_chart_bundle_reuses_ema_cache_across_repeated_requests(tmp_path: Path) 
     assert client.get("/api/market/chart-bundle", params=params).status_code == 200
     assert client.get("/api/market/chart-bundle", params=params).status_code == 200
     assert len(market.calls) == 2
-    assert len(strategy.calls) == 3
+    assert len(strategy.calls) == 4
+    assert len(strategy.multi_calls) == 2
 
 
 def test_chart_bundle_rejects_non_monotonic_anchor_stack(tmp_path: Path) -> None:

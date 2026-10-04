@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Mapping, Protocol
 
 from research_service.domain.contracts import (
     HistoricalExecutionProjectionDTO,
@@ -22,6 +22,14 @@ from research_service.domain.contracts import (
 class IndicatorSeriesResult:
     time_ms: tuple[int, ...]
     values: tuple[str | None, ...]
+    plan_hash: str
+    market_data_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class MultiIndicatorSeriesResult:
+    time_ms: tuple[int, ...]
+    values_by_period: Mapping[int, tuple[str | None, ...]]
     plan_hash: str
     market_data_hash: str
 
@@ -64,6 +72,13 @@ class StrategyEnginePort(Protocol):
         *,
         period: int,
     ) -> IndicatorSeriesResult: ...
+
+    def evaluate_emas(
+        self,
+        market: MarketRange,
+        *,
+        periods: tuple[int, ...],
+    ) -> MultiIndicatorSeriesResult: ...
 
     def get_composer_catalog(self, strategy_id: str) -> dict[str, Any]: ...
 

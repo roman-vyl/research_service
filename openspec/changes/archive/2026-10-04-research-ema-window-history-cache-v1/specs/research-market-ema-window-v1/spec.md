@@ -1,42 +1,4 @@
-# Research Market EMA Window v1 Specification
-
-## Purpose
-
-Define the preserved Workbench EMA-window BFF route backed by Strategy
-Engine's indicator evaluation API.
-## Requirements
-### Requirement: Preserved Workbench route
-
-Research Service SHALL serve `GET /api/market/ema-window` with the existing
-BBB query parameters and response field names.
-
-#### Scenario: Workbench requests an EMA window
-
-- **WHEN** the Workbench frontend calls `GET /api/market/ema-window`
-- **THEN** the response uses the existing field names it always has.
-
-### Requirement: Strategy Engine ownership
-
-Research Service SHALL NOT calculate EMA locally. It SHALL request an EMA
-feature through Strategy Engine `POST /v1/indicator-evaluations/range`.
-
-#### Scenario: EMA value is needed
-
-- **WHEN** the route needs an EMA series for the requested window
-- **THEN** it requests it from Strategy Engine rather than computing it
-  in-process.
-
-### Requirement: Presentation conversion
-
-Strategy Engine Decimal-text values SHALL be converted to JSON numbers only
-at the BFF chart DTO boundary. Timestamps SHALL be converted from
-milliseconds to Unix seconds.
-
-#### Scenario: Response serialization
-
-- **WHEN** the EMA-window response is built
-- **THEN** Decimal-text values become JSON numbers and millisecond
-  timestamps become Unix seconds only in that final conversion step.
+## MODIFIED Requirements
 
 ### Requirement: Cache behavior
 
@@ -118,6 +80,8 @@ warm-up. The service SHALL NOT claim run-specific or canonical-origin parity bey
 - **WHEN** the first request is served from the newly calculated preview
 - **THEN** `calculation_origin_ms` is the start of that preview calculation, including its warm-up, rather
   than the requested range start.
+
+## ADDED Requirements
 
 ### Requirement: Preview while the history is built
 

@@ -83,7 +83,7 @@ def test_candles_alias_returns_legacy_list_and_reuses_window_use_case(tmp_path: 
     assert strategy.calls == []
 
 
-def test_ema_alias_returns_legacy_list_and_reuses_shared_cache(tmp_path: Path) -> None:
+def test_ema_alias_returns_legacy_list_for_uncached_non_stack_period(tmp_path: Path) -> None:
     market = FakeMarketData()
     strategy = FakeStrategyEngine()
     client = make_client(tmp_path, market, strategy)
@@ -98,7 +98,7 @@ def test_ema_alias_returns_legacy_list_and_reuses_shared_cache(tmp_path: Path) -
         {"time": 300, "value": 42.5, "kind": "chart_overlay_ema"},
     ]
     assert second.status_code == 200
-    assert len(strategy.calls) == 1
+    assert len(strategy.calls) == 2
     assert market.calls == []
 
 
