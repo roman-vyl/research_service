@@ -5,10 +5,10 @@
 The BFF SHALL retain a process-local authoritative cache keyed by ticker and timeframe. Its entry SHALL
 hold the full committed history of the EMA periods 200, 500 and 1000 as compact numeric arrays, produced
 by one Strategy Engine calculation over the history bounds served by Market Data Service. Independently
-calculated pieces SHALL NOT be concatenated. `cache_hit` SHALL be true only when a request is answered
-by slicing the authoritative entry without a Strategy Engine call. A request outside the entry's
-coverage SHALL be answered with the part inside it and `truncated=true` and SHALL NOT trigger a
-calculation.
+calculated pieces SHALL NOT be concatenated. `cache_hit` SHALL be true when a request is fully answered
+by slicing an existing preview or authoritative entry without a Strategy Engine call. A request outside
+the current entry's coverage SHALL be answered with the part inside it and `truncated=true` and SHALL NOT
+trigger a calculation or expansion.
 
 #### Scenario: Authoritative cache ready
 
@@ -49,25 +49,37 @@ warm-up. The service SHALL NOT claim run-specific or canonical-origin parity bey
 ### Requirement: Preview while the history is built
 
 The first request for a ticker and timeframe SHALL start, once, a background build of the authoritative
-entry and SHALL be answered, like every request until the build is published, by a preview: one Strategy
-Engine calculation over the requested range preceded by a warm-up of five times the period in bars, served
-from the requested start, with `cache_hit` `false`. Previews SHALL NOT be stored. The build SHALL be
-published by one atomic replacement.
+entry and SHALL create one temporary preview entry for EMA 200, 500 and 1000 with one Strategy Engine
+calculation. The preview calculation SHALL cover the requested range preceded by a warm-up of five times
+the maximum period, 5 000 bars. The triggering request SHALL be served from the requested start with
+`cache_hit=false`; further fully covered requests for any of the three periods SHALL be slices of that
+same preview with `cache_hit=true` and no Strategy Engine call. The preview SHALL have fixed coverage and
+SHALL NOT expand. The full entry SHALL be published by one atomic replacement of the preview. The only
+states for the supported stack SHALL be `EMPTY`, `PREVIEW` and `FULL`.
 
 #### Scenario: First chart open
 
 - **WHEN** the first EMA-window request of a process arrives
-- **THEN** it is answered from a preview without waiting for the history build.
+- **THEN** one Strategy Engine call calculates EMA 200, 500 and 1000 with a 5 000-bar warm-up, and the
+  requested period is answered from that preview without waiting for the history build.
 
-#### Scenario: Build in progress
+#### Scenario: Other stack periods while build is in progress
 
-- **WHEN** further requests arrive before the build is published
-- **THEN** each is answered by a preview and no second build is started.
+- **WHEN** fully covered requests for the other supported periods arrive before the full build is published
+- **THEN** they are sliced from the same preview entry with `cache_hit=true`; no further preview call and
+  no second full build is started.
+
+#### Scenario: Window outside preview coverage
+
+- **WHEN** a request arrives before the full build is published and extends outside the fixed preview
+  coverage
+- **THEN** the available slice is returned with `truncated=true` and the preview is not expanded or
+  recalculated.
 
 #### Scenario: Failed build
 
 - **WHEN** the history build fails
-- **THEN** previews keep answering and the next request starts a new attempt.
+- **THEN** the preview remains available and the next request starts a new full-build attempt.
 
 ### Requirement: History bounds source
 

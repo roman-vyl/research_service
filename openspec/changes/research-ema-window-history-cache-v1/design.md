@@ -41,26 +41,38 @@ inside it and `truncated=true`; it never triggers a calculation.
 ### Preview while the cache is being built
 
 The first request for `(ticker, timeframe)` for a period in the set starts the full build in a background
-thread and, in parallel, is answered by a preview: one Engine call for
-`[from - 5 * period bars, to)`, served from `from` on, `cache_hit=false`,
-`calculation_origin_ms` = start of that call (earlier than the requested start). Requests that arrive
-during the build are answered the same way. A period outside the set is answered by previews only.
-Previews are not stored.
+thread and, in parallel, creates one temporary preview entry for all three periods with one Engine call.
+The call covers `[from - 5 * max(periods) bars, to)`, i.e. a 5 000-bar warm-up for the fixed
+`(200, 500, 1000)` stack. The entry has the same compact `times` plus per-period `values` shape as the
+full entry, but is marked as preview and has only that fixed coverage.
+
+The triggering request is served from the new entry with `cache_hit=false`. Further requests for 200,
+500 or 1000 during the full build are binary-search slices of the same preview entry and report
+`cache_hit=true` when fully covered. A request outside the preview coverage receives the available slice
+with `truncated=true`; it does not expand or replace the preview and does not make another Engine call.
+`calculation_origin_ms` is the start of the preview call, including warm-up. A period outside the fixed
+stack is answered by an uncached one-period preview and does not participate in this state machine.
+
+Thus a supported stack has exactly three states: `EMPTY -> PREVIEW[200,500,1000] ->
+FULL[200,500,1000]`. There are no per-period preview entries and no long-lived preview cache.
 
 ### Atomic swap
 
-The build assembles an immutable entry and publishes it with one assignment under a lock; requests read
-the reference once. There is at most one build per `(ticker, timeframe)`; a failed build is logged, leaves
-the previews in place, and the next request starts a new attempt.
+The build assembles an immutable full entry and publishes it by atomically replacing the preview entry
+under a lock; requests read the reference once. There is at most one build per `(ticker, timeframe)`; a
+failed build is logged, leaves the preview entry in place, and the next request starts a new attempt.
 
-### Why the preview does not need a cache
+### Why the preview is stored temporarily
 
-It is used only for the first seconds of a process; a window of 25 000 bars costs 0.5 s. The simplicity
-of "preview or slice" is worth more than reusing it.
+The preview exists only for the roughly 13 seconds of the full build, but retaining it avoids two repeated
+candle reads when the frontend requests EMA 500 and 1000 after EMA 200. It is not a navigation cache:
+it has fixed coverage, never expands, and disappears in the same atomic publication that installs the
+authoritative full entry.
 
 ## Risks
 
-- A cold process spends about 13 s of Engine and Market Data time on the build while previews also call
-  Engine. Acceptable for a single-user research tool; measured separately in the tasks.
+- A cold process spends about 13 s of Engine and Market Data time on the full build while one multi-EMA
+  preview call also reads candles. Acceptable for a single-user research tool; measured separately in
+  the tasks.
 - Bars committed after the build are not in the series until the process restarts. Out of scope by
   decision.

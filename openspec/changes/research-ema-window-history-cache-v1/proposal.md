@@ -22,9 +22,12 @@ Measured on the development MacBook (Strategy Engine, BTCUSDT.P 5m, 686 565 bars
 
 - Strategy Engine calculates the **full history once** for EMA 200/500/1000 in one call; the result is
   kept as compact arrays and is the authoritative cache. After it exists, every window is a slice.
-- While that build runs (about 13 s), requests are answered from a **preview window** with warm-up, so
-  EMAs appear within about a second.
+- While that build runs (about 13 s), the first request creates one short-lived **preview entry** for
+  EMA 200/500/1000 in one Strategy Engine call, with a 5 000-bar warm-up. The initial response and the
+  other two period requests are slices of that entry, so EMAs appear within about a second without
+  repeating the candle read.
 - The preview is replaced by the authoritative cache in one atomic swap.
+- The cache state machine is only `EMPTY -> PREVIEW -> FULL`; neither preview nor full entries expand.
 - History bounds come from the existing Market Data Service bounds (`get_bounds`), no new setting.
 
 Public routes, query parameters and response field names do not change; the frontend does not change.
