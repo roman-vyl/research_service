@@ -14,6 +14,23 @@ SHALL remain a separate indication of requested-range coverage. A request outsid
 coverage SHALL be answered with the part inside it and `truncated=true` and SHALL NOT trigger a
 calculation or expansion.
 
+#### Scenario: Cold miss
+
+- **WHEN** no entry exists yet for the ticker and timeframe
+- **THEN** one Strategy Engine call creates the multi-EMA preview, the authoritative build starts once in
+  the background, and `cache_hit` is `false`.
+
+#### Scenario: Full cache hit
+
+- **WHEN** an existing preview or authoritative entry fully covers the requested range and period
+- **THEN** no Strategy Engine call is made and `cache_hit` is `true`.
+
+#### Scenario: Right-edge extension is not a cache hit
+
+- **WHEN** an existing preview or authoritative entry covers only a prefix of the requested range
+- **THEN** the available slice is returned with `truncated=true` and `cache_hit=false`, without a
+  Strategy Engine call, concatenation, recalculation, or expansion.
+
 #### Scenario: Authoritative cache ready
 
 - **WHEN** the authoritative entry exists and a request lies inside its coverage
@@ -57,6 +74,12 @@ warm-up. The service SHALL NOT claim run-specific or canonical-origin parity bey
 - **WHEN** a response is served from a preview
 - **THEN** `calculation_origin_ms` is the start of the preview calculation, earlier than the requested
   start by the warm-up.
+
+#### Scenario: First request for a ticker/period
+
+- **WHEN** the first request is served from the newly calculated preview
+- **THEN** `calculation_origin_ms` is the start of that preview calculation, including its warm-up, rather
+  than the requested range start.
 
 ## ADDED Requirements
 
