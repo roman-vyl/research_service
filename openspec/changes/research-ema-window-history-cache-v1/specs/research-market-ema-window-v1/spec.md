@@ -6,15 +6,29 @@ The BFF SHALL retain a process-local authoritative cache keyed by ticker and tim
 hold the full committed history of the EMA periods 200, 500 and 1000 as compact numeric arrays, produced
 by one Strategy Engine calculation over the history bounds served by Market Data Service. Independently
 calculated pieces SHALL NOT be concatenated. `cache_hit` SHALL be true when a request is fully answered
-by slicing an existing preview or authoritative entry without a Strategy Engine call. A request outside
-the current entry's coverage SHALL be answered with the part inside it and `truncated=true` and SHALL NOT
-trigger a calculation or expansion.
+by slicing an existing preview or authoritative entry without a Strategy Engine call. It SHALL describe
+whether the current request reused an existing calculation, not whether the entry is preview or
+authoritative. The request whose Strategy Engine calculation creates the preview SHALL have
+`cache_hit=false`; a later fully covered slice from that preview SHALL have `cache_hit=true`. `truncated`
+SHALL remain a separate indication of requested-range coverage. A request outside the current entry's
+coverage SHALL be answered with the part inside it and `truncated=true` and SHALL NOT trigger a
+calculation or expansion.
 
 #### Scenario: Authoritative cache ready
 
 - **WHEN** the authoritative entry exists and a request lies inside its coverage
 - **THEN** no Strategy Engine call is made, `cache_hit` is `true`, and the values do not depend on the
   order in which windows were requested.
+
+#### Scenario: Preview creation is not a cache hit
+
+- **WHEN** a request performs the Strategy Engine calculation that creates the preview entry
+- **THEN** `cache_hit` is `false`.
+
+#### Scenario: Existing preview entry
+
+- **WHEN** an existing preview entry fully covers a request for a supported EMA period
+- **THEN** no Strategy Engine call is made and `cache_hit` is `true`.
 
 #### Scenario: Scrolling to any earlier window
 
