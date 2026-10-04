@@ -66,7 +66,7 @@ def create_app(
 
 def _build_services(settings: Settings, container: Container) -> AppServices:
     candles_window = GetCandlesWindow(container.market_data)
-    ema_window = GetEmaWindow(container.strategy_engine)
+    ema_window = GetEmaWindow(container.strategy_engine, container.market_data)
     config_validation = ValidateStrategyConfig(container.strategy_engine)
     config_store = FilesystemConfigStore(settings.configs_root)
     config_store.ensure_ready()

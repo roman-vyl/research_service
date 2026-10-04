@@ -25,6 +25,7 @@ from research_service.domain.contracts import (
 from research_service.domain.errors import UpstreamServiceError
 from research_service.ports.strategy_engine import (
     IndicatorSeriesResult,
+    MultiIndicatorSeriesResult,
     StrategyAuthoringValidationResult,
     StrategyValidationError,
 )
@@ -410,7 +411,21 @@ class HttpStrategyEngineClient:
         *,
         period: int,
     ) -> IndicatorSeriesResult:
-        output_id = f"chart_ema_{market.timeframe}_{period}"
+        result = self.evaluate_emas(market, periods=(period,))
+        return IndicatorSeriesResult(
+            time_ms=result.time_ms,
+            values=result.values_by_period[period],
+            plan_hash=result.plan_hash,
+            market_data_hash=result.market_data_hash,
+        )
+
+    def evaluate_emas(
+        self,
+        market: MarketRange,
+        *,
+        periods: tuple[int, ...],
+    ) -> MultiIndicatorSeriesResult:
+        output_ids = {period: f"chart_ema_{market.timeframe}_{period}" for period in periods}
         payload = {
             "market": {
                 "ticker": market.ticker,
@@ -422,13 +437,14 @@ class HttpStrategyEngineClient:
                 "plan_version": "1",
                 "features": [
                     {
-                        "output_id": output_id,
+                        "output_id": output_ids[period],
                         "kind": "ema",
                         "timeframe": "base",
                         "source": "close",
                         "parameters": {"period": period},
                         "dependencies": [],
                     }
+                    for period in periods
                 ],
             },
         }
@@ -438,11 +454,14 @@ class HttpStrategyEngineClient:
             "Strategy Engine indicator request failed",
         )
         raw_series = cast("dict[str, object]", body["series"])
-        return IndicatorSeriesResult(
+        return MultiIndicatorSeriesResult(
             time_ms=tuple(_int(value) for value in _list(body["time_ms"])),
-            values=tuple(
-                None if value is None else str(value) for value in _list(raw_series[output_id])
-            ),
+            values_by_period={
+                period: tuple(
+                    None if value is None else str(value) for value in _list(raw_series[output_id])
+                )
+                for period, output_id in output_ids.items()
+            },
             plan_hash=str(body["plan_hash"]),
             market_data_hash=str(body["market_data_hash"]),
         )

@@ -187,3 +187,44 @@ def test_strategy_engine_client_reads_composer_catalog() -> None:
     )
     body = client.get_composer_catalog("ema_pullback")
     assert body["strategy_id"] == "ema_pullback"
+
+
+def test_strategy_engine_client_evaluates_multiple_emas_in_one_plan() -> None:
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "POST"
+        assert request.url.path == "/v1/indicator-evaluations/range"
+        payload = json.loads(request.content)
+        assert [feature["parameters"]["period"] for feature in payload["plan"]["features"]] == [
+            200,
+            500,
+            1000,
+        ]
+        return httpx.Response(
+            200,
+            json={
+                "time_ms": [0, 300_000],
+                "series": {
+                    "chart_ema_5m_200": ["1.0", "2.0"],
+                    "chart_ema_5m_500": ["3.0", "4.0"],
+                    "chart_ema_5m_1000": ["5.0", None],
+                },
+                "plan_hash": "plan",
+                "market_data_hash": "market",
+            },
+        )
+
+    client = HttpStrategyEngineClient("http://strategy")
+    client._client = httpx.Client(
+        transport=httpx.MockTransport(handler), base_url="http://strategy"
+    )
+    result = client.evaluate_emas(
+        MarketRange(ticker="BTCUSDT.P", timeframe="5m", from_ms=0, to_ms=600_000),
+        periods=(200, 500, 1000),
+    )
+
+    assert result.time_ms == (0, 300_000)
+    assert result.values_by_period == {
+        200: ("1.0", "2.0"),
+        500: ("3.0", "4.0"),
+        1000: ("5.0", None),
+    }
