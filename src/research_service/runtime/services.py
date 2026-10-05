@@ -15,7 +15,7 @@ from typing import cast
 
 from fastapi import Request
 
-from research_service.adapters.experiments import FilesystemExperiments
+from research_service.adapters.experiments import FilesystemExperiments, FilesystemRunDeletion
 from research_service.application.backtests import (
     PersistSingleInstanceRun,
     ReadResearchRuns,
@@ -46,6 +46,7 @@ class AppServices:
     run_batch_experiment: RunBatchExperiment
     persist_batch_experiment: PersistBatchExperiment
     experiments: FilesystemExperiments
+    run_deletion: FilesystemRunDeletion
 
 
 def services(request: Request) -> AppServices:

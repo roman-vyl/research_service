@@ -136,3 +136,13 @@ class InvalidExperiment(ResearchServiceError):
             status_code=500,
             details={"experiment_id": experiment_id, "problem": problem},
         )
+
+
+class PlanStale(ResearchServiceError):
+    def __init__(self, experiment_id: str) -> None:
+        super().__init__(
+            code="plan_stale",
+            message="the delete plan no longer matches the selection or the result table; plan again",
+            status_code=409,
+            details={"experiment_id": experiment_id},
+        )
