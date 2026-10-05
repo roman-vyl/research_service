@@ -8,8 +8,8 @@
 
 ## 2. Verification on real data (Mac, only on explicit command)
 
-- [ ] 2.1 Plan on one real Surface with a small selection; compare counts and bytes with `du`.
-- [ ] 2.2 Delete the small selection; check that Surface values are unchanged, Open run is unavailable for those points, `GET /api/research/runs` and Workbench work, space is freed, backup and journal exist.
+- [x] 2.1 Plan on one real Surface with a small selection; compare counts and bytes with `du`. Done on the Mac (`btcusdt_p.ema500.ratio_4d`, 16 704 rows): 20 runs, 160 files, 39 921 782 bytes in the plan and on disk; invalid and foreign ids skipped (`invalid_run_id`, `not_in_experiment`); plan time 2.05 s; table and run folders unchanged. `shared_with_other_experiment` not exercised on real data (no shared runs in the local tables).
+- [x] 2.2 Delete the small selection; check that Surface values are unchanged, Open run is unavailable for those points, `GET /api/research/runs` and Workbench work, space is freed, backup and journal exist. Done on the Mac on the owner's command with one run (8 files, 6 183 538 bytes): folder removed (71 140 -> 71 139 run folders), one `run_id` cell cleared with all other cells byte-identical (16 704 rows kept), backup byte-equal to the previous table, one journal line. Not exercised on real data: a batch of more than one run, deletion during a parallel write, Workbench with the new image (the stack image predates the routes).
 
 ## 3. Out of Scope (recorded)
 
