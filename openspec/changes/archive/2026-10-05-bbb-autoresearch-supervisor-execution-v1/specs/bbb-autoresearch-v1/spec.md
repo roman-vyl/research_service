@@ -1,5 +1,10 @@
 # bbb-autoresearch-v1 Delta Specification
 
+## RENAMED Requirements
+
+- FROM: `### Requirement: Fresh worker per iteration`
+- TO: `### Requirement: Fresh worker per logical iteration`
+
 ## MODIFIED Requirements
 
 ### Requirement: Immutable evaluator boundary
@@ -45,6 +50,12 @@ distinguishable from worker-authored outputs and SHALL be checked for mutation b
 Tracked infrastructure, unrelated OpenSpec changes, and the domain skill SHALL remain immutable
 during a session.
 
+#### Scenario: Runtime output only
+
+- **WHEN** session runtime files (prompts, results, logs, analysis) are written inside
+  `var/autoresearch/<session_id>/`
+- **THEN** the mutation guard permits them and no tracked output is created.
+
 #### Scenario: Planning output only
 
 - **WHEN** a planning worker completes normally
@@ -87,6 +98,11 @@ validated.
 - **THEN** the supervisor launches no canonical executor, creates no execution intent or receipt,
   launches a fresh interpretation worker, validates the applicable existing iteration result, and
   mechanically commits one journal row and one state transition.
+
+#### Scenario: Autonomous continuation
+
+- **WHEN** iteration N completes with a proposed next experiment
+- **THEN** state advances atomically and a fresh process receives iteration N+1.
 
 ### Requirement: Existing batch path only
 
@@ -150,6 +166,21 @@ evidence and SHALL NOT create new experiment truth.
 - **THEN** a fresh interpretation worker expresses the conclusion through the applicable existing
   iteration-result contract and ordinary supervisor validation/commit semantics without a receipt.
 
+#### Scenario: Canonical batch reference mismatch
+
+- **WHEN** a worker result disagrees with its canonical request, summary, or manifest
+- **THEN** the supervisor rejects the result without recomputing trading metrics or sizing.
+
+#### Scenario: Valid-looking bundle outside canonical storage
+
+- **WHEN** a worker reports a structurally valid bundle below its session directory or another non-canonical path
+- **THEN** the supervisor rejects it before reading bundle contents.
+
+#### Scenario: AutoResearch does not select quantity
+
+- **WHEN** AutoResearch constructs or interprets a candidate
+- **THEN** it supplies no independent fixed/equity sizing choice and derives no quantity from research metrics.
+
 ### Requirement: Durable research continuity
 
 `state.json` SHALL remain a compact atomically published snapshot and `journal.jsonl` SHALL remain
@@ -185,6 +216,11 @@ actions SHALL have no execution-intent or receipt stage. All persisted contracts
 - **THEN** restart fails closed rather than automatically creating a second execution for the same
   frozen request.
 
+#### Scenario: Restart after one iteration
+
+- **WHEN** a supervisor restarts after iteration 1 committed
+- **THEN** it reads state/journal intact and starts iteration 2 without rerunning iteration 1.
+
 ### Requirement: Bounded failure, cancellation, and budgets
 
 Planning and interpretation process crashes or malformed outputs SHALL retry independently only to
@@ -216,6 +252,16 @@ than worker self-repair. Cancellation and iteration/wall-clock budgets SHALL rem
 - **WHEN** cancellation is observed before planning, execution, interpretation, or the next logical
   iteration
 - **THEN** the supervisor transitions cleanly without launching the next stage.
+
+#### Scenario: Repeated worker crash
+
+- **WHEN** fresh worker attempts fail up to the configured limit
+- **THEN** the session hard-stops and no failed output is accepted as a research finding.
+
+#### Scenario: Cancellation before next worker
+
+- **WHEN** an operator requests cancellation
+- **THEN** the supervisor transitions to `cancelled` without launching another worker.
 
 ## ADDED Requirements
 
