@@ -21,9 +21,9 @@ list of `run_id` and SHALL return `run_count`, `file_count`, `bytes`,
 `already_absent`, the `skipped` list with a reason for each skipped id, and a
 `plan_token`. It SHALL NOT change any file. A `run_id` SHALL be skipped as
 `invalid_run_id` when it does not match `run_` followed by 32 hex characters, as
-`not_in_experiment` when the Experiment's table does not reference it, and as
+`not_in_experiment` when the Experiment's table does not reference it, as
 `shared_with_other_experiment` when another registered Experiment's table
-references it. An unknown Experiment SHALL be HTTP 404.
+references it, and as `not_a_directory` when the run path is a symbolic link. An unknown Experiment SHALL be HTTP 404.
 
 #### Scenario: Plan counts size
 

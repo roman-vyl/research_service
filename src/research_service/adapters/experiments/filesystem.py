@@ -66,6 +66,19 @@ class FilesystemExperiments:
     def manifest(self, experiment_id: str) -> dict[str, Any]:
         return _load_json(self._manifest_path(experiment_id), experiment_id)  # type: ignore[no-any-return]
 
+    def result_table(self, experiment_id: str) -> tuple[Path, ResultSchema]:
+        """Path of the result table and its schema (used by run deletion)."""
+        manifest_path = self._manifest_path(experiment_id)
+        manifest = _load_json(manifest_path, experiment_id)
+        try:
+            schema = ResultSchema.model_validate(manifest.get("result_schema"))
+        except ValidationError as exc:
+            raise InvalidExperiment(experiment_id, f"result_schema: {exc.errors()[0]['msg']}") from exc
+        return manifest_path.parent / schema.table, schema
+
+    def registered_ids(self) -> list[str]:
+        return [str(e["experiment_id"]) for e in self.registry().get("experiments", []) if "experiment_id" in e]
+
     # --- results ---------------------------------------------------------------
 
     def results(

@@ -67,7 +67,8 @@ the reason in brackets:
 - it matches the run id pattern `run_` + 32 hex characters (`invalid_run_id`);
 - it appears in the Experiment's result table, in `run_id_column` (`not_in_experiment`);
 - no other registered Experiment's table references it (`shared_with_other_experiment`).
-  The other tables are read only for this check.
+  The other tables are read only for this check;
+- its path is not a symbolic link (`not_a_directory`).
 
 A run that is referenced but whose folder is already missing is `already_absent`: it
 costs 0 bytes and its `run_id` is still cleared.
