@@ -551,25 +551,43 @@ class ManagedTransitionThresholdDTO(BaseModel):
     trade_metric: TradeMetric
 
 
+EntryChangeOp = Literal[">=", ">", "<=", "<"]
+
+
+class ManagedTransitionEntryChangeDTO(BaseModel):
+    """`distances[series_id][i] - distances[series_id][e] <op> value`,
+    where `e` is the position's entry bar; false when either point is
+    null (`research-entry-anchored-change-v1`)."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    series_id: str = Field(min_length=1)
+    op: EntryChangeOp
+    value: float = Field(allow_inf_nan=False)
+
+
 class ManagedTransitionTermDTO(BaseModel):
-    """One `at_least` term: exactly one of `condition_id` (market) or
-    (`distance_id`, `trade_metric`) (trade threshold)."""
+    """One `at_least` term: exactly one of `condition_id` (market),
+    (`distance_id`, `trade_metric`) (trade threshold) or `entry_change`
+    (entry-anchored change)."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     condition_id: str | None = None
     distance_id: str | None = None
     trade_metric: TradeMetric | None = None
+    entry_change: ManagedTransitionEntryChangeDTO | None = None
 
     @model_validator(mode="after")
     def validate_exactly_one_reference(self) -> "ManagedTransitionTermDTO":
         has_condition = self.condition_id is not None
         has_distance = self.distance_id is not None and self.trade_metric is not None
         has_partial_distance = (self.distance_id is None) != (self.trade_metric is None)
-        if has_condition == has_distance or has_partial_distance:
+        has_entry_change = self.entry_change is not None
+        if has_partial_distance or (has_condition + has_distance + has_entry_change) != 1:
             raise ValueError(
-                "at_least term must set exactly one of condition_id or "
-                "(distance_id, trade_metric)"
+                "at_least term must set exactly one of condition_id, "
+                "(distance_id, trade_metric) or entry_change"
             )
         return self
 
@@ -591,13 +609,15 @@ class ManagedTransitionAtLeastDTO(BaseModel):
 
 class ManagedTransitionPathDTO(BaseModel):
     """True on a bar iff `condition_id` (if any) is true for the trade
-    side, every threshold holds and `at_least` (if any) holds."""
+    side, every threshold holds, every entry change holds and `at_least`
+    (if any) holds."""
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
     path_id: str = Field(min_length=1)
     condition_id: str | None = None
     thresholds: tuple[ManagedTransitionThresholdDTO, ...] = ()
+    entry_changes: tuple[ManagedTransitionEntryChangeDTO, ...] = ()
     at_least: ManagedTransitionAtLeastDTO | None = None
 
 
@@ -710,8 +730,8 @@ class HistoricalManagedProjectionDTO(BaseModel):
 
     @model_validator(mode="after")
     def validate_references_exist(self) -> "HistoricalManagedProjectionDTO":
-        """Every `condition_id`/`distance_id` a rule, path, threshold or
-        term names must exist, so a malformed contract fails decode
+        """Every `condition_id`/`distance_id`/`series_id` a rule, path,
+        threshold, entry change or term names must exist, so a malformed contract fails decode
         instead of raising `KeyError` mid-execution."""
 
         condition_ids: set[str] = set()
@@ -726,11 +746,14 @@ class HistoricalManagedProjectionDTO(BaseModel):
                     if path.condition_id is not None:
                         condition_ids.add(path.condition_id)
                     distance_ids.update(item.distance_id for item in path.thresholds)
+                    distance_ids.update(item.series_id for item in path.entry_changes)
                     for term in path.at_least.terms if path.at_least is not None else ():
                         if term.condition_id is not None:
                             condition_ids.add(term.condition_id)
                         if term.distance_id is not None:
                             distance_ids.add(term.distance_id)
+                        if term.entry_change is not None:
+                            distance_ids.add(term.entry_change.series_id)
             elif rule.kind == "stop_action":
                 distance_ids.add(rule.distance_id)
                 if rule.trigger_distance_id is not None:
