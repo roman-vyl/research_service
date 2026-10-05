@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import operator
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from decimal import Decimal
 from math import isfinite
@@ -17,6 +19,7 @@ from research_service.domain.contracts import (
     ManagedRuntimeExitRuleDTO,
     ManagedStopActionRuleDTO,
     ManagedTakeActionRuleDTO,
+    ManagedTransitionEntryChangeDTO,
     ManagedTransitionPathDTO,
     MarketFrame,
 )
@@ -26,6 +29,12 @@ from research_service.execution.managed_policy_events import ManagedPolicyEvent
 
 _PHASES = ("initial_risk", "proven", "protected", "runner", "exhaustion")
 _PHASE_RANK = {name: index for index, name in enumerate(_PHASES)}
+_ENTRY_CHANGE_OPS: dict[str, Callable[[float, float], bool]] = {
+    ">=": operator.ge,
+    ">": operator.gt,
+    "<=": operator.le,
+    "<": operator.lt,
+}
 
 # Round-trips through this module's own `_runtime_candidate_type`, so a
 # projection-driven `ManagedEffectiveState` reaches the same
@@ -238,7 +247,9 @@ def build_managed_policy_timeline_from_projection(
         for rule in phase_rules:
             if _PHASE_RANK[rule.target_phase] <= _PHASE_RANK[phase]:
                 continue
-            met, _path_id = _phase_rule_met(rule, projection, side, trade_metric_values, index)
+            met, _path_id = _phase_rule_met(
+                rule, projection, side, trade_metric_values, index, entry_index
+            )
             if met:
                 phase = rule.target_phase
 
@@ -473,7 +484,9 @@ def advance_managed_trade_state(
     for rule in rule_set.phase_transitions:
         if _PHASE_RANK[rule.target_phase] <= _PHASE_RANK[phase]:
             continue
-        met, path_id = _phase_rule_met(rule, projection, side, trade_metric_values, bar_index)
+        met, path_id = _phase_rule_met(
+            rule, projection, side, trade_metric_values, bar_index, state.entry_index
+        )
         if met:
             if event_sink is not None:
                 event_sink.append(
@@ -635,6 +648,7 @@ def _phase_rule_met(
     side: ExecutionSide,
     trade_metric_values: Mapping[str, float],
     index: int,
+    entry_index: int,
 ) -> tuple[bool, str | None]:
     """Whether one phase rule's condition holds on bar `index`, and the
     attributed `path_id` for a paths rule (`historical-managed-
@@ -654,7 +668,7 @@ def _phase_rule_met(
         )
     assert rule.paths is not None
     for path in rule.paths:
-        if _path_met(projection, path, side, trade_metric_values, index):
+        if _path_met(projection, path, side, trade_metric_values, index, entry_index):
             return True, path.path_id
     return False, None
 
@@ -665,6 +679,7 @@ def _path_met(
     side: ExecutionSide,
     trade_metric_values: Mapping[str, float],
     index: int,
+    entry_index: int,
 ) -> bool:
     if path.condition_id is not None and not _condition_value(
         projection, path.condition_id, side, index
@@ -675,6 +690,9 @@ def _path_met(
             projection, item.distance_id, item.trade_metric, trade_metric_values, index
         ):
             return False
+    for change in path.entry_changes:
+        if not _entry_change_met(projection, change, index, entry_index):
+            return False
     at_least = path.at_least
     if at_least is None:
         return True
@@ -682,6 +700,8 @@ def _path_met(
     for term in at_least.terms:
         if term.condition_id is not None:
             count += _condition_value(projection, term.condition_id, side, index)
+        elif term.entry_change is not None:
+            count += _entry_change_met(projection, term.entry_change, index, entry_index)
         else:
             assert term.distance_id is not None and term.trade_metric is not None
             count += _threshold_met(
@@ -709,6 +729,23 @@ def _threshold_met(
 ) -> bool:
     threshold = projection.distances[distance_id][index]
     return threshold is not None and trade_metric_values[trade_metric] >= threshold
+
+
+def _entry_change_met(
+    projection: HistoricalManagedProjectionDTO,
+    change: ManagedTransitionEntryChangeDTO,
+    index: int,
+    entry_index: int,
+) -> bool:
+    """`series[index] - series[entry_index] <op> value`, null on either
+    bar -> False (`research-entry-anchored-change-v1`)."""
+
+    series = projection.distances[change.series_id]
+    current = series[index]
+    anchor = series[entry_index]
+    if current is None or anchor is None:
+        return False
+    return _ENTRY_CHANGE_OPS[change.op](current - anchor, change.value)
 
 
 def _stop_candidate(
