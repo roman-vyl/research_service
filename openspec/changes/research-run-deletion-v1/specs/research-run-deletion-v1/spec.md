@@ -41,35 +41,32 @@ references it. An unknown Experiment SHALL be HTTP 404.
 - **WHEN** a requested run is also referenced by another registered Experiment
 - **THEN** it is skipped as `shared_with_other_experiment`.
 
-### Requirement: Delete requires the plan and the confirmed count
+### Requirement: Delete requires the plan token
 
 `POST /api/research/experiments/{experiment_id}/runs/delete` SHALL accept the same
-list, the `plan_token` and a `confirm_run_count`. The service SHALL recompute the
-plan; if its token differs from the supplied token, or the planned `run_count`
-differs from `confirm_run_count`, it SHALL change nothing and answer HTTP 409
-`plan_stale`. The token SHALL depend on the Experiment id, the deletable run ids
-with their file counts and sizes, the skipped list and the content hash of the
-result table, and SHALL NOT depend on server state.
+list and the `plan_token`. The service SHALL recompute the token; if it differs it
+SHALL change nothing and answer HTTP 409 `plan_stale`. The token SHALL depend only
+on the sorted deletable run ids and the content hash of the result table, and SHALL
+NOT depend on server state.
 
 #### Scenario: Table changed after the plan
 
 - **WHEN** the result table changes between plan and delete
 - **THEN** delete answers 409 `plan_stale` and deletes nothing.
 
-#### Scenario: Wrong confirmed count
+#### Scenario: Selection changed after the plan
 
-- **WHEN** `confirm_run_count` is not the planned run count
+- **WHEN** the delete request lists different runs than the plan
 - **THEN** delete answers 409 `plan_stale` and deletes nothing.
 
 ### Requirement: Delete removes whole runs and clears run_id
 
 Delete SHALL remove each planned run folder as a whole and SHALL empty the
 `run_id` cell of every row that referenced a deleted run, including runs reported
-as `already_absent`. It SHALL NOT modify any other cell, the manifest, the registry,
-other Experiments, `batches/` or runs that were not selected. A deleted run SHALL
-NOT remain partially present in `<artifacts_root>` at any time visible to the run
-routes: folders are first moved atomically into a hidden folder under the artifacts
-root and removed after the table is rewritten.
+as `already_absent`. Deleting a run whose folder is already missing SHALL NOT be an
+error. It SHALL NOT modify any other cell, the manifest, the registry, other
+Experiments, `batches/` or runs that were not selected, and SHALL NOT delete files
+inside a run folder separately from the folder.
 
 #### Scenario: Run list stays valid
 
@@ -88,6 +85,11 @@ root and removed after the table is rewritten.
 - **WHEN** the run routes are asked for a deleted `run_id`
 - **THEN** they answer 404 `RunNotFound` as for any missing run.
 
+#### Scenario: Already absent run
+
+- **WHEN** a selected run's folder no longer exists
+- **THEN** delete succeeds and its `run_id` cell is cleared.
+
 ### Requirement: Backup, atomic rewrite and journal
 
 Before the table is rewritten the service SHALL keep a copy named
@@ -101,16 +103,16 @@ UTC time, run ids, counts, bytes and backup name.
 - **WHEN** the process stops while the new table is being written
 - **THEN** the previous table is still intact.
 
-### Requirement: Repeatable after interruption
+### Requirement: Repeating a delete completes it
 
-Repeating a delete request after an interruption SHALL complete it: runs already
-moved or removed are reported as `already_absent`, their `run_id` is cleared, and
-leftovers in the hidden folder are removed.
+Repeating a delete after an interruption SHALL complete it: folders already removed
+are treated as already deleted and the remaining `run_id` cells are cleared. The
+service SHALL NOT require any recovery state for this.
 
-#### Scenario: Crash after folders moved
+#### Scenario: Stopped after some folders were removed
 
-- **WHEN** folders were moved to the hidden folder but the table was not yet rewritten
-- **THEN** repeating the same request clears the `run_id` cells and removes the folders.
+- **WHEN** some selected folders were removed but the table was not rewritten
+- **THEN** repeating a plan and delete for the same runs clears every selected `run_id`.
 
 ### Requirement: Read routes stay read-only
 

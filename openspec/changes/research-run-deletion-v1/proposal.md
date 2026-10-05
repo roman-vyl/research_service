@@ -21,14 +21,14 @@ There is no "pruned" or "lightweight" run. A deleted run is a deleted run.
 
 - Add a two-step, irreversible **delete runs** operation to Research Service for the
   runs of one Experiment: a dry-run plan (how many runs, files, bytes; what is
-  skipped and why) and an apply step that needs the plan's token and the confirmed
-  run count.
+  skipped and why) and an apply step that needs the plan's token.
 - Apply removes each selected run folder `<artifacts_root>/<run_id>/` whole and
   clears `run_id` in the Experiment's result table. No other cell of the table is
   touched; metrics and provenance stay exactly as they were.
 - Before the table is rewritten, a backup `runs.pre_delete_<UTC>.csv` is kept next
   to it, the rewrite is atomic, and a line is appended to
-  `runs_deleted.jsonl` in the Experiment folder.
+  `runs_deleted.jsonl` in the Experiment folder. The operation is best-effort and
+  safe to repeat: deleting an already absent run is not an error.
 
 ## Capabilities
 
@@ -49,7 +49,7 @@ There is no "pruned" or "lightweight" run. A deleted run is a deleted run.
 - Calculating or restoring runs, a `materialize` manifest block, job queue,
   progress or cancel. That is a separate change after this one has been smoked on a
   real surface.
-- A trash folder, undo, partial deletion of files inside a run, a "pruned" marker,
+- A trash folder, transactions or crash recovery, undo, partial deletion of files inside a run, a "pruned" marker,
   a new HTTP status for deleted runs, changes to `GET /api/research/runs*` or to run
   reading.
 - Deleting runs that no registered Experiment references, deleting batch folders,

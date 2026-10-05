@@ -1,9 +1,9 @@
 ## 1. Research Service
 
 - [ ] 1.1 Confirm that `/data/analysis` (the Experiment folders) is writable by Research Service in the compose stack; if not, record the mount change needed. No new setting.
-- [ ] 1.2 Deletion adapter: deletable/skipped classification (id pattern, referenced by this table, not by another registered table), file and byte counts, plan token, hidden `.deleting` move, table backup, atomic rewrite with only `run_id` cells changed, journal line, cleanup, per-Experiment lock.
-- [ ] 1.3 `POST .../runs/delete-plan` and `POST .../runs/delete` with `plan_stale` (409) and stable errors; response shapes as in `design.md`.
-- [ ] 1.4 Tests on small fixture Experiments: counts and skipped reasons, shared run, stale token after table change, wrong confirmed count, other cells byte-identical, run list still valid, deleted run 404, interrupted-apply repeat, backup and journal written, read routes and `/api/research/runs*` tests unchanged.
+- [ ] 1.2 Deletion adapter: deletable/skipped classification (id pattern, referenced by this table, not by another registered table), file and byte counts, plan token (run ids + table hash), table backup, folder removal (missing is fine), atomic rewrite with only `run_id` cells changed, journal line.
+- [ ] 1.3 `POST .../runs/delete-plan` and `POST .../runs/delete` with `plan_stale` (409) and stable errors; request and response shapes as in `design.md`.
+- [ ] 1.4 Tests on small fixture Experiments: counts and skipped reasons, shared run, stale token after table or selection change, other cells byte-identical, run list still valid, deleted run 404, already absent run, repeat after partial removal, backup and journal written, read routes and `/api/research/runs*` tests unchanged.
 - [ ] 1.5 Measure plan time for a table of 12 672 referenced runs on the local data (read-only plan, nothing deleted).
 
 ## 2. Verification on real data (Mac, only on explicit command)

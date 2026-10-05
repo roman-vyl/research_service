@@ -49,21 +49,15 @@ returns
 }
 ```
 
-Nothing is changed. `POST .../runs/delete` takes
+Nothing is changed. `POST .../runs/delete` takes `{ "run_ids": [...], "plan_token": "..." }`,
+deletes as described below and returns the counts and the backup file name. The user's
+confirmation (typing the planned run count) is a frontend step; the backend only checks
+the token.
 
-```json
-{ "run_ids": ["run_..."], "plan_token": "sha256:...", "confirm_run_count": 47 }
-```
-
-and performs the deletion described below, returning the same counts plus the backup
-file name. The service recomputes the plan from `run_ids`; if its token differs from
-`plan_token` or `confirm_run_count` differs from the planned `run_count`, nothing is
-changed and the response is 409 `plan_stale`.
-
-**Token.** SHA-256 over canonical JSON of: `experiment_id`, the sorted deletable
-run ids with each one's file count and byte size, the skipped list, and the SHA-256
-of the result table. Stateless: it survives a restart, and any change of the table or
-of a run folder invalidates it.
+**Token.** SHA-256 over the sorted deletable run ids and the SHA-256 of the result
+table. Its only job is to refuse a delete when the selection or the table is not what
+the user was shown. If it differs the service changes nothing and answers 409
+`plan_stale`. Stateless: nothing is stored on the server.
 
 ### D3. What is deletable
 
@@ -76,26 +70,25 @@ the reason in brackets:
   The other tables are read only for this check.
 
 A run that is referenced but whose folder is already missing is `already_absent`: it
-costs 0 bytes and its `run_id` is still cleared, so the table ends consistent.
+costs 0 bytes and its `run_id` is still cleared.
 
-### D4. Apply order and crash safety
+### D4. Apply
 
-1. Take an exclusive in-process lock for the Experiment; recompute and compare the
-   plan.
-2. Move every selected folder into `<artifacts_root>/.deleting/<run_id>/` with an
-   atomic rename on the same volume. The dot-folder is invisible to `list_run_ids`.
-3. Copy `runs.csv` to `runs.pre_delete_<UTC>.csv`.
+Best-effort, safe to repeat. In this order:
+
+1. Recompute the token; refuse with 409 `plan_stale` if it differs.
+2. Copy `runs.csv` to `runs.pre_delete_<UTC>.csv`.
+3. Delete each selected run folder whole (`rmtree`; a missing folder is not an error).
 4. Write a new table to a temporary file in the same folder with the selected
    `run_id` cells emptied and every other cell byte-identical (read and written as
-   plain strings, same dialect and line ending), then rename it over `runs.csv`.
-5. Append one line to `runs_deleted.jsonl` (UTC time, run ids, counts, bytes, backup
-   name).
-6. Remove `.deleting/` contents and report the result.
+   plain strings), then rename it over `runs.csv`.
+5. Append one line to `runs_deleted.jsonl` (UTC time, run ids, counts, bytes, backup name).
 
-A crash after step 2 leaves rows pointing at hidden folders; repeating the same
-request completes it (the runs are then found in `.deleting` or already absent).
-A crash after step 4 leaves only space to free: the next apply empties `.deleting`.
-Nothing a reader sees is ever half a run.
+There is no transaction. If the process stops in the middle, some folders are gone
+and `runs.csv` may still name them. That state is harmless and is repaired by
+repeating the same delete: missing folders count as already deleted and their
+`run_id` is cleared. A folder is removed in one operation, so the run list sees a run
+either whole or not at all; nothing deletes files inside a run folder.
 
 ### D5. What is not touched
 
@@ -107,10 +100,9 @@ reading a deleted run: its folder is gone, so the existing run routes answer 404
 ### D6. Concurrency with other writers
 
 Scripts that write `runs.csv` (Engine fill, gap-fill) are not coordinated with this
-service. The token covers any change between plan and apply, and the in-process lock
-covers concurrent requests, but a script writing during the apply window is not
-covered. Deletion must not be run while such a script is writing the same table; the
-frontend states this in the confirmation text.
+service. The token covers a change between plan and apply; a script writing during the
+apply itself is not covered. Deletion must not be run while such a script is writing the
+same table; the frontend states this in the confirmation text.
 
 ### D7. Write access
 
@@ -122,8 +114,8 @@ stack and, if not, change the mount; no code path depends on a new setting.
 
 ## Risks / Trade-offs
 
-- Deletion is irreversible; the safeguards are the plan, the token, the confirmed
-  count, the backup of the table and the journal. The deleted run itself is not
+- Deletion is irreversible; the safeguards are the plan, the token, the typed
+  confirmation in the frontend, the backup of the table and the journal. The deleted run itself is not
   recoverable except by recalculation (later change).
 - A backup copy of the table per operation grows disk use by one table size
   (`runs.csv` of the trailing experiment is 53 MB). Old backups are removed by hand.
