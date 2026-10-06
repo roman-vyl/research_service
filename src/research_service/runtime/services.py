@@ -19,6 +19,7 @@ from research_service.adapters.experiments import (
     FilesystemCandidates,
     FilesystemExperiments,
     FilesystemExperimentStorage,
+    FilesystemRunCalculation,
     FilesystemRunDeletion,
 )
 from research_service.application.backtests import (
@@ -54,6 +55,7 @@ class AppServices:
     run_deletion: FilesystemRunDeletion
     experiment_storage: FilesystemExperimentStorage
     candidates: FilesystemCandidates
+    run_calculation: FilesystemRunCalculation
 
 
 def services(request: Request) -> AppServices:

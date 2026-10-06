@@ -139,10 +139,10 @@ class InvalidExperiment(ResearchServiceError):
 
 
 class PlanStale(ResearchServiceError):
-    def __init__(self, experiment_id: str) -> None:
+    def __init__(self, experiment_id: str, operation: str = "delete") -> None:
         super().__init__(
             code="plan_stale",
-            message="the delete plan no longer matches the selection or the result table; plan again",
+            message=f"the {operation} plan no longer matches the selection or the result table; plan again",
             status_code=409,
             details={"experiment_id": experiment_id},
         )
@@ -185,4 +185,46 @@ class InvalidCandidatesFile(ResearchServiceError):
             message=f"candidates.json is not readable: {problem}",
             status_code=500,
             details={"problem": problem},
+        )
+
+
+class CalculationRejected(ResearchServiceError):
+    """Calculate is not possible for the whole Experiment (`research-run-calculation-v1`)."""
+
+    def __init__(self, experiment_id: str, code: str, message: str, details: dict[str, Any] | None = None) -> None:
+        super().__init__(
+            code=code,
+            message=message,
+            status_code=409,
+            details={"experiment_id": experiment_id, **(details or {})},
+        )
+
+
+class TooManyRows(ResearchServiceError):
+    def __init__(self, count: int, limit: int) -> None:
+        super().__init__(
+            code="too_many_rows",
+            message=f"at most {limit} rows per request; got {count}",
+            status_code=422,
+            details={"count": count, "limit": limit},
+        )
+
+
+class CalculationJobNotFound(ResearchServiceError):
+    def __init__(self, job_id: str) -> None:
+        super().__init__(
+            code="calculation_job_not_found",
+            message=f"calculation job not found: {job_id}",
+            status_code=404,
+            details={"job_id": job_id},
+        )
+
+
+class MarketDataHashMismatch(ResearchServiceError):
+    def __init__(self, expected: str, actual: str) -> None:
+        super().__init__(
+            code="market_data_hash_mismatch",
+            message=f"market data hash {actual} differs from the expected {expected}",
+            status_code=409,
+            details={"expected": expected, "actual": actual},
         )

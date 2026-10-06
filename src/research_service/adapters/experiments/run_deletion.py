@@ -19,6 +19,7 @@ from pathlib import Path
 from typing import Any
 
 from research_service.adapters.experiments.filesystem import FilesystemExperiments
+from research_service.adapters.experiments.locks import experiment_lock
 from research_service.domain.errors import InvalidExperiment, InvalidRequest, PlanStale
 
 JOURNAL_FILE = "runs_deleted.jsonl"
@@ -77,6 +78,10 @@ class FilesystemRunDeletion:
     # --- apply -----------------------------------------------------------------
 
     def delete(self, experiment_id: str, run_ids: list[str], plan_token: str) -> dict[str, Any]:
+        with experiment_lock(experiment_id):
+            return self._delete(experiment_id, run_ids, plan_token)
+
+    def _delete(self, experiment_id: str, run_ids: list[str], plan_token: str) -> dict[str, Any]:
         plan = self.plan(experiment_id, run_ids)
         if plan["plan_token"] != plan_token:
             raise PlanStale(experiment_id)

@@ -86,7 +86,20 @@ class StrategyEnginePort(Protocol):
         self, strategy_id: str, instances: list[dict[str, Any]]
     ) -> StrategyAuthoringValidationResult: ...
 
+    def validate_strategy(
+        self, strategy_id: str, raw_spec: Mapping[str, Any]
+    ) -> StrategySpecValidation: ...
+
     def health(self) -> bool: ...
+
+
+@dataclass(frozen=True, slots=True)
+class StrategySpecValidation:
+    """Engine's verdict on one complete spec: `config_hash` when valid,
+    Engine's own message when the spec is rejected."""
+
+    config_hash: str | None
+    error: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
