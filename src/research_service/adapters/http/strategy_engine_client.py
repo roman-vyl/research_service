@@ -5,7 +5,7 @@ from __future__ import annotations
 import json
 from collections.abc import Iterator
 from decimal import Decimal
-from typing import Any, cast
+from typing import Any, Mapping, cast
 
 import httpx
 
@@ -27,6 +27,7 @@ from research_service.ports.strategy_engine import (
     IndicatorSeriesResult,
     MultiIndicatorSeriesResult,
     StrategyAuthoringValidationResult,
+    StrategySpecValidation,
     StrategyValidationError,
 )
 
@@ -100,6 +101,40 @@ class HttpStrategyEngineClient:
         return StrategyAuthoringValidationResult(
             valid=bool(body.get("valid", False)), errors=errors
         )
+
+    def validate_strategy(
+        self, strategy_id: str, raw_spec: Mapping[str, Any]
+    ) -> StrategySpecValidation:
+        """`POST /v1/strategies/{id}/validate`: a 4xx is Engine rejecting the
+        spec (returned as `error`); transport failures and 5xx raise."""
+
+        try:
+            response = self._client.post(
+                f"/v1/strategies/{strategy_id}/validate",
+                json={"strategy_id": strategy_id, "raw_spec": dict(raw_spec)},
+            )
+        except httpx.HTTPError as exc:
+            raise UpstreamServiceError(
+                service="strategy_engine", status_code=503, message=str(exc)
+            ) from exc
+        if 400 <= response.status_code < 500:
+            return StrategySpecValidation(config_hash=None, error=_error_text(response))
+        if response.status_code != 200:
+            raise UpstreamServiceError(
+                service="strategy_engine",
+                status_code=response.status_code,
+                message="Strategy Engine strategy validation request failed",
+                details={"body": _safe_json(response)},
+            )
+        body = response.json()
+        config_hash = body.get("config_hash") if isinstance(body, dict) else None
+        if not isinstance(config_hash, str) or not config_hash:
+            raise UpstreamServiceError(
+                service="strategy_engine",
+                status_code=502,
+                message="Strategy Engine validation response has no config_hash",
+            )
+        return StrategySpecValidation(config_hash=config_hash)
 
     def evaluate_range_projection(
         self,
@@ -615,6 +650,16 @@ def _object(body: dict[str, object], key: str) -> dict[str, object]:
             message=f"Strategy Engine response field {key} is invalid",
         )
     return value
+
+
+def _error_text(response: httpx.Response) -> str:
+    body = _safe_json(response)
+    if isinstance(body, dict):
+        message = body.get("message") or body.get("detail") or body.get("error")
+        if message is not None:
+            return message if isinstance(message, str) else json.dumps(message)
+        return json.dumps(body)
+    return str(body)
 
 
 def _safe_json(response: httpx.Response) -> object:

@@ -1,4 +1,4 @@
-"""Experiment routes: registry, manifest, results, storage (read-only) and run deletion."""
+"""Experiment routes: registry, manifest, results, storage (read-only), run deletion and Calculate."""
 
 from __future__ import annotations
 
@@ -58,3 +58,41 @@ def plan_run_deletion(request: Request, experiment_id: str, body: DeletePlanRequ
 @router.post("/{experiment_id}/runs/delete")
 def delete_runs(request: Request, experiment_id: str, body: DeleteRunsRequest) -> dict[str, Any]:
     return services(request).run_deletion.delete(experiment_id, body.run_ids, body.plan_token)
+
+
+class CalculateRow(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    coords: dict[str, Any]
+
+
+class CalculatePlanRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    rows: list[CalculateRow]
+
+
+class CalculateRequest(CalculatePlanRequest):
+    plan_token: str
+
+
+@router.post("/{experiment_id}/runs/calculate-plan")
+def plan_calculation(request: Request, experiment_id: str, body: CalculatePlanRequest) -> dict[str, Any]:
+    return services(request).run_calculation.plan(experiment_id, [r.model_dump() for r in body.rows])
+
+
+@router.post("/{experiment_id}/runs/calculate", status_code=202)
+def calculate_runs(request: Request, experiment_id: str, body: CalculateRequest) -> dict[str, Any]:
+    return services(request).run_calculation.calculate(
+        experiment_id, [r.model_dump() for r in body.rows], body.plan_token
+    )
+
+
+@router.get("/{experiment_id}/calculations/{job_id}")
+def get_calculation(request: Request, experiment_id: str, job_id: str) -> dict[str, Any]:
+    return services(request).run_calculation.status(experiment_id, job_id)
+
+
+@router.post("/{experiment_id}/calculations/{job_id}/cancel")
+def cancel_calculation(request: Request, experiment_id: str, job_id: str) -> dict[str, Any]:
+    return services(request).run_calculation.cancel(experiment_id, job_id)

@@ -195,9 +195,13 @@ def test_no_surface_cells_aggregates_or_findings_routes(tmp_path: Path) -> None:
         "/api/research/experiments/{experiment_id}/results",
         # research-experiment-storage-v1: read-only counts and size
         "/api/research/experiments/{experiment_id}/storage",
-        # research-run-deletion-v1: the only write routes
+        # research-run-deletion-v1 and research-run-calculation-v1: the only write routes
         "/api/research/experiments/{experiment_id}/runs/delete-plan",
         "/api/research/experiments/{experiment_id}/runs/delete",
+        "/api/research/experiments/{experiment_id}/runs/calculate-plan",
+        "/api/research/experiments/{experiment_id}/runs/calculate",
+        "/api/research/experiments/{experiment_id}/calculations/{job_id}",
+        "/api/research/experiments/{experiment_id}/calculations/{job_id}/cancel",
     }
     assert not any("surface" in p or "cells" in p or "aggregates" in p for p in paths)
 
