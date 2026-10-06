@@ -37,6 +37,10 @@ class FilesystemExperiments:
         self._root = analysis_root
         self._cache: dict[tuple[str, int, int], _Table] = {}
 
+    @property
+    def root(self) -> Path:
+        return self._root
+
     # --- registry and manifest -------------------------------------------------
 
     def registry(self) -> dict[str, Any]:
@@ -85,6 +89,20 @@ class FilesystemExperiments:
         except ValidationError as exc:
             raise InvalidExperiment(experiment_id, f"result_schema: {exc.errors()[0]['msg']}") from exc
         return manifest_path, schema
+
+    def entry(self, experiment_id: str) -> dict[str, Any]:
+        """The registry entry of one Experiment (used by the candidate shortlist)."""
+        return self._entry(experiment_id)
+
+    def loaded(self, experiment_id: str) -> tuple[dict[str, Any], ResultSchema, Path]:
+        """Manifest, schema and result table path, without reading the table."""
+        manifest_path, schema = self._schema(experiment_id)
+        return _load_json(manifest_path, experiment_id), schema, manifest_path.parent / schema.table
+
+    def keyed_table(self, experiment_id: str) -> tuple[tuple[str, int, int], _Table]:
+        """Cache key and parsed table through the results cache."""
+        manifest_path, schema = self._schema(experiment_id)
+        return self._keyed_table(experiment_id, manifest_path.parent / schema.table, schema)
 
     def registered_ids(self) -> list[str]:
         return [str(e["experiment_id"]) for e in self.registry().get("experiments", []) if "experiment_id" in e]
