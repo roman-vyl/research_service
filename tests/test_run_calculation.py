@@ -352,16 +352,77 @@ def test_calculate_publishes_only_rows_that_pass_metric_parity(tmp_path: Path) -
 
 def test_integer_metric_is_exact_and_empty_values(tmp_path: Path) -> None:
     schema = ResultSchema.model_validate(SCHEMA)
+    bindings = MATERIALIZE["result_bindings"]
+
+    def parity(cells: dict[str, str], actual: dict[str, Any]) -> list[dict[str, Any]]:
+        return calc_module._parity(schema, bindings, cells, actual)
+
+    assert parity({"trades": "100"}, {"trades": 100}) == []
+    assert parity({"trades": "100"}, {"trades": 101}) != []
+    # rel 1e-3 of max(|actual|, |expected|)
+    assert parity({"profit_factor": "2"}, {"profit_factor": Decimal("2.0019")}) == []
+    assert parity({"profit_factor": "2"}, {"profit_factor": Decimal("2.0041")}) != []
+    # absolute floor near zero (profit_factor: 1e-4)
+    assert parity({"profit_factor": "0"}, {"profit_factor": Decimal("0.0001")}) == []
+    assert parity({"profit_factor": "0"}, {"profit_factor": Decimal("0.00011")}) != []
+    assert parity({"profit_factor": ""}, {"profit_factor": None}) == []
+    assert parity({"profit_factor": ""}, {"profit_factor": Decimal("1")}) != []
+    assert parity({"profit_factor": "1"}, {"profit_factor": None}) != []
+
+
+# Smoke on a legacy replay Surface (5 rows x 7 metrics): stored values rounded,
+# Engine at full precision, trade counts equal. Every cell must pass.
+SMOKE_BINDINGS = {
+    "realised_trade_count": "realised_trade_count",
+    "net_pnl": "net_pnl",
+    "return_pct": "return_pct",
+    "profit_factor": "profit_factor",
+    "win_rate": "win_rate",
+    "max_drawdown_pct": "max_drawdown",
+    "cumulative_net_r": "cumulative_net_r",
+}
+SMOKE_CELLS = [  # (stored, engine) per metric in SMOKE_BINDINGS order
+    [("212", 212), ("8861.0", "8861.4976"), ("0.8861", "0.886150"), ("1.3052", "1.305189"),
+     ("0.2594", "0.259434"), ("-0.2043", "-0.204313"), ("40.36", "40.35721")],
+    [("269", 269), ("21160.0", "21159.7622"), ("2.116", "2.115976"), ("1.4769", "1.476911"),
+     ("0.2751", "0.275093"), ("-0.2043", "-0.204313"), ("71.38", "71.37993")],
+    [("336", 336), ("9597.0", "9596.8492"), ("0.9597", "0.959685"), ("1.2056", "1.205628"),
+     ("0.2411", "0.241071"), ("-0.296", "-0.295965"), ("32.15", "32.14751")],
+    [("392", 392), ("6164.0", "6163.6079"), ("0.6164", "0.616361"), ("1.1253", "1.125310"),
+     ("0.2296", "0.229592"), ("-0.3504", "-0.350363"), ("13.53", "13.53268")],
+    [("411", 411), ("5350.0", "5350.1338"), ("0.535", "0.535013"), ("1.1075", "1.107521"),
+     ("0.2263", "0.226277"), ("-0.3664", "-0.366419"), ("5.34", "5.34421")],
+]
+
+
+def test_rounded_legacy_smoke_cells_pass_and_real_changes_fail() -> None:
+    schema = ResultSchema.model_validate(
+        {
+            **SCHEMA,
+            "metrics": [
+                {"column": c, "label": c, "format": "integer" if c == "realised_trade_count" else "number"}
+                for c in SMOKE_BINDINGS
+            ],
+        }
+    )
+    columns = list(SMOKE_BINDINGS)
+    for row in SMOKE_CELLS:
+        cells = {c: stored for c, (stored, _) in zip(columns, row)}
+        actual = {c: Decimal(str(engine)) if c != "realised_trade_count" else engine for c, (_, engine) in zip(columns, row)}
+        assert calc_module._parity(schema, SMOKE_BINDINGS, cells, actual) == []
     parity = calc_module._parity
-    assert parity(schema, {"trades": "100"}, {"trades": 100}) == []
-    assert parity(schema, {"trades": "100"}, {"trades": 101}) != []
-    assert parity(schema, {"profit_factor": "1"}, {"profit_factor": Decimal("1.000001")}) == []
-    assert parity(schema, {"profit_factor": "1"}, {"profit_factor": Decimal("1.00001")}) != []
-    assert parity(schema, {"profit_factor": "0"}, {"profit_factor": Decimal("1e-10")}) == []
-    assert parity(schema, {"profit_factor": "0"}, {"profit_factor": Decimal("1e-8")}) != []
-    assert parity(schema, {"profit_factor": ""}, {"profit_factor": None}) == []
-    assert parity(schema, {"profit_factor": ""}, {"profit_factor": Decimal("1")}) != []
-    assert parity(schema, {"profit_factor": "1"}, {"profit_factor": None}) != []
+    # near zero the floor applies: return 0.0 stored vs 0.00004 passes, 0.0002 fails
+    assert parity(schema, SMOKE_BINDINGS, {"return_pct": "0.0"}, {"return_pct": Decimal("0.00004")}) == []
+    assert parity(schema, SMOKE_BINDINGS, {"return_pct": "0.0"}, {"return_pct": Decimal("0.0002")}) != []
+    # net_pnl floor 1.0; cumulative R floor 0.01
+    assert parity(schema, SMOKE_BINDINGS, {"net_pnl": "12.0"}, {"net_pnl": Decimal("12.9")}) == []
+    assert parity(schema, SMOKE_BINDINGS, {"net_pnl": "12.0"}, {"net_pnl": Decimal("13.1")}) != []
+    assert parity(schema, SMOKE_BINDINGS, {"cumulative_net_r": "0.03"}, {"cumulative_net_r": Decimal("0.0349")}) == []
+    # a real change fails: return 0.8861 -> 0.8880 (0.2 %)
+    assert parity(schema, SMOKE_BINDINGS, {"return_pct": "0.8861"}, {"return_pct": Decimal("0.8880")}) != []
+    # side fields use the floor of their last path segment
+    side = {"long_net_pnl": "long.net_pnl"}
+    assert parity(schema, side, {"long_net_pnl": "0.0"}, {"long_net_pnl": Decimal("0.6")}) == []
 
 
 def test_stale_plan_token(tmp_path: Path) -> None:
