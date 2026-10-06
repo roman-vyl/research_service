@@ -11,8 +11,8 @@
 
 ## 2. Existing Surfaces (research machine, only on explicit command)
 
-- [ ] 2.1 Check script (not in the service): materialize every row with a live run and compare `config_hash` with the spec in its `request.json`; report mismatches.
-- [ ] 2.2 Write and verify the `materialize` block for one Engine Surface (`btcusdt_p.ema500.ratio_4d`) with 2.1.
+- [x] 2.1 Check script (not in the service): materialize every row with a live run and compare `config_hash` with the spec in its `request.json`; report mismatches. `scripts/check_materialize.py` (`suggest` and `check`, standard library only, read-only); it also compares identity and `research_policy` with `request.json`.
+- [x] 2.2 Write and verify the `materialize` block for one Engine Surface (`btcusdt_p.ema500.ratio_4d`) with 2.1. Done on the Mac: 12 528 rows, all with a live run; four bindings (`min_current_width_atr`, `untouched_lookback`, `sl_atr_multiplier`, `tp_atr_multiplier`), no formulas; materialized `config_hash` equals `request.json` on 12 528/12 528 rows. The runs used six data windows (same start, different `to_ms`); the owner chose the window of 9 724 runs (`to_ms` 1790543700000), so 2 804 rows of five extension batches differ only in `range.to_ms` (accepted exception; Calculate refuses them on the market data hash). Block written to the manifest (backup `manifest.pre_materialize_20261006T171846Z.json`), check from the manifest identical, `runs.csv` sha256 unchanged, Experiment route 200 with `materialize`. `max_drawdown_pct → max_drawdown` is matched by name only; the check does not compare metrics.
 - [ ] 2.3 Smoke on that Surface: Calculate a few rows whose run was deleted; check parity pass, published cells, backup, journal, Workbench.
 - [ ] 2.4 Smoke on one replay Surface with a few rows; report how many pass the gate.
 
