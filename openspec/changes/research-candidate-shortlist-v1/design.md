@@ -37,7 +37,8 @@ are HTTP 400 `invalid_coords`.
 
 Canonical value: a numeric coordinate is parsed as float and written as
 `format(x, ".12g")` with `-0` written as `0`; a text coordinate (`grid`, `arm`) is
-kept as is. `candidate_id = "cand_" + sha256(canonical_json({"experiment_id",
+kept as is. An empty coordinate (for example the grid and trigger of a
+comparison-arm row) is `null` and matches only an empty cell. `candidate_id = "cand_" + sha256(canonical_json({"experiment_id",
 "coords"}))[:24]`, where `canonical_json` is `json.dumps(sort_keys=True,
 separators=(",", ":"))`. The backend alone builds it; the same point always gets
 the same id.

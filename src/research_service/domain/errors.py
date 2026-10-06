@@ -146,3 +146,43 @@ class PlanStale(ResearchServiceError):
             status_code=409,
             details={"experiment_id": experiment_id},
         )
+
+
+class InvalidCoords(ResearchServiceError):
+    def __init__(self, experiment_id: str, problem: str) -> None:
+        super().__init__(
+            code="invalid_coords",
+            message=f"coordinates do not fit experiment {experiment_id}: {problem}",
+            status_code=400,
+            details={"experiment_id": experiment_id, "problem": problem},
+        )
+
+
+class RowNotFound(ResearchServiceError):
+    def __init__(self, experiment_id: str, coords: dict[str, str | None]) -> None:
+        super().__init__(
+            code="row_not_found",
+            message=f"no row of experiment {experiment_id} has these coordinates",
+            status_code=404,
+            details={"experiment_id": experiment_id, "coords": coords},
+        )
+
+
+class AmbiguousRow(ResearchServiceError):
+    def __init__(self, experiment_id: str, coords: dict[str, str | None], rows: int) -> None:
+        super().__init__(
+            code="ambiguous_row",
+            message=f"{rows} rows of experiment {experiment_id} have these coordinates",
+            status_code=409,
+            details={"experiment_id": experiment_id, "coords": coords, "rows": rows},
+        )
+
+
+class InvalidCandidatesFile(ResearchServiceError):
+    def __init__(self, problem: str) -> None:
+        super().__init__(
+            code="invalid_candidates_file",
+            message=f"candidates.json is not readable: {problem}",
+            status_code=500,
+            details={"problem": problem},
+        )

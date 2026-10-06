@@ -16,6 +16,7 @@ from typing import cast
 from fastapi import Request
 
 from research_service.adapters.experiments import (
+    FilesystemCandidates,
     FilesystemExperiments,
     FilesystemExperimentStorage,
     FilesystemRunDeletion,
@@ -52,6 +53,7 @@ class AppServices:
     experiments: FilesystemExperiments
     run_deletion: FilesystemRunDeletion
     experiment_storage: FilesystemExperimentStorage
+    candidates: FilesystemCandidates
 
 
 def services(request: Request) -> AppServices:
