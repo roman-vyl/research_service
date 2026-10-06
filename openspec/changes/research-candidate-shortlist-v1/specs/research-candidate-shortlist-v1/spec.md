@@ -49,7 +49,7 @@ SHALL be HTTP 404 `row_not_found`.
 
 A star SHALL store the row's values for every metric of the manifest, its
 provenance, `run_id` and row columns, the table's `(mtime_ns, size)`, the fixed list
-of fingerprint fields (every served semantic id of the row except `run_id`) and a
+of fingerprint fields (every served semantic id of the row except `run_id` and provenance) and a
 SHA-256 fingerprint of their canonical values. Starring an existing candidate SHALL
 return the stored record unchanged.
 
@@ -79,13 +79,21 @@ was picked and SHALL NOT be presented as a current or deployable specification.
 the table. Otherwise the row SHALL be resolved by coordinates: one row with the
 stored fingerprint SHALL be `same`, one row with another fingerprint `changed`, no
 row or an unregistered or unreadable Experiment `missing`, several rows
-`ambiguous`. A change of `run_id` alone SHALL NOT make a row `changed`. Columns
+`ambiguous`. A change of `run_id` or provenance alone SHALL NOT make a row
+`changed`; the current values SHALL be reported in `current`. Columns
 outside the stored fingerprint fields SHALL NOT affect the state.
 
 #### Scenario: Run deleted
 
 - **WHEN** the starred row's run is deleted by `research-run-deletion-v1`
 - **THEN** the candidate is listed with `row_state` `same` and `run_id` null.
+
+#### Scenario: Replay point gets an Engine run with equal metrics
+
+- **WHEN** a starred replay row gets provenance `engine` and a `run_id` while its
+  coordinates, metrics and row columns keep their canonical values
+- **THEN** the candidate is listed with `row_state` `same`, `current.provenance`
+  `engine` and the new `run_id`.
 
 #### Scenario: Row recalculated
 

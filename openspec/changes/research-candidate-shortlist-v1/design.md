@@ -51,16 +51,18 @@ HTTP 409 `ambiguous_row`; the service never picks one of them.
 ### D4. Row fingerprint
 
 `fingerprint_fields` = every semantic id the results route serves for the row
-except `run_id`: dimension ids (grid columns resolved by the row's grid), `grid`,
-`arm`, every metric id, `provenance`, every `row_columns` name. The list is fixed
+except `run_id` and `provenance`: dimension ids (grid columns resolved by the
+row's grid), `grid`, `arm`, every metric id, every `row_columns` name. The list is fixed
 at star time and stored in the record.
 
 Value canonicalization: empty cell → `null`; numeric → float → `format(x,
 ".12g")`; text as is. `fingerprint = "sha256:" + sha256(canonical_json({field:
 value}))`. Columns not in `fingerprint_fields` (auxiliary columns, metrics added
 to the manifest later) do not affect it; a field missing from the current schema
-makes the row `changed`. `run_id` is excluded because run deletion or a new run is
-reported separately and does not make the point a different point.
+makes the row `changed`. `run_id` and `provenance` are excluded: they describe
+the artifact behind the row (a run deleted or added, a replay point later run on
+Engine), not the picked point itself, and are reported in `current`. A point
+recalculated on Engine with different metrics is `changed` through its metrics.
 
 ### D5. Record
 
