@@ -43,8 +43,8 @@ with its `job_id`. Only one job SHALL run at a time.
 The job SHALL run calculable rows through the existing Research batch path and
 Engine `/strategy-evaluations/range-batch`, with at most 1 000 variants per call,
 with the Experiment's `research_policy`. When the table declares a market data hash column, rows SHALL
-be grouped by it and each group SHALL be sent with that hash as
-`expected_market_data_hash`.
+be grouped by it and each group SHALL run only on market data with that hash;
+otherwise the group's call SHALL fail before Engine evaluates it.
 
 #### Scenario: Different market data
 

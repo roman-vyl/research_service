@@ -39,7 +39,7 @@ from research_service.domain.contracts import (
     StrategyEvaluationBatchVariant,
     StrategyEvaluationBatchVariantOutcome,
 )
-from research_service.domain.errors import InvalidRequest, UpstreamServiceError
+from research_service.domain.errors import InvalidRequest, MarketDataHashMismatch, UpstreamServiceError
 from research_service.domain.execution import ExecutionPolicy
 from research_service.domain.strategy_instance import (
     DeployableStrategyInstance,
@@ -809,3 +809,43 @@ def test_settled_candidate_carries_trade_native_r_matching_materialized_summary(
         assert item.cumulative_net_r == Decimal("0")
         assert item.long.r_eligible_trade_count == 0
         assert item.long.cumulative_gross_r == Decimal("0")
+
+
+def test_expected_market_data_hash_mismatch_makes_zero_batch_calls(tmp_path: Path) -> None:
+    strategy = FakeStrategyEngine(strategy_projection())
+    market = FakeMarketData(market_frame())
+    use_case, _ = build_use_case(strategy, market, tmp_path)
+    actual = use_case.execute(make_request(candidate("a"))).candidates[0].market_data_hash
+    assert actual
+    calls = len(strategy.batch_requests)
+
+    with pytest.raises(MarketDataHashMismatch):
+        use_case.execute(make_request(candidate("b")), expected_market_data_hash="other-hash")
+    assert len(strategy.batch_requests) == calls
+
+    result = use_case.execute(make_request(candidate("c")), expected_market_data_hash=actual)
+    assert result.status == "completed"
+
+
+def test_http_client_validate_strategy() -> None:
+    seen: list[dict[str, object]] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        body = json.loads(request.content.decode("utf-8"))
+        seen.append({"path": request.url.path, **body})
+        if body["raw_spec"].get("bad"):
+            return httpx.Response(422, json={"error": "invalid_request", "message": "bad value"})
+        return httpx.Response(200, json={"valid": True, "config_hash": "h"})
+
+    client = HttpStrategyEngineClient("http://strategy")
+    client._client = httpx.Client(transport=httpx.MockTransport(handler), base_url="http://strategy")
+
+    ok = client.validate_strategy("ema_pullback", {"anchor": {"period": 200}})
+    bad = client.validate_strategy("ema_pullback", {"bad": True})
+    assert ok.config_hash == "h" and ok.error is None
+    assert bad.config_hash is None and bad.error == "bad value"
+    assert seen[0] == {
+        "path": "/v1/strategies/ema_pullback/validate",
+        "strategy_id": "ema_pullback",
+        "raw_spec": {"anchor": {"period": 200}},
+    }

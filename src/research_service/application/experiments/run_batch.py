@@ -47,6 +47,7 @@ from research_service.domain.contracts import (
     StrategyEvaluationBatchVariant,
     StrategyEvaluationBatchVariantOutcome,
 )
+from research_service.domain.errors import MarketDataHashMismatch
 from research_service.domain.strategy_instance import derive_strategy_instance_id
 from research_service.ports.market_data import MarketDataPort
 from research_service.ports.strategy_engine import StrategyEnginePort
@@ -74,7 +75,12 @@ class RunBatchExperiment:
         self._materialize = materialize
         self._persist_run = persist_run
 
-    def execute(self, request: BatchExperimentRequest) -> BatchExperimentResult:
+    def execute(
+        self,
+        request: BatchExperimentRequest,
+        *,
+        expected_market_data_hash: str | None = None,
+    ) -> BatchExperimentResult:
         # --- shared Phase A: one window, one shared MarketFrame ----------
         first_strategy = request.candidates[0].strategy
         window = self._window_planner.execute(
@@ -83,6 +89,13 @@ class RunBatchExperiment:
             explicit_range=request.range,
             range_policy=request.range_policy,
         )
+        # Calculate (`research-run-calculation-v1`) pins the data a row was
+        # computed on; different data fail the whole call before Engine runs.
+        if (
+            expected_market_data_hash is not None
+            and window.market_data_hash != expected_market_data_hash
+        ):
+            raise MarketDataHashMismatch(expected_market_data_hash, window.market_data_hash)
         instance_ids = {
             candidate.candidate_id: derive_strategy_instance_id(
                 strategy_id=candidate.strategy.strategy_id,

@@ -12,6 +12,7 @@ from research_service.adapters.config import FilesystemConfigStore
 from research_service.adapters.experiments import (
     FilesystemExperiments,
     FilesystemExperimentStorage,
+    FilesystemRunCalculation,
     FilesystemRunDeletion,
 )
 from research_service.api.errors import install_error_handlers
@@ -85,6 +86,16 @@ def _build_services(settings: Settings, container: Container) -> AppServices:
     persist_single_instance_run = PersistSingleInstanceRun(container.artifacts)
     read_research_runs = ReadResearchRuns(container.artifacts)
     experiments = FilesystemExperiments(settings.analysis_root)
+    run_batch_experiment = RunBatchExperiment(
+        container.strategy_engine,
+        container.market_data,
+        MaterializeBacktestProjectionOutcome(
+            container.strategy_engine,
+            allow_legacy_managed_replay_fallback=container.allow_legacy_managed_replay_fallback,
+        ),
+        persist_single_instance_run,
+    )
+    persist_batch_experiment = PersistBatchExperiment(container.artifacts)
     return AppServices(
         candles_window=candles_window,
         ema_window=ema_window,
@@ -99,17 +110,16 @@ def _build_services(settings: Settings, container: Container) -> AppServices:
         generate_run_diagnostics=GenerateRunDiagnostics(
             container.strategy_engine, read_research_runs, container.artifacts
         ),
-        run_batch_experiment=RunBatchExperiment(
-            container.strategy_engine,
-            container.market_data,
-            MaterializeBacktestProjectionOutcome(
-                container.strategy_engine,
-                allow_legacy_managed_replay_fallback=container.allow_legacy_managed_replay_fallback,
-            ),
-            persist_single_instance_run,
-        ),
-        persist_batch_experiment=PersistBatchExperiment(container.artifacts),
+        run_batch_experiment=run_batch_experiment,
+        persist_batch_experiment=persist_batch_experiment,
         experiments=experiments,
         run_deletion=FilesystemRunDeletion(experiments, settings.artifacts_root),
         experiment_storage=FilesystemExperimentStorage(experiments, settings.artifacts_root),
+        run_calculation=FilesystemRunCalculation(
+            experiments,
+            settings.artifacts_root,
+            container.strategy_engine,
+            run_batch_experiment,
+            persist_batch_experiment,
+        ),
     )

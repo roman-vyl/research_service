@@ -18,6 +18,7 @@ from fastapi import Request
 from research_service.adapters.experiments import (
     FilesystemExperiments,
     FilesystemExperimentStorage,
+    FilesystemRunCalculation,
     FilesystemRunDeletion,
 )
 from research_service.application.backtests import (
@@ -52,6 +53,7 @@ class AppServices:
     experiments: FilesystemExperiments
     run_deletion: FilesystemRunDeletion
     experiment_storage: FilesystemExperimentStorage
+    run_calculation: FilesystemRunCalculation
 
 
 def services(request: Request) -> AppServices:

@@ -58,9 +58,9 @@ Engine's message.
 
 ### Requirement: Rows are addressed by coordinates
 
-A row SHALL be addressed by `coords`, holding a value for every dimension column of
-`result_schema` (for a grid dimension, the grid column and that grid's value
-column; the arm column when arms are declared). Numeric columns SHALL be compared
+A row SHALL be addressed by `coords`, keyed by the ids the results route filters
+on: a value for every dimension id of `result_schema` (for a grid dimension, its
+value in that grid together with `grid`; `arm` when arms are declared). Numeric columns SHALL be compared
 as numbers, others as text. Exactly one row SHALL match; no match SHALL be
 `row_not_found` and several matches SHALL be `ambiguous_row`.
 

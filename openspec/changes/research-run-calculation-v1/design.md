@@ -99,9 +99,10 @@ An Experiment without the block is served as today; Calculate answers 409
 
 ### D2. Rows are addressed by coordinates
 
-The frontend has no row id. A row is addressed by `coords`: one value per
-dimension column of `result_schema` (for a grid dimension: the grid column and
-the value column of that grid; plus the arm column when arms are declared).
+The frontend has no row id. A row is addressed by `coords`, keyed by the same
+ids the results route filters on: one value per dimension id of `result_schema`
+(for a grid dimension: its value in that grid, plus `grid`; plus `arm` when arms
+are declared).
 Values are compared as numbers for numeric columns and as text otherwise. Exactly
 one row must match; zero is `row_not_found`, more than one is `ambiguous_row`.
 
@@ -159,10 +160,11 @@ calculable rows. Stateless, same idea as the delete plan token.
 One job at a time in the service, in-process. Calculable rows are grouped by the
 row's market data hash when the table declares one in `row_columns`; each group
 is sent in Engine batch calls of at most 1 000 variants through
-`RunBatchExperiment`, with the group hash as
-`expected_market_data_hash`, so Engine refuses data that differ from the data
-the row was computed on. Batch experiment id:
-`calc-<experiment_id>-<UTC timestamp>` (truncated to the id pattern). Job state
+`RunBatchExperiment` with the group hash as the expected market data hash: when
+the window Research resolves has a different hash, the call fails before Engine
+runs (the resolved hash is what Research already sends to Engine as
+`expected_market_data_hash`). Batch experiment id:
+`calc-<experiment_id>-<job suffix>-<call>` (truncated to the id pattern). Job state
 is kept in memory and in the journal (D8). A restart loses a running job; rows
 published before it stay published, the rest are untouched.
 
