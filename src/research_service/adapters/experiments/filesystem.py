@@ -68,13 +68,23 @@ class FilesystemExperiments:
 
     def result_table(self, experiment_id: str) -> tuple[Path, ResultSchema]:
         """Path of the result table and its schema (used by run deletion)."""
+        manifest_path, schema = self._schema(experiment_id)
+        return manifest_path.parent / schema.table, schema
+
+    def table_snapshot(self, experiment_id: str) -> tuple[tuple[str, int, int], ResultSchema, Path, list[str | None]]:
+        """Cache key, schema, Experiment folder and the cached ``run_id`` column (used by storage)."""
+        manifest_path, schema = self._schema(experiment_id)
+        key, table = self._keyed_table(experiment_id, manifest_path.parent / schema.table, schema)
+        return key, schema, manifest_path.parent, table.text[schema.run_id_column]
+
+    def _schema(self, experiment_id: str) -> tuple[Path, ResultSchema]:
         manifest_path = self._manifest_path(experiment_id)
         manifest = _load_json(manifest_path, experiment_id)
         try:
             schema = ResultSchema.model_validate(manifest.get("result_schema"))
         except ValidationError as exc:
             raise InvalidExperiment(experiment_id, f"result_schema: {exc.errors()[0]['msg']}") from exc
-        return manifest_path.parent / schema.table, schema
+        return manifest_path, schema
 
     def registered_ids(self) -> list[str]:
         return [str(e["experiment_id"]) for e in self.registry().get("experiments", []) if "experiment_id" in e]
@@ -88,12 +98,7 @@ class FilesystemExperiments:
         filters: dict[str, str],
         columns: list[str] | None,
     ) -> dict[str, Any]:
-        manifest_path = self._manifest_path(experiment_id)
-        manifest = _load_json(manifest_path, experiment_id)
-        try:
-            schema = ResultSchema.model_validate(manifest.get("result_schema"))
-        except ValidationError as exc:
-            raise InvalidExperiment(experiment_id, f"result_schema: {exc.errors()[0]['msg']}") from exc
+        manifest_path, schema = self._schema(experiment_id)
         table = self._table(experiment_id, manifest_path.parent / schema.table, schema)
         out = _Out(schema)
         wanted = out.resolve_columns(columns)
@@ -105,18 +110,23 @@ class FilesystemExperiments:
         return result
 
     def _table(self, experiment_id: str, path: Path, schema: ResultSchema) -> _Table:
+        return self._keyed_table(experiment_id, path, schema)[1]
+
+    def _keyed_table(
+        self, experiment_id: str, path: Path, schema: ResultSchema
+    ) -> tuple[tuple[str, int, int], _Table]:
         if not path.is_file():
             raise InvalidExperiment(experiment_id, f"result table not found: {path.name}")
         st = path.stat()
         key = (str(path), st.st_mtime_ns, st.st_size)
         hit = self._cache.get(key)
         if hit is not None:
-            return hit
+            return key, hit
         table = _read_table(experiment_id, path, schema)
         if len(self._cache) >= _CACHE_SIZE:
             self._cache.pop(next(iter(self._cache)))
         self._cache[key] = table
-        return table
+        return key, table
 
 
 def _load_json(path: Path, experiment_id: str | None = None) -> Any:

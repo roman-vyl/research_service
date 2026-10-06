@@ -1,10 +1,10 @@
-"""Read-only Experiment routes: registry, manifest, results."""
+"""Experiment routes: registry, manifest, results, storage (read-only) and run deletion."""
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel, ConfigDict
 
 from research_service.runtime.services import services
@@ -29,6 +29,15 @@ def get_results(request: Request, experiment_id: str) -> dict[str, Any]:
     columns = [c for c in columns_raw.split(",") if c] if columns_raw else None
     filters = {k: v for k, v in params.items() if k != "columns"}
     return services(request).experiments.results(experiment_id, filters=filters, columns=columns)
+
+
+@router.get("/{experiment_id}/storage")
+def get_storage(
+    request: Request,
+    experiment_id: str,
+    size: Literal["cached", "compute"] = Query("cached"),
+) -> dict[str, Any]:
+    return services(request).experiment_storage.storage(experiment_id, size)
 
 
 class DeletePlanRequest(BaseModel):
