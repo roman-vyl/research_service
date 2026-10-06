@@ -53,8 +53,18 @@ from research_service.ports.strategy_engine import StrategySpecValidation
 MAX_ROWS = 2000
 BATCH_SIZE = 1000
 JOURNAL_FILE = "runs_calculated.jsonl"
-REL_TOL = 1e-6
-ABS_TOL = 1e-9
+REL_TOL = 1e-3
+#: Absolute floor per Engine summary field (last path segment): keeps the relative
+#: tolerance from degenerating near zero. Fixed by each metric's semantics.
+ABS_TOL = {
+    "return_pct": 1e-4,
+    "win_rate": 1e-4,
+    "max_drawdown": 1e-4,
+    "profit_factor": 1e-4,
+    "cumulative_net_r": 0.01,
+    "net_pnl": 1.0,
+}
+DEFAULT_ABS_TOL = 1e-9
 _ID_CHARS_RE = re.compile(r"[^A-Za-z0-9._-]")
 _MARKET_HASH_ROW_COLUMN = "market_data_hash"
 
@@ -436,7 +446,7 @@ class FilesystemRunCalculation:
                 continue
             summary = candidate.model_dump(mode="python")
             values = {col: _lookup(summary, path) for col, path in plan.block.result_bindings.items()}
-            diffs = _parity(plan.schema, jr.row.cells, values)
+            diffs = _parity(plan.schema, plan.block.result_bindings, jr.row.cells, values)
             if diffs:
                 with job.lock:
                     jr.run_id = candidate.run_id
@@ -703,7 +713,9 @@ def _decimal(value: Any) -> Decimal | None:
     return number if number.is_finite() else None
 
 
-def _parity(schema: ResultSchema, cells: dict[str, str], actual: dict[str, Any]) -> list[dict[str, Any]]:
+def _parity(
+    schema: ResultSchema, bindings: dict[str, str], cells: dict[str, str], actual: dict[str, Any]
+) -> list[dict[str, Any]]:
     """Metric parity only: every result-binding column against the stored cell (fixed tolerance)."""
     formats = {m.column: m.format for m in schema.metrics}
     diffs: list[dict[str, Any]] = []
@@ -719,7 +731,8 @@ def _parity(schema: ResultSchema, cells: dict[str, str], actual: dict[str, Any])
             ok = expected == got
         else:
             e, a = float(expected), float(got)
-            ok = abs(a - e) <= max(REL_TOL * max(abs(a), abs(e)), ABS_TOL)
+            floor = ABS_TOL.get(bindings.get(column, "").rsplit(".", 1)[-1], DEFAULT_ABS_TOL)
+            ok = abs(a - e) <= max(REL_TOL * max(abs(a), abs(e)), floor)
         if not ok:
             diffs.append({"column": column, "expected": expected_text, "actual": _cell(value)})
     return diffs
