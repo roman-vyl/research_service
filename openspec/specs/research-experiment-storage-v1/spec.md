@@ -1,7 +1,10 @@
-# research-experiment-storage-v1 Specification
+# Research Experiment Storage v1 Specification
 
 ## Purpose
-TBD - created by archiving change research-experiment-storage-v1. Update Purpose after archive.
+
+Report, per Experiment, its strategy count, Engine run count and disk size through a
+read-only route, without walking every run folder.
+
 ## Requirements
 ### Requirement: Storage route
 
