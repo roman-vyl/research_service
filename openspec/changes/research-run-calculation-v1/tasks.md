@@ -4,7 +4,7 @@
 - [ ] 1.2 Row addressing by `coords` over `result_schema` dimensions, grids and arms; `row_not_found` / `ambiguous_row`.
 - [ ] 1.3 Materializer: deep copy, JSON Pointer set, typed parse, Engine `/strategies/{id}/validate` client, `config_hash`.
 - [ ] 1.4 `POST .../runs/calculate-plan` and `POST .../runs/calculate` with skip reasons, 409/422 errors and the stateless plan token as in `design.md`.
-- [ ] 1.5 Job runner: one job at a time, grouping by market data hash, chunks of 50 through `RunBatchExperiment`, cancel between chunks; `GET .../calculations/{job_id}` and `POST .../calculations/{job_id}/cancel`.
+- [ ] 1.5 Job runner: one job at a time, grouping by market data hash, Engine batch calls of at most 1 000 variants through `RunBatchExperiment`, cancel between calls; `GET .../calculations/{job_id}` and `POST .../calculations/{job_id}/cancel`.
 - [ ] 1.6 Parity gate with the fixed tolerance from `design.md` D7.
 - [ ] 1.7 Publisher: per-Experiment lock (also taken by run deletion), row-stale check, backup, atomic rewrite of only the allowed cells, `runs_calculated.jsonl`.
 - [ ] 1.8 Tests on fixture Experiments with a fake Engine: materialize per binding type, invalid binding/path, unbound metric, constant replay provenance rejected, plan skip reasons, stale token, parity pass and fail (integer exact, relative and near-zero cases, one empty value), publish changes only allowed cells, row stale after deletion, cancel, journal lines, read routes and run deletion tests unchanged.

@@ -41,8 +41,8 @@ with its `job_id`. Only one job SHALL run at a time.
 ### Requirement: Calculation runs through Engine batch
 
 The job SHALL run calculable rows through the existing Research batch path and
-Engine `/strategy-evaluations/range-batch`, in chunks, with the Experiment's
-`research_policy`. When the table declares a market data hash column, rows SHALL
+Engine `/strategy-evaluations/range-batch`, with at most 1 000 variants per call,
+with the Experiment's `research_policy`. When the table declares a market data hash column, rows SHALL
 be grouped by it and each group SHALL be sent with that hash as
 `expected_market_data_hash`.
 
@@ -54,7 +54,7 @@ be grouped by it and each group SHALL be sent with that hash as
 
 ### Requirement: Parity gate before publish
 
-For each completed row the job SHALL compare every result-binding value of the
+The gate SHALL be metric parity only. For each completed row the job SHALL compare every result-binding value of the
 Engine run summary with the value stored in the row. Metrics with format
 `integer` SHALL be equal. Other metrics SHALL satisfy
 `|actual − expected| ≤ max(1e-6 × max(|actual|, |expected|), 1e-9)`. Two empty
@@ -116,13 +116,13 @@ empty.
 `completed`, `cancelled`, `failed`), counts per outcome and per-row outcomes
 (`published`, `parity_failed`, `engine_failed`, `row_stale`, `cancelled`) with
 `run_id` and parity differences when present. `POST .../calculations/{job_id}/cancel`
-SHALL stop the job before its next chunk; rows already published SHALL stay
+SHALL stop the job before its next batch call; rows already published SHALL stay
 published. Each row outcome SHALL be appended to `runs_calculated.jsonl` in the
 Experiment folder with job id, row key, `config_hash`, outcome, `run_id`,
 parity differences and UTC time. An unknown job SHALL be 404.
 
 #### Scenario: Cancel mid-job
 
-- **WHEN** a job is cancelled after its first chunk was published
-- **THEN** the first chunk's rows stay published and the remaining rows end as
+- **WHEN** a job is cancelled after its first batch call was published
+- **THEN** the first call's rows stay published and the remaining rows end as
   `cancelled` without Engine runs.

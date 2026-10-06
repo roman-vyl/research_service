@@ -27,7 +27,7 @@ the row.
 - Materialize is mechanical: deep copy of the template, each binding copies the
   row value to its path, Engine validates the spec. Research Service has no
   knowledge of components; the frontend sends only the Experiment and the rows.
-- Calculate is a transaction per row: materialize → Engine run → parity gate
+- Calculate is a transaction per row: materialize → Engine run → metric parity gate
   against the row's stored metrics → atomic publish to the row (Engine metrics,
   `provenance=engine`, new `run_id`). If the gate fails the row is not changed and
   the outcome is `parity_failed` with the differing metrics; the new run is kept
@@ -57,6 +57,8 @@ the row.
 - Changing a row's coordinates, adding rows to a Surface, or creating a Surface.
 - Formulas or unit conversions in bindings. A derived value (for example TP =
   SL × ratio) must be a column of the table.
+- Checking that a replay method matches Engine. Preliminary replay ↔ Engine
+  parity is the user's responsibility when the Experiment is prepared.
 - Configurable parity tolerance. The tolerance is fixed by this contract.
 - Persistent "Calculated" status, separate `replay_*`/`engine_*` metric columns.
 - A durable job queue that survives a service restart; parallel jobs.
@@ -77,4 +79,4 @@ the row.
   cell, `run_id`, market identity cells); a backup `runs.pre_calculate_<UTC>.csv`
   and `runs_calculated.jsonl` appear in the Experiment folder; new run folders and
   a batch folder per job appear in the artifacts root.
-- Strategy Engine load: one `/range-batch` call per chunk of rows.
+- Strategy Engine load: `/range-batch` calls of at most 1 000 variants, so at most two per request of 2 000 rows.

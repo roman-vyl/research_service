@@ -147,7 +147,7 @@ the token, 409 `plan_stale` if it differs, else starts a job and answers 202
 `failed`), counts per outcome, per row outcome with `run_id` and parity
 differences when present.
 
-`POST .../calculations/{job_id}/cancel` → stops before the next chunk; rows
+`POST .../calculations/{job_id}/cancel` → stops before the next batch call; rows
 already published stay published.
 
 **Token**: SHA-256 over the content hash of the result table, the SHA-256 of the
@@ -158,12 +158,16 @@ calculable rows. Stateless, same idea as the delete plan token.
 
 One job at a time in the service, in-process. Calculable rows are grouped by the
 row's market data hash when the table declares one in `row_columns`; each group
-is sent in chunks of 50 rows through `RunBatchExperiment`, with the group hash as
+is sent in Engine batch calls of at most 1 000 variants through
+`RunBatchExperiment`, with the group hash as
 `expected_market_data_hash`, so Engine refuses data that differ from the data
 the row was computed on. Batch experiment id:
 `calc-<experiment_id>-<UTC timestamp>` (truncated to the id pattern). Job state
 is kept in memory and in the journal (D8). A restart loses a running job; rows
 published before it stay published, the rest are untouched.
+
+With the 2 000-row request limit (D5) and one market data hash, a job makes at
+most two batch calls.
 
 ### D7. Parity gate
 
@@ -179,13 +183,14 @@ fails the row: outcome `parity_failed` with the list `{column, expected,
 actual}`. The run folder is kept as a diagnostic artifact and is not linked to the
 row. A failed Engine candidate is `engine_failed` with Engine's error.
 
-With this tolerance a replay row passes only if the replay reproduces the Engine
-execution model trade for trade. That is intended: the system never claims replay
-equals Engine; the gate only lets through what agrees.
+The gate is metric parity only: it compares the row's metric columns and
+nothing else. The preliminary replay ↔ Engine parity of a replay method is the
+user's responsibility when the Experiment is prepared; the system does not claim
+that replay equals Engine.
 
 ### D8. Publish
 
-After each chunk, rows that passed the gate are published in one atomic rewrite
+After each batch call, rows that passed the gate are published in one atomic rewrite
 of the result table, under a per-Experiment lock that run deletion also takes:
 
 1. Reread the table. A row whose cells changed since the plan (row hash) is not
@@ -217,13 +222,13 @@ by Engine, and only then is the Surface computed.
 
 ## Risks / Trade-offs
 
-- With the fixed tolerance most replay rows of the current replay Surfaces will
-  likely fail the gate. Their Engine runs remain available as diagnostics through
-  the journal.
+- A replay method that does not agree with Engine on the metrics fails the gate
+  on its rows. Its Engine runs remain available as diagnostics through the
+  journal.
 - Diagnostic runs are not referenced by any table, so the delete route cannot
   remove them. Cleaning them is a later change.
 - Engine version is not recorded per run; a different Engine image on the same
   template can fail the gate on Engine rows. The failure is visible in the
   journal.
-- Rewriting a large table per chunk costs time (hundreds of thousands of rows).
-  Chunk size is a constant and can be raised.
+- Rewriting a large table per batch call costs time (hundreds of thousands of
+  rows); with at most two calls per job it is at most two rewrites.
