@@ -9,7 +9,7 @@
 
 ## 2. Verification on real data (Mac, only on explicit command)
 
-- [ ] 2.1 Star one Engine point and one replay point on real Surfaces; list them; delete the Engine point's run with the delete route; listing shows `same` with no run.
+- [x] 2.1 Star one Engine point and one replay point on real Surfaces; list them; delete the Engine point's run with the delete route; listing shows `same` with no run. Confirmed by the owner on real data 2026-10-06 (research-service c155712): star, list, Chart and On Surface work; the run-deletion step was not performed on real data and is covered by the unit tests.
 
 ## 3. Out of Scope (recorded)
 
