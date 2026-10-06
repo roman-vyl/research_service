@@ -53,7 +53,8 @@ the row.
 
 ## Non-Goals
 
-- Recalculating a row that already has a run (`run_id` set and the folder exists).
+- Recalculating a row that has a `run_id`. Only rows with an empty `run_id` are
+  calculated; whether a run folder exists plays no role.
 - Changing a row's coordinates, adding rows to a Surface, or creating a Surface.
 - Formulas or unit conversions in bindings. A derived value (for example TP =
   SL × ratio) must be a column of the table.

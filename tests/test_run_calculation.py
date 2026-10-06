@@ -32,7 +32,7 @@ from research_service.runtime.settings import Settings
 EXP = "btc.ema500.calc"
 BASE = f"/api/research/experiments/{EXP}"
 LIVE_RUN = "run_" + "a" * 32
-DELETED_RUN = "run_" + "b" * 32
+DANGLING_RUN = "run_" + "b" * 32  # filled run_id, no run folder
 
 SCHEMA: dict[str, Any] = {
     "contract_version": "research_experiment_result_schema.v1",
@@ -86,11 +86,12 @@ ROWS = [
     [3, 20, 3.0, 9.0, "0.25", 100, "1.5", "", "replay", "h1"],             # 0: agrees within tolerance
     [3, 30, 3.0, 9.0, "0.1", 50, "1.2", "", "replay", "h1"],               # 1: trade count differs
     [4, 20, 3.0, 9.0, "0.3", 70, "1.4", LIVE_RUN, "engine", "h1"],         # 2: live run
-    [5, 20, 3.0, 9.0, "-0.05", 40, "0.9", DELETED_RUN, "engine", "h1"],    # 3: run deleted
+    [5, 20, 3.0, 9.0, "-0.05", 40, "0.9", "", "engine", "h1"],             # 3: run deleted
     [6, 20, 3.0, 9.0, "0.0", 1, "1.0", "", "replay", "h1"],                # 4: duplicate
     [6, 20, 3.0, 9.0, "0.0", 1, "1.0", "", "replay", "h1"],                # 5: duplicate
     [7, 20, 3.0, "", "0.0", 1, "1.0", "", "replay", "h1"],                 # 6: empty bound cell
     [8, 20, 3.0, 9.0, "0.0", 1, "1.0", "", "replay", "h1"],                # 7: Engine rejects
+    [10, 20, 3.0, 9.0, "0.0", 1, "1.0", DANGLING_RUN, "engine", "h1"],     # 8: run_id without folder
 ]
 
 # What the fake Engine computes, per (min_width, lookback).
@@ -267,7 +268,10 @@ def _status(env: Env, job_id: str) -> dict[str, Any]:
 def test_plan_reasons_and_changes_nothing(tmp_path: Path) -> None:
     env = _setup(tmp_path)
     before = env.table.read_bytes()
-    rows = [_coords(3), _coords(3, 30), _coords(4), _coords(5), _coords(6), _coords(7), _coords(8), _coords(99)]
+    rows = [
+        _coords(3), _coords(3, 30), _coords(4), _coords(5), _coords(6), _coords(7), _coords(8), _coords(99),
+        _coords(10),
+    ]
     plan = _plan(env, rows)
     status = [(r["status"], r.get("reason")) for r in plan["rows"]]
     assert status == [
@@ -279,6 +283,7 @@ def test_plan_reasons_and_changes_nothing(tmp_path: Path) -> None:
         ("skipped", "binding_value_invalid"),
         ("skipped", "invalid_spec"),
         ("skipped", "row_not_found"),
+        ("skipped", "has_run"),
     ]
     assert plan["rows"][6]["message"] == "min_width out of range"
     assert plan["calculable_count"] == 3 and plan["plan_token"].startswith("sha256:")
@@ -326,7 +331,7 @@ def test_calculate_publishes_only_rows_that_pass_metric_parity(tmp_path: Path) -
     assert after[2] == before[2]  # parity failed: untouched
     row3 = dict(zip(after[0], after[4]))
     assert row3["run_id"] == outcomes[(5, 20, 3.0)]["run_id"] and row3["provenance"] == "engine"
-    for i in (3, 5, 6, 7, 8):
+    for i in (3, 5, 6, 7, 8, 9):
         assert after[i] == before[i]
     assert (tmp_path / "runs" / failed["run_id"]).is_dir()  # diagnostic run kept, not linked
     assert failed["run_id"] not in env.table.read_text()

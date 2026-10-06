@@ -6,8 +6,9 @@
 a list of rows addressed by `coords` and SHALL return, per row, whether it is
 calculable or skipped with a reason, the `calculable_count` and a `plan_token`.
 It SHALL materialize and validate each row and SHALL NOT change any file or start
-any Engine run. A row SHALL be skipped as `has_run` when its `run_id` is set and
-its run folder exists. More than 2 000 rows SHALL be rejected with 422
+any Engine run. A row SHALL be skipped as `has_run` when its `run_id` is not empty,
+whether or not a run folder exists; only rows with an empty `run_id` SHALL be
+calculable. More than 2 000 rows SHALL be rejected with 422
 `too_many_rows`. An unknown Experiment SHALL be 404. The Experiment SHALL be
 rejected with 409 `materialize_missing`, `unbound_metric`,
 `provenance_not_per_row` (provenance is a constant other than `engine`) or
@@ -18,6 +19,12 @@ rejected with 409 `materialize_missing`, `unbound_metric`,
 - **WHEN** a plan is requested for a replay row without a run and a row with a
   live run
 - **THEN** the first is calculable and the second is skipped as `has_run`.
+
+#### Scenario: Run id without a run folder
+
+- **WHEN** a plan is requested for a row whose `run_id` is set but whose run
+  folder is missing
+- **THEN** the row is skipped as `has_run`.
 
 #### Scenario: Engine row whose run was deleted
 

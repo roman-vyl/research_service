@@ -125,8 +125,9 @@ because the gate could not check it; provenance declared as a constant other tha
 `engine` (`provenance_not_per_row`), because one row could not become `engine`;
 another calculation job is running (`job_running`).
 
-Row-level skips: `row_not_found`, `ambiguous_row`, `has_run` (`run_id` set and
-the folder exists; a set `run_id` whose folder is missing counts as no run),
+Row-level skips: `row_not_found`, `ambiguous_row`, `has_run` (any non-empty
+`run_id`; the run folder is not looked at, because `runs.csv` is the state of the
+Surface and run deletion empties `run_id`),
 `binding_value_invalid`, `invalid_spec`.
 
 Both replay rows and Engine rows whose run was deleted can be calculated. The

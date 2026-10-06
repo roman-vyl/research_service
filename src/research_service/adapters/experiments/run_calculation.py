@@ -55,7 +55,6 @@ BATCH_SIZE = 1000
 JOURNAL_FILE = "runs_calculated.jsonl"
 REL_TOL = 1e-6
 ABS_TOL = 1e-9
-_RUN_ID_RE = re.compile(r"^run_[0-9a-f]{32}$")
 _ID_CHARS_RE = re.compile(r"[^A-Za-z0-9._-]")
 _MARKET_HASH_ROW_COLUMN = "market_data_hash"
 
@@ -292,7 +291,9 @@ class FilesystemRunCalculation:
                 row.reason = "row_not_found"
             elif matches[key] > 1:
                 row.reason = "ambiguous_row"
-            elif self._has_run(row.cells.get(schema.run_id_column, "")):
+            elif row.cells.get(schema.run_id_column, "") != "":
+                # runs.csv is the state of the Surface: a filled run_id is a run,
+                # whatever the filesystem holds (`has_run`).
                 row.reason = "has_run"
             else:
                 self._materialize(row, block, validations)
@@ -334,11 +335,6 @@ class FilesystemRunCalculation:
                 "provenance is a constant other than engine; one row cannot become engine",
                 {"provenance": schema.provenance.value},
             )
-
-    def _has_run(self, run_id: str) -> bool:
-        if not run_id:
-            return False
-        return bool(_RUN_ID_RE.fullmatch(run_id)) and (self._runs / run_id).is_dir()
 
     def _materialize(
         self, row: _Row, block: MaterializeBlock, cache: dict[str, StrategySpecValidation]
