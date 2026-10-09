@@ -22,7 +22,11 @@ from research_service.domain.contracts import (
     StrategyEvaluationBatchVariantOutcome,
     StrategyEvaluationRequest,
 )
-from research_service.domain.errors import UpstreamServiceError
+from research_service.domain.errors import (
+    DependencyUnavailable,
+    UpstreamResponse,
+    UpstreamServiceError,
+)
 from research_service.ports.strategy_engine import (
     IndicatorSeriesResult,
     MultiIndicatorSeriesResult,
@@ -101,6 +105,46 @@ class HttpStrategyEngineClient:
         return StrategyAuthoringValidationResult(
             valid=bool(body.get("valid", False)), errors=errors
         )
+
+    def query_ema_stack_episode_history(
+        self,
+        body: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """`research-market-ema-stack-episodes-v1`: one call, body and
+        response unchanged, an Engine error returned with its status and
+        body."""
+
+        return self._post_passthrough("/v1/ema-stack-episodes/history", body)
+
+    def build_strategy_feature_plan(
+        self,
+        strategy_id: str,
+        body: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """`POST /v1/strategies/{id}/feature-plan` unchanged: the Workbench
+        reads the effective episode parameters (`episode_params_by_ref`)."""
+
+        return self._post_passthrough(f"/v1/strategies/{strategy_id}/feature-plan", body)
+
+    def _post_passthrough(self, path: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        try:
+            response = self._client.post(path, json=dict(body))
+        except httpx.HTTPError as exc:
+            raise DependencyUnavailable(service="strategy_engine", message=str(exc)) from exc
+        if response.status_code != 200:
+            raise UpstreamResponse(
+                service="strategy_engine",
+                status_code=response.status_code,
+                body=_safe_json(response),
+            )
+        result = _safe_json(response)
+        if not isinstance(result, dict):
+            raise UpstreamServiceError(
+                service="strategy_engine",
+                status_code=502,
+                message=f"Strategy Engine response of {path} is not an object",
+            )
+        return result
 
     def validate_strategy(
         self, strategy_id: str, raw_spec: Mapping[str, Any]

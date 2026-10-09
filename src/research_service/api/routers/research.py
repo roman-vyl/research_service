@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Request, status
+from typing import Any
+
+from fastapi import APIRouter, Body, Path, Query, Request, status
+from fastapi.responses import JSONResponse
 
 from research_service.api.contracts.backtests import BacktestRunRequest, BacktestRunResponse
 from research_service.api.contracts.runs import (
@@ -224,3 +227,18 @@ def get_run_managed_policy_events(
         run_id=run_id,
         position_id=position_id,
     )
+
+
+@router.post(
+    "/strategies/{strategy_id}/feature-plan",
+    summary="Strategy feature plan (Strategy Engine, unchanged)",
+)
+def post_strategy_feature_plan(
+    request: Request,
+    strategy_id: str = Path(..., pattern=r"^[A-Za-z0-9_-]{1,64}$"),
+    body: dict[str, Any] = Body(...),
+) -> JSONResponse:
+    """Thin proxy to Strategy Engine `POST /v1/strategies/{id}/feature-plan`;
+    the Workbench reads `episode_params_by_ref` (effective episode parameters)."""
+
+    return JSONResponse(services(request).strategy_feature_plan.execute(strategy_id, body))

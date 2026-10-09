@@ -26,7 +26,13 @@ from research_service.application.backtests import (
 )
 from research_service.application.diagnostics import GenerateRunDiagnostics, ProjectRunDiagnostics
 from research_service.application.experiments import PersistBatchExperiment, RunBatchExperiment
-from research_service.application.market import GetCandlesWindow, GetChartBundle, GetEmaWindow
+from research_service.application.market import (
+    GetCandlesWindow,
+    GetChartBundle,
+    GetEmaStackEpisodeHistory,
+    GetEmaWindow,
+    GetStrategyFeaturePlan,
+)
 from research_service.application.research import GetComponentCatalog, ValidateStrategyConfig
 from research_service.application.research.config_persistence import ManageResearchConfigs
 from research_service.runtime.services import AppServices
@@ -102,6 +108,8 @@ def _build_services(settings: Settings, container: Container) -> AppServices:
         candles_window=candles_window,
         ema_window=ema_window,
         chart_bundle=GetChartBundle(candles_window, ema_window),
+        ema_stack_episode_history=GetEmaStackEpisodeHistory(container.strategy_engine),
+        strategy_feature_plan=GetStrategyFeaturePlan(container.strategy_engine),
         component_catalog=GetComponentCatalog(container.strategy_engine),
         config_validation=config_validation,
         research_configs=ManageResearchConfigs(config_validation, config_store),

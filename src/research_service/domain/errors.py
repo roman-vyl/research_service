@@ -31,6 +31,19 @@ class UpstreamServiceError(ResearchServiceError):
         )
 
 
+class UpstreamResponse(Exception):
+    """An upstream error response returned to the caller as it is: the same
+    HTTP status and the same body (`research-market-ema-stack-episodes-v1`).
+    Unlike `UpstreamServiceError`, the status is not rewritten and the
+    error code is the upstream's own."""
+
+    def __init__(self, *, service: str, status_code: int, body: object) -> None:
+        super().__init__(f"{service} answered HTTP {status_code}")
+        self.service = service
+        self.status_code = status_code
+        self.body = body
+
+
 class InvalidRequest(ResearchServiceError):
     def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
         super().__init__(

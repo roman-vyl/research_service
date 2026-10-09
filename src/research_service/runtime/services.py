@@ -29,7 +29,13 @@ from research_service.application.backtests import (
 )
 from research_service.application.diagnostics import GenerateRunDiagnostics, ProjectRunDiagnostics
 from research_service.application.experiments import PersistBatchExperiment, RunBatchExperiment
-from research_service.application.market import GetCandlesWindow, GetChartBundle, GetEmaWindow
+from research_service.application.market import (
+    GetCandlesWindow,
+    GetChartBundle,
+    GetEmaStackEpisodeHistory,
+    GetEmaWindow,
+    GetStrategyFeaturePlan,
+)
 from research_service.application.research import GetComponentCatalog, ValidateStrategyConfig
 from research_service.application.research.config_persistence import ManageResearchConfigs
 
@@ -41,6 +47,8 @@ class AppServices:
     candles_window: GetCandlesWindow
     ema_window: GetEmaWindow
     chart_bundle: GetChartBundle
+    ema_stack_episode_history: GetEmaStackEpisodeHistory
+    strategy_feature_plan: GetStrategyFeaturePlan
     component_catalog: GetComponentCatalog
     config_validation: ValidateStrategyConfig
     research_configs: ManageResearchConfigs
