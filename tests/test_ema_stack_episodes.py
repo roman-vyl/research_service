@@ -189,3 +189,60 @@ def test_non_object_success_body_is_502(tmp_path: Path) -> None:
 
     assert response.status_code == 502
     assert response.json()["error"] == "upstream_service_error"
+
+
+FEATURE_PLAN_ROUTE = "/api/research/strategies/ema_pullback/feature-plan"
+STRATEGY = {"strategy_id": "ema_pullback", "raw_spec": {"ema_stack_episode": {"trend": {}}}}
+PLAN = {
+    "plan_hash": "p",
+    "episode_params_by_ref": {
+        "trend": {
+            "fast_period": 200,
+            "anchor_period": 500,
+            "slow_period": 1000,
+            "window_bars": 24,
+            "break_bars": 24,
+            "history_bars": 15000,
+        }
+    },
+}
+
+
+def test_feature_plan_forwarded_and_returned_unchanged(tmp_path: Path) -> None:
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json=PLAN)
+
+    response = make_client(tmp_path, handler).post(FEATURE_PLAN_ROUTE, json=STRATEGY)
+
+    assert response.status_code == 200
+    assert response.json() == PLAN
+    assert [c.url.path for c in calls] == ["/v1/strategies/ema_pullback/feature-plan"]
+    assert json.loads(calls[0].content) == STRATEGY
+
+
+def test_feature_plan_engine_error_passed_through(tmp_path: Path) -> None:
+    body = _engine_error(422, "invalid_request", {"path": "ema_stack_episode.trend"})
+    client = make_client(tmp_path, lambda _r: httpx.Response(422, json=body))
+
+    response = client.post(FEATURE_PLAN_ROUTE, json=STRATEGY)
+
+    assert response.status_code == 422
+    assert response.json() == body
+
+
+def test_feature_plan_rejects_odd_strategy_id(tmp_path: Path) -> None:
+    calls: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        calls.append(request)
+        return httpx.Response(200, json=PLAN)
+
+    response = make_client(tmp_path, handler).post(
+        "/api/research/strategies/a.b/feature-plan", json=STRATEGY
+    )
+
+    assert response.status_code == 422
+    assert calls == []

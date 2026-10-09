@@ -21,6 +21,10 @@ Service nor the frontend computes or reshapes any of it.
   Strategy Engine unreachable is 503 `dependency_unavailable`.
 - One Engine call per request. No server-side cache, no own validation of episode parameters, no own
   episode computation.
+- Add `POST /api/research/strategies/{strategy_id}/feature-plan`, a thin proxy to Strategy Engine
+  `POST /v1/strategies/{strategy_id}/feature-plan` with the same pass-through rules. The Workbench reads
+  the effective episode parameters of a strategy (`episode_params_by_ref`) from it instead of resolving
+  the `ema_stack_episode` section itself (owner review 2026-10-09).
 
 ## Capabilities
 

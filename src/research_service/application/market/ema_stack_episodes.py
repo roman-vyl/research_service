@@ -18,3 +18,14 @@ class GetEmaStackEpisodeHistory:
 
     def execute(self, body: Mapping[str, Any]) -> dict[str, Any]:
         return self._strategy_engine.query_ema_stack_episode_history(body)
+
+
+class GetStrategyFeaturePlan:
+    """Engine's feature plan of a strategy, unchanged: the Workbench reads the
+    effective episode parameters (`episode_params_by_ref`) from it."""
+
+    def __init__(self, strategy_engine: StrategyEnginePort) -> None:
+        self._strategy_engine = strategy_engine
+
+    def execute(self, strategy_id: str, body: Mapping[str, Any]) -> dict[str, Any]:
+        return self._strategy_engine.build_strategy_feature_plan(strategy_id, body)

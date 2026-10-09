@@ -34,6 +34,7 @@ from research_service.application.market import (
     GetChartBundle,
     GetEmaStackEpisodeHistory,
     GetEmaWindow,
+    GetStrategyFeaturePlan,
 )
 from research_service.application.research import GetComponentCatalog, ValidateStrategyConfig
 from research_service.application.research.config_persistence import ManageResearchConfigs
@@ -47,6 +48,7 @@ class AppServices:
     ema_window: GetEmaWindow
     chart_bundle: GetChartBundle
     ema_stack_episode_history: GetEmaStackEpisodeHistory
+    strategy_feature_plan: GetStrategyFeaturePlan
     component_catalog: GetComponentCatalog
     config_validation: ValidateStrategyConfig
     research_configs: ManageResearchConfigs

@@ -114,8 +114,21 @@ class HttpStrategyEngineClient:
         response unchanged, an Engine error returned with its status and
         body."""
 
+        return self._post_passthrough("/v1/ema-stack-episodes/history", body)
+
+    def build_strategy_feature_plan(
+        self,
+        strategy_id: str,
+        body: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """`POST /v1/strategies/{id}/feature-plan` unchanged: the Workbench
+        reads the effective episode parameters (`episode_params_by_ref`)."""
+
+        return self._post_passthrough(f"/v1/strategies/{strategy_id}/feature-plan", body)
+
+    def _post_passthrough(self, path: str, body: Mapping[str, Any]) -> dict[str, Any]:
         try:
-            response = self._client.post("/v1/ema-stack-episodes/history", json=dict(body))
+            response = self._client.post(path, json=dict(body))
         except httpx.HTTPError as exc:
             raise DependencyUnavailable(service="strategy_engine", message=str(exc)) from exc
         if response.status_code != 200:
@@ -129,7 +142,7 @@ class HttpStrategyEngineClient:
             raise UpstreamServiceError(
                 service="strategy_engine",
                 status_code=502,
-                message="Strategy Engine episode history response is not an object",
+                message=f"Strategy Engine response of {path} is not an object",
             )
         return result
 

@@ -68,3 +68,20 @@ that is not a JSON object SHALL be wrapped in the standard error envelope with c
 
 - **WHEN** the connection to Strategy Engine fails
 - **THEN** Research Service SHALL answer 503 `dependency_unavailable`.
+
+### Requirement: Strategy feature plan proxy
+
+Research Service SHALL serve `POST /api/research/strategies/{strategy_id}/feature-plan` and SHALL forward
+its JSON body unchanged to Strategy Engine `POST /v1/strategies/{strategy_id}/feature-plan`, returning
+the response unchanged and Engine errors with the same status and body. `strategy_id` SHALL match
+`[A-Za-z0-9_-]{1,64}`; any other value SHALL be rejected without an Engine call.
+
+#### Scenario: Effective episode parameters
+
+- **WHEN** the Workbench posts `{strategy_id, raw_spec}` of a strategy with `ema_stack_episode`
+- **THEN** the response SHALL be Engine's feature plan, including `episode_params_by_ref`.
+
+#### Scenario: Odd strategy id
+
+- **WHEN** the path `strategy_id` is `a.b`
+- **THEN** Research Service SHALL answer 422 without calling Strategy Engine.

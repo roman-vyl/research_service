@@ -57,6 +57,15 @@ start and refreshes `current`.
 The existing Strategy Engine client timeout (60 s) covers a cold history request (about 10 to 15 s for
 BTCUSDT.P 5m full history measured on the development MacBook).
 
+### Effective episode parameters
+
+The Workbench must show the episode a strategy actually uses. Engine already resolves the
+`ema_stack_episode` section (defaults from `anchor_stack`, `window_bars`, `break_bars`) into
+`episode_params_by_ref` of the strategy feature plan. Research Service passes
+`POST /v1/strategies/{strategy_id}/feature-plan` through unchanged under
+`/api/research/strategies/{strategy_id}/feature-plan`; `strategy_id` is limited to letters, digits, `_`
+and `-` (1 to 64), because it becomes part of the Engine path.
+
 ## Risks
 
 - The route exposes Engine's contract directly: an incompatible Engine change reaches the frontend

@@ -43,6 +43,15 @@ class StrategyEnginePort(Protocol):
         response object as Engine returns it."""
         ...
 
+    def build_strategy_feature_plan(
+        self,
+        strategy_id: str,
+        body: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """`POST /v1/strategies/{id}/feature-plan`: the body as given, the
+        response object as Engine returns it."""
+        ...
+
     def evaluate_range_projection(
         self,
         request: StrategyEvaluationRequest,

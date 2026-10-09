@@ -8,6 +8,7 @@ from research_service.application.market.candles_window import (
 )
 from research_service.application.market.ema_stack_episodes import (
     GetEmaStackEpisodeHistory,
+    GetStrategyFeaturePlan,
 )
 from research_service.application.market.ema_window import (
     CANONICAL_ORIGIN_POLICY,
@@ -20,6 +21,7 @@ __all__ = [
     "GetChartBundle",
     "GetEmaStackEpisodeHistory",
     "GetEmaWindow",
+    "GetStrategyFeaturePlan",
     "canonical_ticker",
     "resolve_exclusive_to_ms",
 ]
