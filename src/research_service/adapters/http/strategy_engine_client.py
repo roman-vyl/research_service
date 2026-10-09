@@ -22,7 +22,11 @@ from research_service.domain.contracts import (
     StrategyEvaluationBatchVariantOutcome,
     StrategyEvaluationRequest,
 )
-from research_service.domain.errors import UpstreamServiceError
+from research_service.domain.errors import (
+    DependencyUnavailable,
+    UpstreamResponse,
+    UpstreamServiceError,
+)
 from research_service.ports.strategy_engine import (
     IndicatorSeriesResult,
     MultiIndicatorSeriesResult,
@@ -101,6 +105,33 @@ class HttpStrategyEngineClient:
         return StrategyAuthoringValidationResult(
             valid=bool(body.get("valid", False)), errors=errors
         )
+
+    def query_ema_stack_episode_history(
+        self,
+        body: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """`research-market-ema-stack-episodes-v1`: one call, body and
+        response unchanged, an Engine error returned with its status and
+        body."""
+
+        try:
+            response = self._client.post("/v1/ema-stack-episodes/history", json=dict(body))
+        except httpx.HTTPError as exc:
+            raise DependencyUnavailable(service="strategy_engine", message=str(exc)) from exc
+        if response.status_code != 200:
+            raise UpstreamResponse(
+                service="strategy_engine",
+                status_code=response.status_code,
+                body=_safe_json(response),
+            )
+        result = _safe_json(response)
+        if not isinstance(result, dict):
+            raise UpstreamServiceError(
+                service="strategy_engine",
+                status_code=502,
+                message="Strategy Engine episode history response is not an object",
+            )
+        return result
 
     def validate_strategy(
         self, strategy_id: str, raw_spec: Mapping[str, Any]

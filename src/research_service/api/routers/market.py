@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Query, Request
+from typing import Any
+
+from fastapi import APIRouter, Body, Query, Request
+from fastapi.responses import JSONResponse
 
 from research_service.api.contracts.chart import (
     CandlesWindowBundle,
@@ -164,3 +167,17 @@ def get_ema(
         to_ms=end_ms,
         origin_policy=CANONICAL_ORIGIN_POLICY,
     ).points
+
+
+@router.post(
+    "/ema-stack-episodes/history",
+    summary="EMA stack episode history (Strategy Engine, unchanged)",
+)
+def post_ema_stack_episode_history(
+    request: Request,
+    body: dict[str, Any] = Body(...),
+) -> JSONResponse:
+    """Thin proxy to Strategy Engine `POST /v1/ema-stack-episodes/history`:
+    the body is forwarded and the answer returned unchanged, times in ms."""
+
+    return JSONResponse(services(request).ema_stack_episode_history.execute(body))

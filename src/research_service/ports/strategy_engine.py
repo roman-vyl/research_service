@@ -35,6 +35,14 @@ class MultiIndicatorSeriesResult:
 
 
 class StrategyEnginePort(Protocol):
+    def query_ema_stack_episode_history(
+        self,
+        body: Mapping[str, Any],
+    ) -> dict[str, Any]:
+        """`POST /v1/ema-stack-episodes/history`: the body as given, the
+        response object as Engine returns it."""
+        ...
+
     def evaluate_range_projection(
         self,
         request: StrategyEvaluationRequest,
