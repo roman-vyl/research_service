@@ -273,11 +273,6 @@ SCHEMAS: dict[str, dict[str, Any]] = {
                  "grids": {"ATR": {"column": "trail_distance_atr", "unit": "ATR"},
                            "R": {"column": "trail_distance_r", "unit": "R"}}},
             ],
-            "arms": {"column": "arm",
-                     "roles": {"trailing_no_tp": "treatment", "control_tp5r": "comparison",
-                               "fixed_tp_6r": "comparison", "fixed_tp_7r": "comparison",
-                               "fixed_tp_8r": "comparison", "fixed_tp_10r": "comparison"},
-                     "baseline": "control_tp5r", "match_on": ["width", "lookback", "sl"]},
             "metrics": [
                 {"column": "net_pnl", "label": "Net PnL", "format": "number", "unit": "USDT"},
                 {"column": "return_pct", "label": "Return", "format": "fraction"},
