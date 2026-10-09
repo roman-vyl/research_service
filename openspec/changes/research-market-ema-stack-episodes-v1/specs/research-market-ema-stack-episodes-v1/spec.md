@@ -32,8 +32,8 @@ validation decides every request.
 ### Requirement: Response unchanged
 
 A 200 Engine response SHALL be returned with the same JSON object: the same fields, values and times in
-milliseconds, including `episodes`, `current`, `next_before_start_ms`, `market_data_hash`,
-`params_hash`, `history_id`, `earliest_ms` and `as_of_ms`. A 200 response whose body is not a JSON
+milliseconds, including `history_id`, `market` (with `earliest_ms` and `as_of_ms`), `episode`,
+`params_hash`, `market_data_hash`, `side`, `current`, `episodes` and `next_before_start_ms`. A 200 response whose body is not a JSON
 object SHALL be HTTP 502 `upstream_service_error`.
 
 #### Scenario: Times stay in milliseconds

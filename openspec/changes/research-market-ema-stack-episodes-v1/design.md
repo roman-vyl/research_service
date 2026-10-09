@@ -4,8 +4,9 @@ Engine owns the episode semantics and the history route (`ema-stack-episode-quer
 
 - request `{market: {ticker, base_timeframe}, episode: {fast_period, anchor_period, slow_period,
   window_bars?, break_bars?}, side: long|short, page?: {before_start_ms, limit}, expected_market_data_hash?}`;
-- response: `history_id`, effective `params`, `params_hash`, `market_data_hash`, `earliest_ms`, `as_of_ms`,
-  `episodes` (whole finished episodes, newest first), `next_before_start_ms`, `current`;
+- response: `history_id`, `market` (`ticker`, `base_timeframe`, `earliest_ms`, `as_of_ms`), the effective
+  `episode` parameters, `params_hash`, `market_data_hash`, `side`, `current`, `episodes` (whole finished
+  episodes, newest first) and `next_before_start_ms`;
 - errors in the envelope `{error, message, details, request_id}`: 409 `market_data_version_changed`
   (both hashes in `details`), 422 `invalid_request`, 503 when the market stream is not ready.
 

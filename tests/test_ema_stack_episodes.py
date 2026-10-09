@@ -29,7 +29,13 @@ REQUEST: dict[str, Any] = {
 
 ENGINE_PAGE: dict[str, Any] = {
     "history_id": "hid",
-    "params": {
+    "market": {
+        "ticker": "BTCUSDT.P",
+        "base_timeframe": "5m",
+        "earliest_ms": 1_614_556_800_000,
+        "as_of_ms": 1_791_500_000_000,
+    },
+    "episode": {
         "fast_period": 200,
         "anchor_period": 500,
         "slow_period": 1000,
@@ -38,8 +44,6 @@ ENGINE_PAGE: dict[str, Any] = {
     },
     "params_hash": "ph",
     "market_data_hash": "h1",
-    "earliest_ms": 1_614_556_800_000,
-    "as_of_ms": 1_791_500_000_000,
     "side": "long",
     "episodes": [
         {
