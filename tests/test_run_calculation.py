@@ -118,13 +118,19 @@ class FakeRunner:
     def __init__(self, runs: Path) -> None:
         self.runs = runs
         self.calls: list[tuple[BatchExperimentRequest, str | None]] = []
+        self.frames: list[dict[Any, Any] | None] = []
         self.on_call: Callable[[int], None] | None = None
         self.fail: Exception | None = None
 
     def execute(
-        self, request: BatchExperimentRequest, *, expected_market_data_hash: str | None = None
+        self,
+        request: BatchExperimentRequest,
+        *,
+        expected_market_data_hash: str | None = None,
+        frames: dict[Any, Any] | None = None,
     ) -> BatchExperimentResult:
         self.calls.append((request, expected_market_data_hash))
+        self.frames.append(frames)
         if self.on_call is not None:
             self.on_call(len(self.calls))
         if self.fail is not None:
@@ -478,6 +484,8 @@ def test_rows_are_split_into_calls_of_batch_size(tmp_path: Path, monkeypatch: py
     env.run_pending()
     assert _status(env, job_id)["state"] == "completed"
     assert [len(request.candidates) for request, _ in env.runner.calls] == [2, 1]
+    # Both calls of the job share one frame cache, so the window is read once.
+    assert env.runner.frames[0] is not None and env.runner.frames[0] is env.runner.frames[1]
 
 
 def test_market_data_mismatch_fails_the_rows(tmp_path: Path) -> None:
