@@ -52,3 +52,9 @@ cell that has no run can still be addressed.
   declares `values`
 - **THEN** the workbench offers those values and the plan accepts them as
   coordinates.
+
+#### Scenario: Value outside the declared values
+
+- **WHEN** an optional dimension declares `values` and a requested row carries a
+  value that is not among them
+- **THEN** the row is skipped as `coord_not_allowed`.
