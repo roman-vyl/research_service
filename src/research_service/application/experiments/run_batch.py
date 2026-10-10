@@ -43,6 +43,7 @@ from research_service.application.experiments.contracts import (
 from research_service.domain.contracts import (
     HistoricalExecutionProjectionDTO,
     MarketFrame,
+    MarketRange,
     StrategyEvaluationBatchRequest,
     StrategyEvaluationBatchVariant,
     StrategyEvaluationBatchVariantOutcome,
@@ -80,7 +81,11 @@ class RunBatchExperiment:
         request: BatchExperimentRequest,
         *,
         expected_market_data_hash: str | None = None,
+        frames: dict[tuple[MarketRange, str | None], MarketFrame] | None = None,
     ) -> BatchExperimentResult:
+        """`frames`, when given, keeps the MarketFrame read for a window so that
+        several calls over the same window (a Calculate job split into small Engine
+        calls) read and decode it once; the caller owns and drops the dict."""
         # --- shared Phase A: one window, one shared MarketFrame ----------
         first_strategy = request.candidates[0].strategy
         window = self._window_planner.execute(
@@ -128,10 +133,15 @@ class RunBatchExperiment:
         # that case (research-batch-lifecycle-v1) -- but this is not the
         # same as the failure happening before this method returns.
         outcomes = self._strategy_engine.evaluate_range_batch(batch_request)
-        market_frame = self._market_data.read_historical_range(
-            window.market,
-            expected_market_data_hash=window.market_data_hash,
-        )
+        frame_key = (window.market, window.market_data_hash)
+        market_frame = frames.get(frame_key) if frames is not None else None
+        if market_frame is None:
+            market_frame = self._market_data.read_historical_range(
+                window.market,
+                expected_market_data_hash=window.market_data_hash,
+            )
+            if frames is not None:
+                frames[frame_key] = market_frame
 
         candidates_by_id = {candidate.candidate_id: candidate for candidate in request.candidates}
 

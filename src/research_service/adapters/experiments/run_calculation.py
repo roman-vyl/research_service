@@ -10,8 +10,11 @@ does not agree is left as it was; its run stays on disk as a diagnostic.
 
 from __future__ import annotations
 
+import contextlib
 import copy
 import csv
+import ctypes
+import gc
 import hashlib
 import json
 import math
@@ -51,7 +54,10 @@ from research_service.domain.strategy_instance import DeployableStrategyInstance
 from research_service.ports.strategy_engine import StrategySpecValidation
 
 MAX_ROWS = 2000
-BATCH_SIZE = 1000
+#: Variants per Engine `/range-batch` call. Engine memory grows with the variants of one
+#: call (about 30 MB each for a managed trailing spec over the full 5m window), so a call
+#: of 1000 exhausts the local Docker VM; small calls keep the peak bounded at little cost.
+BATCH_SIZE = 25
 JOURNAL_FILE = "runs_calculated.jsonl"
 REL_TOL = 1e-3
 #: Absolute floor per Engine summary field (last path segment): keeps the relative
@@ -73,9 +79,21 @@ class _SpecValidator(Protocol):
     def validate_strategy(self, strategy_id: str, raw_spec: dict[str, Any]) -> StrategySpecValidation: ...
 
 
+def _release_memory() -> None:
+    """Hand the job's market frame and Engine results back to the OS (glibc keeps
+    freed arenas otherwise), so the service's footprint drops between jobs."""
+    gc.collect()
+    with contextlib.suppress(OSError, AttributeError):
+        ctypes.CDLL("libc.so.6").malloc_trim(0)
+
+
 class _BatchRunner(Protocol):
     def execute(
-        self, request: BatchExperimentRequest, *, expected_market_data_hash: str | None = None
+        self,
+        request: BatchExperimentRequest,
+        *,
+        expected_market_data_hash: str | None = None,
+        frames: dict[Any, Any] | None = None,
     ) -> BatchExperimentResult: ...
 
 
@@ -168,6 +186,8 @@ class _Job:
     backup: str | None = None
     error: str | None = None
     lock: threading.Lock = field(default_factory=threading.Lock)
+    #: MarketFrame per window, read once for the whole job and cleared when it ends.
+    frames: dict[Any, Any] = field(default_factory=dict)
 
     def payload(self) -> dict[str, Any]:
         with self.lock:
@@ -381,6 +401,9 @@ class FilesystemRunCalculation:
                 key = (jr.row.cells.get(market_column) or None) if market_column else None
                 groups.setdefault(key, []).append(jr)
             call = 0
+            # One MarketFrame per window for the whole job (about 1.2 GB for the full
+            # 5m window); dropped when the job ends.
+            frames = job.frames
             for market_hash, members in groups.items():
                 for start in range(0, len(members), BATCH_SIZE):
                     chunk = members[start:start + BATCH_SIZE]
@@ -390,7 +413,7 @@ class FilesystemRunCalculation:
                         self._settle(job, chunk, "cancelled", None)
                         continue
                     call += 1
-                    self._run_chunk(job, chunk, market_hash, call)
+                    self._run_chunk(job, chunk, market_hash, call, frames)
             with job.lock:
                 job.state = "cancelled" if job.cancel_requested else "completed"
         except Exception as exc:  # noqa: BLE001 -- the job reports, never crashes the service
@@ -401,11 +424,15 @@ class FilesystemRunCalculation:
             with job.lock:
                 job.state = "failed"
         finally:
+            job.frames.clear()
+            _release_memory()
             with self._guard:
                 if self._active == job.job_id:
                     self._active = None
 
-    def _run_chunk(self, job: _Job, chunk: list[_JobRow], market_hash: str | None, call: int) -> None:
+    def _run_chunk(
+        self, job: _Job, chunk: list[_JobRow], market_hash: str | None, call: int, frames: dict[Any, Any]
+    ) -> None:
         plan = job.plan
         policy = plan.block.research_policy
         request = BatchExperimentRequest(
@@ -427,7 +454,7 @@ class FilesystemRunCalculation:
             description=f"Calculate {plan.experiment_id} ({job.job_id})",
         )
         try:
-            result = self._run_batch.execute(request, expected_market_data_hash=market_hash)
+            result = self._run_batch.execute(request, expected_market_data_hash=market_hash, frames=frames)
         except Exception as exc:  # noqa: BLE001 -- a failed call fails its rows, not the job
             self._settle(job, chunk, "engine_failed", getattr(exc, "message", None) or str(exc))
             return
