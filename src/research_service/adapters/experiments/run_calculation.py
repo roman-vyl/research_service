@@ -96,6 +96,7 @@ class _Row:
     coords: dict[str, Any]
     row_index: int | None = None  # data row index in the table (0-based, header excluded)
     row_hash: str | None = None
+    is_new: bool = False          # no row in the table: created from the coordinates
     cells: dict[str, str] = field(default_factory=dict)
     spec: dict[str, Any] | None = None
     config_hash: str | None = None
@@ -122,6 +123,8 @@ class _Plan:
             item: dict[str, Any] = {"position": r.position, "coords": r.coords}
             if r.reason is None:
                 item.update(status="calculable", config_hash=r.config_hash)
+                if r.is_new:
+                    item["new_row"] = True
             else:
                 item.update(status="skipped", reason=r.reason)
                 if r.message:
@@ -298,7 +301,9 @@ class FilesystemRunCalculation:
         for row in planned:
             key = keys.request_key(row.coords, row.position)
             if matches.get(key, 0) == 0:
-                row.reason = "row_not_found"
+                self._new_row(row, schema, block, header)
+                if row.reason is None:
+                    self._materialize(row, block, validations)
             elif matches[key] > 1:
                 row.reason = "ambiguous_row"
             elif row.cells.get(schema.run_id_column, "") != "":
@@ -310,6 +315,42 @@ class FilesystemRunCalculation:
 
         token = _token(table_digest.hexdigest(), block, planned)
         return _Plan(experiment_id, table, schema, block, planned, token)
+
+    @staticmethod
+    def _new_row(row: _Row, schema: ResultSchema, block: MaterializeBlock, header: list[str]) -> None:
+        """A coordinate without a row: build its cells from the coordinates, or say why it cannot be."""
+        cells = {c: "" for c in header}
+        coords = row.coords
+        for dim in schema.dimensions:
+            value = coords.get(dim.id)
+            empty = dim.optional and value in (None, "")
+            if dim.optional and not empty and dim.values is not None:
+                number = _num(value)
+                if number is None or not any(abs(number - v) < 1e-9 for v in dim.values):
+                    row.reason = "coord_not_allowed"
+                    row.message = f"{dim.id}: {value!r} is not among the declared values"
+                    return
+            if empty:
+                continue
+            if dim.grids:
+                grid = str(coords.get(GRID_ID, ""))
+                if grid not in dim.grids or dim.grid_column is None:
+                    row.reason = "row_not_creatable"
+                    row.message = f"{dim.id}: no column in grid {grid!r}"
+                    return
+                cells[dim.grid_column] = grid
+                cells[dim.grids[grid].column] = _coord_text(value)
+            elif dim.column is not None:
+                cells[dim.column] = _coord_text(value)
+        if schema.arms is not None:
+            cells[schema.arms.column] = str(coords.get("arm", ""))
+        missing = sorted({b.column for b in block.bindings if cells.get(b.column, "") == ""})
+        if missing:
+            row.reason = "row_not_creatable"
+            row.message = f"bound columns not in the coordinates: {missing}"
+            return
+        row.cells = cells
+        row.is_new = True
 
     def _block(self, experiment_id: str) -> MaterializeBlock:
         raw = self._experiments.manifest(experiment_id).get("materialize")
@@ -450,12 +491,12 @@ class FilesystemRunCalculation:
             range=policy.range,
             candidates=tuple(
                 BatchCandidateRequest(
-                    candidate_id=f"r{jr.row.row_index}",
+                    candidate_id=_candidate_id(jr.row),
                     strategy=DeployableStrategyInstance.model_validate(jr.row.spec),
                     execution=policy.execution,
                     accounting=policy.accounting,
                     managed_policy_enabled=policy.managed_policy_enabled,
-                    metadata={"experiment_id": plan.experiment_id, "row_index": jr.row.row_index},
+                    metadata={"experiment_id": plan.experiment_id, "row_index": jr.row.row_index, "new_row": jr.row.is_new},
                 )
                 for jr in chunk
             ),
@@ -474,14 +515,15 @@ class FilesystemRunCalculation:
         by_candidate = {c.candidate_id: c for c in result.candidates}
         passed: list[tuple[_JobRow, dict[str, str]]] = []
         for jr in chunk:
-            candidate = by_candidate.get(f"r{jr.row.row_index}")
+            candidate = by_candidate.get(_candidate_id(jr.row))
             if candidate is None or candidate.status != "completed" or not candidate.run_id:
                 message = candidate.error_message if candidate is not None else "no result for row"
                 self._settle(job, [jr], "engine_failed", message)
                 continue
             summary = candidate.model_dump(mode="python")
             values = {col: _lookup(summary, path) for col, path in plan.block.result_bindings.items()}
-            diffs = _parity(plan.schema, plan.block.result_bindings, jr.row.cells, values)
+            # a new row has no stored result to compare with
+            diffs = [] if jr.row.is_new else _parity(plan.schema, plan.block.result_bindings, jr.row.cells, values)
             if diffs:
                 with job.lock:
                     jr.run_id = candidate.run_id
@@ -498,11 +540,15 @@ class FilesystemRunCalculation:
         plan = job.plan
         schema = plan.schema
         updates: dict[int, tuple[_JobRow, dict[str, str]]] = {}
+        appends: list[tuple[_JobRow, dict[str, str]]] = []
         for jr, cells in passed:
             new = dict(cells)
             new[schema.run_id_column] = jr.run_id or ""
             if schema.provenance.column:
                 new[schema.provenance.column] = "engine"
+            if jr.row.is_new:
+                appends.append((jr, new))
+                continue
             assert jr.row.row_index is not None
             updates[jr.row.row_index] = (jr, new)
         with experiment_lock(plan.experiment_id):
@@ -512,9 +558,10 @@ class FilesystemRunCalculation:
                 shutil.copy2(plan.table, backup)
                 with job.lock:
                     job.backup = backup.name
-            published, stale = _rewrite(plan.table, updates)
-        self._settle(job, [updates[i][0] for i in sorted(published)], "published", None)
-        self._settle(job, [updates[i][0] for i in sorted(stale)], "row_stale", "row changed since the plan")
+            published, stale = _rewrite(plan.table, updates) if updates else (set(), set())
+            appended, exists = _append(plan.table, schema, appends) if appends else ([], [])
+        self._settle(job, [updates[i][0] for i in sorted(published)] + appended, "published", None)
+        self._settle(job, [updates[i][0] for i in sorted(stale)] + exists, "row_stale", "row changed since the plan")
 
     def _settle(self, job: _Job, rows: list[_JobRow], outcome: str, message: str | None) -> None:
         if not rows:
@@ -716,6 +763,47 @@ def _rewrite(table: Path, updates: dict[int, tuple[_JobRow, dict[str, str]]]) ->
     return published, stale
 
 
+def _append(
+    table: Path, schema: ResultSchema, entries: list[tuple[_JobRow, dict[str, str]]]
+) -> tuple[list[_JobRow], list[_JobRow]]:
+    """Append new rows; a coordinate that gained a row since the plan is left alone (stale)."""
+    keys = _Keys(schema)
+    with table.open("rb") as raw:
+        data = raw.read()
+    terminator = "\r\n" if b"\r\n" in data[:65536] else "\n"
+    header = _header(table)
+    existing = {keys.row_key(header, cells) for _, cells, _ in _rows(table)}
+    appended: list[_JobRow] = []
+    stale: list[_JobRow] = []
+    lines: list[list[str]] = []
+    for jr, cells in entries:
+        row = {**jr.row.cells, **cells}
+        key = keys.row_key(header, [row.get(c, "") for c in header])
+        if key in existing:
+            stale.append(jr)
+            continue
+        existing.add(key)
+        lines.append([row.get(c, "") for c in header])
+        appended.append(jr)
+    if lines:
+        with table.open("a", newline="") as fh:
+            if data and not data.endswith(b"\n"):
+                fh.write(terminator)
+            csv.writer(fh, lineterminator=terminator).writerows(lines)
+    return appended, stale
+
+
+def _candidate_id(row: _Row) -> str:
+    return f"r{row.row_index}" if row.row_index is not None else f"n{row.position}"
+
+
+def _coord_text(value: Any) -> str:
+    number = _num(value)
+    if number is None:
+        return str(value)
+    return str(int(number)) if number == int(number) else repr(number)
+
+
 # --- values and parity -------------------------------------------------------------------
 
 
@@ -791,7 +879,11 @@ def _parity(
 
 
 def _token(table_sha256: str, block: MaterializeBlock, rows: list[_Row]) -> str:
-    calculable = sorted((r.row_index, r.config_hash) for r in rows if r.reason is None)
+    calculable = sorted(
+        (-1 if r.row_index is None else r.row_index, r.config_hash, json.dumps(r.coords, sort_keys=True, default=str) if r.is_new else "")
+        for r in rows
+        if r.reason is None
+    )
     payload = json.dumps(
         {
             "table_sha256": table_sha256,

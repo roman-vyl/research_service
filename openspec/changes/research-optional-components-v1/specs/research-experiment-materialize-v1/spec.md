@@ -71,3 +71,24 @@ make the block invalid.
 - **WHEN** the trail trigger and the break-even trigger take their value from one
   column
 - **THEN** both paths receive the same cell value.
+
+### Requirement: Rows are addressed by coordinates
+
+A row SHALL be addressed by `coords`, keyed by the ids the results route filters
+on: a value for every dimension id of `result_schema` (for a grid dimension, its
+value in that grid together with `grid`; `arm` when arms are declared); an
+`optional` dimension MAY be omitted or empty, which addresses the row without it.
+Numeric columns SHALL be compared as numbers, others as text. At most one row
+SHALL match; several matches SHALL be `ambiguous_row`. Coordinates that match no
+row are handled by Calculate (a new row, or `row_not_creatable`).
+
+#### Scenario: Duplicate coordinates
+
+- **WHEN** two rows of the table have the same coordinates
+- **THEN** a request for those coordinates skips the row as `ambiguous_row` and
+  neither row is calculated.
+
+#### Scenario: Optional dimension omitted
+
+- **WHEN** a request names no value for an optional dimension
+- **THEN** it addresses the row whose cell for that dimension is empty.

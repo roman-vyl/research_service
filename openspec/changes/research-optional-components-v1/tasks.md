@@ -7,8 +7,8 @@
 - [x] 1.5 Tests: off row has the same spec and `config_hash` as a template without the item; on row carries the item with the bound trigger; shared trigger column; unparsable cell; half-filled row; two options at once; Surface without options unchanged.
 - [ ] 1.6 Real check on a copy of the fee4 trailing geometry manifest with a break-even option: plan and a 40-row Calculate with parity.
 
-- [ ] 1.7 Create rows from coordinates: plan `new_row` / `row_not_creatable`, materialize from coordinates, append on publish without parity, token over new coordinates.
-- [ ] 1.8 `values` on an optional dimension (schema model only; the workbench change is separate).
+- [x] 1.7 Create rows from coordinates: plan `new_row` / `row_not_creatable`, materialize from coordinates, append on publish without parity, token over new coordinates.
+- [x] 1.8 `values` on an optional dimension (schema model only; the workbench change is separate).
 
 - [ ] 1.9 First user: fee4 trailing geometry manifest gets the `be_trigger` dimension (`optional`, unit R, `values` 2, 3, 4, 6, 8, 10) together with `materialize.options` (break-even, `lock_r` 0), after the service is deployed; the empty `be_trigger_r` column is already in the table.
 
