@@ -10,6 +10,8 @@
 - [ ] 1.7 Create rows from coordinates: plan `new_row` / `row_not_creatable`, materialize from coordinates, append on publish without parity, token over new coordinates.
 - [ ] 1.8 `values` on an optional dimension (schema model only; the workbench change is separate).
 
+- [ ] 1.9 First user: fee4 trailing geometry manifest gets the `be_trigger` dimension (`optional`, unit R, `values` 2, 3, 4, 6, 8, 10) together with `materialize.options` (break-even, `lock_r` 0), after the service is deployed; the empty `be_trigger_r` column is already in the table.
+
 ## 2. Out of Scope (recorded)
 
 Frontend switch, Engine changes, group-A filter components, variants with more than two states, item ordering.
