@@ -51,7 +51,10 @@ from research_service.domain.strategy_instance import DeployableStrategyInstance
 from research_service.ports.strategy_engine import StrategySpecValidation
 
 MAX_ROWS = 2000
-BATCH_SIZE = 1000
+#: Variants per Engine `/range-batch` call. Engine memory grows with the variants of one
+#: call (about 30 MB each for a managed trailing spec over the full 5m window), so a call
+#: of 1000 exhausts the local Docker VM; small calls keep the peak bounded at little cost.
+BATCH_SIZE = 25
 JOURNAL_FILE = "runs_calculated.jsonl"
 REL_TOL = 1e-3
 #: Absolute floor per Engine summary field (last path segment): keeps the relative

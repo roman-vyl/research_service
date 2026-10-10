@@ -467,8 +467,17 @@ def test_cancel_between_batch_calls(tmp_path: Path, monkeypatch: pytest.MonkeyPa
     assert len(env.runner.calls) == 1
 
 
-def test_batch_calls_hold_at_most_1000_variants(tmp_path: Path) -> None:
-    assert calc_module.BATCH_SIZE == 1000 and calc_module.MAX_ROWS == 2000
+def test_batch_calls_hold_at_most_25_variants(tmp_path: Path) -> None:
+    assert calc_module.BATCH_SIZE == 25 and calc_module.MAX_ROWS == 2000
+
+
+def test_rows_are_split_into_calls_of_batch_size(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(calc_module, "BATCH_SIZE", 2)
+    env = _setup(tmp_path)
+    job_id = _calculate(env, [_coords(3), _coords(5), _coords(3, 30)])
+    env.run_pending()
+    assert _status(env, job_id)["state"] == "completed"
+    assert [len(request.candidates) for request, _ in env.runner.calls] == [2, 1]
 
 
 def test_market_data_mismatch_fails_the_rows(tmp_path: Path) -> None:
