@@ -79,12 +79,15 @@ def _candle_type() -> type[Candle]:
 class CandleColumns(Sequence["Candle"]):
     """Read-only sequence of `Candle` backed by fixed-width arrays."""
 
-    __slots__ = ("_times", "_coef", "_exp")
+    __slots__ = ("_times", "_coef", "_exp", "_last_index", "_last_candle")
 
     def __init__(self) -> None:
         self._times = array("q")
         self._coef = {name: array("q") for name in _FIELDS}
         self._exp = {name: array("b") for name in _FIELDS}
+        # The candle read last: loops read the same bar more than once in a row.
+        self._last_index = -1
+        self._last_candle: Candle | None = None
 
     # --- building ---------------------------------------------------------------
 
@@ -169,7 +172,11 @@ class CandleColumns(Sequence["Candle"]):
             index += n
         if not 0 <= index < n:
             raise IndexError("candle index out of range")
-        return self._candle(index)
+        if index == self._last_index and self._last_candle is not None:
+            return self._last_candle
+        candle = self._candle(index)
+        self._last_index, self._last_candle = index, candle
+        return candle
 
     def __iter__(self) -> Iterator[Candle]:
         for i in range(len(self)):
