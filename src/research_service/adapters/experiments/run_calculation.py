@@ -45,7 +45,7 @@ from research_service.domain.errors import (
     PlanStale,
     TooManyRows,
 )
-from research_service.domain.experiment_materialize import MaterializeBlock, pointer_set
+from research_service.domain.experiment_materialize import MaterializeBlock, pointer_get, pointer_set
 from research_service.domain.experiment_schema import GRID_ID, ResultSchema
 from research_service.domain.strategy_instance import DeployableStrategyInstance
 from research_service.ports.strategy_engine import StrategySpecValidation
@@ -327,9 +327,18 @@ class FilesystemRunCalculation:
         experiment_id: str, schema: ResultSchema, block: MaterializeBlock, header: list[str]
     ) -> None:
         needed = {b.column for b in block.bindings} | set(block.result_bindings) | {schema.run_id_column}
+        for option in block.options:
+            needed |= set(option.columns)
         missing = sorted(needed - set(header))
         if missing:
             raise InvalidExperiment(experiment_id, f"materialize: table lacks columns {missing}")
+        optional = {d.column for d in schema.dimensions if d.optional and d.column}
+        for option in block.options:
+            if option.column not in optional:
+                raise InvalidExperiment(
+                    experiment_id,
+                    f"materialize: option {option.id} column {option.column} is not an optional dimension",
+                )
         unbound = sorted(m.column for m in schema.metrics if m.column not in block.result_bindings)
         if unbound:
             raise CalculationRejected(
@@ -359,6 +368,8 @@ class FilesystemRunCalculation:
                 row.message = f"{binding.column}: {exc}"
                 return
             pointer_set(spec, binding.path, value)
+        if not self._insert_options(row, block, spec):
+            return
         canonical = json.dumps(spec["raw_spec"], sort_keys=True, separators=(",", ":"))
         verdict = cache.get(canonical)
         if verdict is None:
@@ -369,6 +380,30 @@ class FilesystemRunCalculation:
             return
         row.spec = spec
         row.config_hash = verdict.config_hash
+
+    @staticmethod
+    def _insert_options(row: _Row, block: MaterializeBlock, spec: dict[str, Any]) -> bool:
+        """Append the item of every option that is on; an option that is off adds nothing."""
+        for option in block.options:
+            filled = [row.cells.get(c, "") != "" for c in option.columns]
+            if not any(filled):
+                continue
+            if not all(filled):
+                missing = [c for c, f in zip(option.columns, filled) if not f]
+                row.reason = "option_inconsistent"
+                row.message = f"option {option.id}: filled together with empty {missing}"
+                return False
+            item = copy.deepcopy(option.insert.item)
+            for binding in option.insert.bindings:
+                try:
+                    value = _parse(row.cells[binding.column], binding.type)
+                except ValueError as exc:
+                    row.reason = "binding_value_invalid"
+                    row.message = f"{binding.column}: {exc}"
+                    return False
+                pointer_set(item, binding.path, value)
+            pointer_get(spec, option.insert.path).append(item)
+        return True
 
     # --- job ---------------------------------------------------------------------
 
@@ -512,6 +547,8 @@ class FilesystemRunCalculation:
             fh.write("\n".join(lines) + "\n")
 
 
+OFF = "off"  # key part of an empty cell of an optional dimension
+
 # --- coordinates -------------------------------------------------------------------
 
 
@@ -521,9 +558,12 @@ class _Keys:
     def __init__(self, schema: ResultSchema) -> None:
         self.single: list[tuple[str, str]] = []          # (dimension id, column)
         self.multi: list[tuple[str, dict[str, str]]] = []  # (dimension id, grid -> column)
+        self.optional: set[str] = set()                  # ids of optional dimensions
         self.grid_column: str | None = None
         self.arm_column = schema.arms.column if schema.arms else None
         for dim in schema.dimensions:
+            if dim.optional:
+                self.optional.add(dim.id)
             if dim.grids:
                 self.multi.append((dim.id, {g: c.column for g, c in dim.grids.items()}))
                 self.grid_column = dim.grid_column
@@ -537,7 +577,7 @@ class _Keys:
             self.ids.append("arm")
 
     def request_key(self, coords: dict[str, Any], position: int) -> tuple[Any, ...]:
-        missing = [i for i in self.ids if i not in coords]
+        missing = [i for i in self.ids if i not in coords and i not in self.optional]
         extra = [k for k in coords if k not in self.ids]
         if missing or extra:
             raise InvalidRequest(
@@ -546,6 +586,9 @@ class _Keys:
             )
         key: list[Any] = []
         for dim_id in [d for d, _ in self.single] + [d for d, _ in self.multi]:
+            if dim_id in self.optional and coords.get(dim_id) in (None, ""):
+                key.append(OFF)
+                continue
             value = _num(coords[dim_id])
             if value is None:
                 raise InvalidRequest(f"rows[{position}].coords.{dim_id} needs a number", {"id": dim_id})
@@ -556,15 +599,21 @@ class _Keys:
             key.append(str(coords["arm"]))
         return tuple(key)
 
+    def _cell(self, dim_id: str, text: str) -> Any:
+        """A numeric key part; an empty cell of an optional dimension is the "off" row."""
+        if text == "" and dim_id in self.optional:
+            return OFF
+        return _num(text)
+
     def row_key(self, header: list[str], cells: list[str]) -> tuple[Any, ...] | None:
         row = dict(zip(header, cells))
-        key: list[Any] = [_num(row.get(col, "")) for _, col in self.single]
+        key: list[Any] = [self._cell(i, row.get(col, "")) for i, col in self.single]
         grid = row.get(self.grid_column, "") if self.grid_column else None
-        for _, grids in self.multi:
+        for dim_id, grids in self.multi:
             col = grids.get(grid or "")
             if col is None:
                 return None
-            key.append(_num(row.get(col, "")))
+            key.append(self._cell(dim_id, row.get(col, "")))
         if None in key:
             return None
         if self.grid_column:

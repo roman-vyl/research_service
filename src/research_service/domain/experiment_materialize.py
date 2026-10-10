@@ -28,6 +28,40 @@ class Binding(BaseModel):
     type: Literal["number", "integer", "string"]
 
 
+class Insert(BaseModel):
+    """A complete component appended to a list of the template when an option is on."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    path: str = Field(pattern=r"^/")
+    item: dict[str, Any]
+    bindings: tuple[Binding, ...] = ()
+
+    @model_validator(mode="after")
+    def _item_paths_exist(self) -> Insert:
+        paths = [b.path for b in self.bindings]
+        if len(paths) != len(set(paths)):
+            raise ValueError("insert binding paths must be unique")
+        for binding in self.bindings:
+            pointer_get(self.item, binding.path)
+        return self
+
+
+class OptionalComponent(BaseModel):
+    """An optional component: off when ``column`` is empty, on when it is filled."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    id: str = Field(min_length=1)
+    column: str = Field(min_length=1)
+    insert: Insert
+
+    @property
+    def columns(self) -> tuple[str, ...]:
+        """Every column of the option: filled together, or all empty."""
+        return tuple(dict.fromkeys((self.column, *(b.column for b in self.insert.bindings))))
+
+
 class ResearchPolicy(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -52,15 +86,13 @@ class MaterializeBlock(BaseModel):
     contract_version: Literal["research_experiment_materialize.v1"]
     strategy_template: DeployableStrategyInstance
     bindings: tuple[Binding, ...] = Field(min_length=1)
+    options: tuple[OptionalComponent, ...] = ()
     result_bindings: dict[str, str] = Field(min_length=1)
     research_policy: ResearchPolicy
 
     @model_validator(mode="after")
     def _paths_exist(self) -> MaterializeBlock:
         document = self.strategy_template.model_dump(mode="json")
-        columns = [b.column for b in self.bindings]
-        if len(columns) != len(set(columns)):
-            raise ValueError("binding columns must be unique")
         paths = [b.path for b in self.bindings]
         if len(paths) != len(set(paths)):
             raise ValueError("binding paths must be unique")
@@ -68,6 +100,12 @@ class MaterializeBlock(BaseModel):
             if pointer_parts(binding.path)[:1] in (["enabled"], ["strategy_id"]):
                 raise ValueError(f"binding {binding.column}: {binding.path} is not bindable")
             pointer_get(document, binding.path)
+        ids = [o.id for o in self.options]
+        if len(ids) != len(set(ids)):
+            raise ValueError("option ids must be unique")
+        for option in self.options:
+            if not isinstance(pointer_get(document, option.insert.path), list):
+                raise ValueError(f"option {option.id}: {option.insert.path} is not a list in the template")
         return self
 
 
