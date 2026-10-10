@@ -5,13 +5,13 @@
 
 ## 2. Implementation
 
-- [ ] 2.1 Columnar `MarketFrame` with lossless coefficient + exponent arrays and a read-only `candles` sequence view.
-- [ ] 2.2 Decode MDS JSON straight into the arrays; keep the grid validation.
-- [ ] 2.3 Adapt only the consumers that need more than index, length, iteration or slicing.
-- [ ] 2.4 Unit tests: exact `Decimal` round-trip including exponent (`6500` vs `6500.0`, volume with 8 places), slicing, negative index, grid errors.
+- [x] 2.1 Columnar `MarketFrame` with lossless coefficient + exponent arrays and a read-only `candles` sequence view.
+- [x] 2.2 Decode MDS JSON straight into the arrays; keep the grid validation.
+- [x] 2.3 Adapt only the consumers that need more than index, length, iteration or slicing.
+- [x] 2.4 Unit tests: exact `Decimal` round-trip including exponent (`6500` vs `6500.0`, volume with 8 places), slicing, negative index, grid errors.
 
 ## 3. Acceptance
 
-- [ ] 3.1 Re-run the two reference runs on the new code: `trades.json`, `execution_events.json`, `strategy_evaluation.json`, `managed_policy_events.json`, `metrics.json` byte-identical to the stored ones (run id aside).
-- [ ] 3.2 Peak RSS and wall time before/after for both runs, in the PR description.
-- [ ] 3.3 `make verify`; `openspec validate --all --strict`.
+- [x] 3.1 Re-run the two reference runs on the new code: `trades.json`, `execution_events.json`, `strategy_evaluation.json`, `managed_policy_events.json`, `metrics.json` byte-identical to the stored ones (run id aside).
+- [x] 3.2 Peak RSS and wall time before/after for both runs, in the PR description.
+- [x] 3.3 `make verify`; `openspec validate --all --strict`.
