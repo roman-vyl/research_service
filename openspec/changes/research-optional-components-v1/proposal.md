@@ -16,20 +16,24 @@ purpose.
 
 ## What Changes
 
-- `materialize.options`: a list of optional components. Each has an `id`, a
-  switch `column` holding `off` or `on`, an `insert` (a JSON Pointer to a list in
-  the template and the complete item to add, with `bindings` whose pointers are
-  relative to the item).
-- Materialize adds the item to the template when the row's switch is `on`;
-  nothing is added when `off`. An `off` row yields exactly the spec the template
+- The workbench already treats a result-schema dimension with `optional: true`
+  as a switch: a row with an empty cell for it is an "off" row, a row with a
+  number is "on". Research Service ignores the field today (`extra="ignore"`) and
+  its row addressing drops rows with an empty dimension cell. This change makes
+  Research Service honor the same convention.
+- `materialize.options`: a list of optional components. Each has an `id`, the
+  optional dimension's value `column` (empty = off, filled = on), an `insert` (a
+  JSON Pointer to a list in the template and the complete item to add, with
+  `bindings` whose pointers are relative to the item).
+- Materialize adds the item to the template when the row's cell is filled;
+  nothing is added when it is empty. An `off` row yields exactly the spec the template
   alone yields, so it has the same `config_hash` as a spec without the component.
 - A binding column may feed several paths (today each column is bound once).
-- A result-schema dimension may be marked as belonging to an option
-  (`option`: id). Its cell is empty when the option is `off` and required when
-  `on`; row addressing treats an empty cell of such a dimension as a value `off`
-  and does not drop the row.
-- A row with the switch `off` and a filled option-only cell, or `on` and an empty
-  one, is skipped as `option_inconsistent`.
+- Row addressing treats an empty cell of an `optional` dimension as "off" and
+  does not drop the row.
+- An option may have further parameter columns; they are filled exactly when the
+  option's value column is filled. A row where they disagree is skipped as
+  `option_inconsistent`.
 - No change to Strategy Engine. No interpretation of components in Research: it
   only inserts the declared item.
 
@@ -38,9 +42,9 @@ purpose.
 - Group-A filters stay replay-only; they have no Engine component yet.
 - Choosing among more than two states (variant 1/2/3); this change is a binary
   switch per option. Several options may coexist, each with its own switch.
-- Frontend: the switch is a dimension with `option` metadata read from the
-  manifest; the frontend change is separate and small, specified in
-  `research_frontend`.
+- Frontend: it already renders `optional: true` dimensions as a checkbox plus
+  slider and filters "off" rows; no change is expected for a numeric option such
+  as the break-even trigger.
 - The Engine memory failure of large Calculate batches (separate thread).
 
 ## Impact
