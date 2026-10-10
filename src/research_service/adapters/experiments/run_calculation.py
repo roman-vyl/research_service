@@ -45,7 +45,7 @@ from research_service.domain.errors import (
     PlanStale,
     TooManyRows,
 )
-from research_service.domain.experiment_materialize import MaterializeBlock, pointer_set
+from research_service.domain.experiment_materialize import MaterializeBlock, pointer_get, pointer_set
 from research_service.domain.experiment_schema import GRID_ID, ResultSchema
 from research_service.domain.strategy_instance import DeployableStrategyInstance
 from research_service.ports.strategy_engine import StrategySpecValidation
@@ -96,6 +96,7 @@ class _Row:
     coords: dict[str, Any]
     row_index: int | None = None  # data row index in the table (0-based, header excluded)
     row_hash: str | None = None
+    is_new: bool = False          # no row in the table: created from the coordinates
     cells: dict[str, str] = field(default_factory=dict)
     spec: dict[str, Any] | None = None
     config_hash: str | None = None
@@ -122,6 +123,8 @@ class _Plan:
             item: dict[str, Any] = {"position": r.position, "coords": r.coords}
             if r.reason is None:
                 item.update(status="calculable", config_hash=r.config_hash)
+                if r.is_new:
+                    item["new_row"] = True
             else:
                 item.update(status="skipped", reason=r.reason)
                 if r.message:
@@ -298,7 +301,9 @@ class FilesystemRunCalculation:
         for row in planned:
             key = keys.request_key(row.coords, row.position)
             if matches.get(key, 0) == 0:
-                row.reason = "row_not_found"
+                self._new_row(row, schema, block, header)
+                if row.reason is None:
+                    self._materialize(row, block, validations)
             elif matches[key] > 1:
                 row.reason = "ambiguous_row"
             elif row.cells.get(schema.run_id_column, "") != "":
@@ -310,6 +315,42 @@ class FilesystemRunCalculation:
 
         token = _token(table_digest.hexdigest(), block, planned)
         return _Plan(experiment_id, table, schema, block, planned, token)
+
+    @staticmethod
+    def _new_row(row: _Row, schema: ResultSchema, block: MaterializeBlock, header: list[str]) -> None:
+        """A coordinate without a row: build its cells from the coordinates, or say why it cannot be."""
+        cells = {c: "" for c in header}
+        coords = row.coords
+        for dim in schema.dimensions:
+            value = coords.get(dim.id)
+            empty = dim.optional and value in (None, "")
+            if dim.optional and not empty and dim.values is not None:
+                number = _num(value)
+                if number is None or not any(abs(number - v) < 1e-9 for v in dim.values):
+                    row.reason = "coord_not_allowed"
+                    row.message = f"{dim.id}: {value!r} is not among the declared values"
+                    return
+            if empty:
+                continue
+            if dim.grids:
+                grid = str(coords.get(GRID_ID, ""))
+                if grid not in dim.grids or dim.grid_column is None:
+                    row.reason = "row_not_creatable"
+                    row.message = f"{dim.id}: no column in grid {grid!r}"
+                    return
+                cells[dim.grid_column] = grid
+                cells[dim.grids[grid].column] = _coord_text(value)
+            elif dim.column is not None:
+                cells[dim.column] = _coord_text(value)
+        if schema.arms is not None:
+            cells[schema.arms.column] = str(coords.get("arm", ""))
+        missing = sorted({b.column for b in block.bindings if cells.get(b.column, "") == ""})
+        if missing:
+            row.reason = "row_not_creatable"
+            row.message = f"bound columns not in the coordinates: {missing}"
+            return
+        row.cells = cells
+        row.is_new = True
 
     def _block(self, experiment_id: str) -> MaterializeBlock:
         raw = self._experiments.manifest(experiment_id).get("materialize")
@@ -327,9 +368,18 @@ class FilesystemRunCalculation:
         experiment_id: str, schema: ResultSchema, block: MaterializeBlock, header: list[str]
     ) -> None:
         needed = {b.column for b in block.bindings} | set(block.result_bindings) | {schema.run_id_column}
+        for option in block.options:
+            needed |= set(option.columns)
         missing = sorted(needed - set(header))
         if missing:
             raise InvalidExperiment(experiment_id, f"materialize: table lacks columns {missing}")
+        optional = {d.column for d in schema.dimensions if d.optional and d.column}
+        for option in block.options:
+            if option.column not in optional:
+                raise InvalidExperiment(
+                    experiment_id,
+                    f"materialize: option {option.id} column {option.column} is not an optional dimension",
+                )
         unbound = sorted(m.column for m in schema.metrics if m.column not in block.result_bindings)
         if unbound:
             raise CalculationRejected(
@@ -359,6 +409,8 @@ class FilesystemRunCalculation:
                 row.message = f"{binding.column}: {exc}"
                 return
             pointer_set(spec, binding.path, value)
+        if not self._insert_options(row, block, spec):
+            return
         canonical = json.dumps(spec["raw_spec"], sort_keys=True, separators=(",", ":"))
         verdict = cache.get(canonical)
         if verdict is None:
@@ -369,6 +421,30 @@ class FilesystemRunCalculation:
             return
         row.spec = spec
         row.config_hash = verdict.config_hash
+
+    @staticmethod
+    def _insert_options(row: _Row, block: MaterializeBlock, spec: dict[str, Any]) -> bool:
+        """Append the item of every option that is on; an option that is off adds nothing."""
+        for option in block.options:
+            filled = [row.cells.get(c, "") != "" for c in option.columns]
+            if not any(filled):
+                continue
+            if not all(filled):
+                missing = [c for c, f in zip(option.columns, filled) if not f]
+                row.reason = "option_inconsistent"
+                row.message = f"option {option.id}: filled together with empty {missing}"
+                return False
+            item = copy.deepcopy(option.insert.item)
+            for binding in option.insert.bindings:
+                try:
+                    value = _parse(row.cells[binding.column], binding.type)
+                except ValueError as exc:
+                    row.reason = "binding_value_invalid"
+                    row.message = f"{binding.column}: {exc}"
+                    return False
+                pointer_set(item, binding.path, value)
+            pointer_get(spec, option.insert.path).append(item)
+        return True
 
     # --- job ---------------------------------------------------------------------
 
@@ -415,12 +491,12 @@ class FilesystemRunCalculation:
             range=policy.range,
             candidates=tuple(
                 BatchCandidateRequest(
-                    candidate_id=f"r{jr.row.row_index}",
+                    candidate_id=_candidate_id(jr.row),
                     strategy=DeployableStrategyInstance.model_validate(jr.row.spec),
                     execution=policy.execution,
                     accounting=policy.accounting,
                     managed_policy_enabled=policy.managed_policy_enabled,
-                    metadata={"experiment_id": plan.experiment_id, "row_index": jr.row.row_index},
+                    metadata={"experiment_id": plan.experiment_id, "row_index": jr.row.row_index, "new_row": jr.row.is_new},
                 )
                 for jr in chunk
             ),
@@ -439,14 +515,15 @@ class FilesystemRunCalculation:
         by_candidate = {c.candidate_id: c for c in result.candidates}
         passed: list[tuple[_JobRow, dict[str, str]]] = []
         for jr in chunk:
-            candidate = by_candidate.get(f"r{jr.row.row_index}")
+            candidate = by_candidate.get(_candidate_id(jr.row))
             if candidate is None or candidate.status != "completed" or not candidate.run_id:
                 message = candidate.error_message if candidate is not None else "no result for row"
                 self._settle(job, [jr], "engine_failed", message)
                 continue
             summary = candidate.model_dump(mode="python")
             values = {col: _lookup(summary, path) for col, path in plan.block.result_bindings.items()}
-            diffs = _parity(plan.schema, plan.block.result_bindings, jr.row.cells, values)
+            # a new row has no stored result to compare with
+            diffs = [] if jr.row.is_new else _parity(plan.schema, plan.block.result_bindings, jr.row.cells, values)
             if diffs:
                 with job.lock:
                     jr.run_id = candidate.run_id
@@ -463,11 +540,15 @@ class FilesystemRunCalculation:
         plan = job.plan
         schema = plan.schema
         updates: dict[int, tuple[_JobRow, dict[str, str]]] = {}
+        appends: list[tuple[_JobRow, dict[str, str]]] = []
         for jr, cells in passed:
             new = dict(cells)
             new[schema.run_id_column] = jr.run_id or ""
             if schema.provenance.column:
                 new[schema.provenance.column] = "engine"
+            if jr.row.is_new:
+                appends.append((jr, new))
+                continue
             assert jr.row.row_index is not None
             updates[jr.row.row_index] = (jr, new)
         with experiment_lock(plan.experiment_id):
@@ -477,9 +558,10 @@ class FilesystemRunCalculation:
                 shutil.copy2(plan.table, backup)
                 with job.lock:
                     job.backup = backup.name
-            published, stale = _rewrite(plan.table, updates)
-        self._settle(job, [updates[i][0] for i in sorted(published)], "published", None)
-        self._settle(job, [updates[i][0] for i in sorted(stale)], "row_stale", "row changed since the plan")
+            published, stale = _rewrite(plan.table, updates) if updates else (set(), set())
+            appended, exists = _append(plan.table, schema, appends) if appends else ([], [])
+        self._settle(job, [updates[i][0] for i in sorted(published)] + appended, "published", None)
+        self._settle(job, [updates[i][0] for i in sorted(stale)] + exists, "row_stale", "row changed since the plan")
 
     def _settle(self, job: _Job, rows: list[_JobRow], outcome: str, message: str | None) -> None:
         if not rows:
@@ -512,6 +594,8 @@ class FilesystemRunCalculation:
             fh.write("\n".join(lines) + "\n")
 
 
+OFF = "off"  # key part of an empty cell of an optional dimension
+
 # --- coordinates -------------------------------------------------------------------
 
 
@@ -521,9 +605,12 @@ class _Keys:
     def __init__(self, schema: ResultSchema) -> None:
         self.single: list[tuple[str, str]] = []          # (dimension id, column)
         self.multi: list[tuple[str, dict[str, str]]] = []  # (dimension id, grid -> column)
+        self.optional: set[str] = set()                  # ids of optional dimensions
         self.grid_column: str | None = None
         self.arm_column = schema.arms.column if schema.arms else None
         for dim in schema.dimensions:
+            if dim.optional:
+                self.optional.add(dim.id)
             if dim.grids:
                 self.multi.append((dim.id, {g: c.column for g, c in dim.grids.items()}))
                 self.grid_column = dim.grid_column
@@ -537,7 +624,7 @@ class _Keys:
             self.ids.append("arm")
 
     def request_key(self, coords: dict[str, Any], position: int) -> tuple[Any, ...]:
-        missing = [i for i in self.ids if i not in coords]
+        missing = [i for i in self.ids if i not in coords and i not in self.optional]
         extra = [k for k in coords if k not in self.ids]
         if missing or extra:
             raise InvalidRequest(
@@ -546,6 +633,9 @@ class _Keys:
             )
         key: list[Any] = []
         for dim_id in [d for d, _ in self.single] + [d for d, _ in self.multi]:
+            if dim_id in self.optional and coords.get(dim_id) in (None, ""):
+                key.append(OFF)
+                continue
             value = _num(coords[dim_id])
             if value is None:
                 raise InvalidRequest(f"rows[{position}].coords.{dim_id} needs a number", {"id": dim_id})
@@ -556,15 +646,21 @@ class _Keys:
             key.append(str(coords["arm"]))
         return tuple(key)
 
+    def _cell(self, dim_id: str, text: str) -> Any:
+        """A numeric key part; an empty cell of an optional dimension is the "off" row."""
+        if text == "" and dim_id in self.optional:
+            return OFF
+        return _num(text)
+
     def row_key(self, header: list[str], cells: list[str]) -> tuple[Any, ...] | None:
         row = dict(zip(header, cells))
-        key: list[Any] = [_num(row.get(col, "")) for _, col in self.single]
+        key: list[Any] = [self._cell(i, row.get(col, "")) for i, col in self.single]
         grid = row.get(self.grid_column, "") if self.grid_column else None
-        for _, grids in self.multi:
+        for dim_id, grids in self.multi:
             col = grids.get(grid or "")
             if col is None:
                 return None
-            key.append(_num(row.get(col, "")))
+            key.append(self._cell(dim_id, row.get(col, "")))
         if None in key:
             return None
         if self.grid_column:
@@ -667,6 +763,47 @@ def _rewrite(table: Path, updates: dict[int, tuple[_JobRow, dict[str, str]]]) ->
     return published, stale
 
 
+def _append(
+    table: Path, schema: ResultSchema, entries: list[tuple[_JobRow, dict[str, str]]]
+) -> tuple[list[_JobRow], list[_JobRow]]:
+    """Append new rows; a coordinate that gained a row since the plan is left alone (stale)."""
+    keys = _Keys(schema)
+    with table.open("rb") as raw:
+        data = raw.read()
+    terminator = "\r\n" if b"\r\n" in data[:65536] else "\n"
+    header = _header(table)
+    existing = {keys.row_key(header, cells) for _, cells, _ in _rows(table)}
+    appended: list[_JobRow] = []
+    stale: list[_JobRow] = []
+    lines: list[list[str]] = []
+    for jr, cells in entries:
+        row = {**jr.row.cells, **cells}
+        key = keys.row_key(header, [row.get(c, "") for c in header])
+        if key in existing:
+            stale.append(jr)
+            continue
+        existing.add(key)
+        lines.append([row.get(c, "") for c in header])
+        appended.append(jr)
+    if lines:
+        with table.open("a", newline="") as fh:
+            if data and not data.endswith(b"\n"):
+                fh.write(terminator)
+            csv.writer(fh, lineterminator=terminator).writerows(lines)
+    return appended, stale
+
+
+def _candidate_id(row: _Row) -> str:
+    return f"r{row.row_index}" if row.row_index is not None else f"n{row.position}"
+
+
+def _coord_text(value: Any) -> str:
+    number = _num(value)
+    if number is None:
+        return str(value)
+    return str(int(number)) if number == int(number) else repr(number)
+
+
 # --- values and parity -------------------------------------------------------------------
 
 
@@ -742,7 +879,11 @@ def _parity(
 
 
 def _token(table_sha256: str, block: MaterializeBlock, rows: list[_Row]) -> str:
-    calculable = sorted((r.row_index, r.config_hash) for r in rows if r.reason is None)
+    calculable = sorted(
+        (-1 if r.row_index is None else r.row_index, r.config_hash, json.dumps(r.coords, sort_keys=True, default=str) if r.is_new else "")
+        for r in rows
+        if r.reason is None
+    )
     payload = json.dumps(
         {
             "table_sha256": table_sha256,

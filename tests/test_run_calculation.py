@@ -282,7 +282,7 @@ def test_plan_reasons_and_changes_nothing(tmp_path: Path) -> None:
         ("skipped", "ambiguous_row"),
         ("skipped", "binding_value_invalid"),
         ("skipped", "invalid_spec"),
-        ("skipped", "row_not_found"),
+        ("skipped", "row_not_creatable"),
         ("skipped", "has_run"),
     ]
     assert plan["rows"][6]["message"] == "min_width out of range"

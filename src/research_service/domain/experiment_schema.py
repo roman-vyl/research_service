@@ -29,6 +29,10 @@ class Dimension(_Model):
     unit: str | None = None
     grid_column: str | None = None
     grids: dict[str, GridColumn] | None = None
+    # A row with an empty cell is an "off" row of this dimension (workbench switch).
+    optional: bool = False
+    # Numbers an optional dimension can take (offered when no row carries a value yet).
+    values: list[float] | None = None
 
     @model_validator(mode="after")
     def _single_or_multi(self) -> Dimension:
