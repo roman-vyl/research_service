@@ -43,7 +43,7 @@ rules (`has_run`, `ambiguous_row`).
 ### Requirement: Optional dimension declares its values
 
 A result-schema dimension with `optional: true` MAY declare `values`, the numbers
-the option can take. The workbench offers them when no row carries a value, so a
+the option can take; the workbench SHALL offer them when no row carries a value, so a
 cell that has no run can still be addressed.
 
 #### Scenario: No row has a value yet
