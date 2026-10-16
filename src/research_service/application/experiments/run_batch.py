@@ -258,5 +258,6 @@ class RunBatchExperiment:
             long=summary.long,
             short=summary.short,
             **summary.period_fields,
+            entry_signal_count=len(materialized.strategy_evaluation.entry_opportunities),
             metadata=candidate.metadata,
         )

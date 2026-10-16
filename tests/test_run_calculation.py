@@ -149,6 +149,8 @@ class FakeRunner:
                     long=side,
                     short=side,
                     market_data_hash=expected_market_data_hash,
+                    # `research-calculate-blocked-share-v1`: each inserted option item blocks 10 of 100 signals
+                    entry_signal_count=100 - 10 * sum(len(v) for v in c.strategy.raw_spec.values() if isinstance(v, list)),
                 )
             )
         return BatchExperimentResult(

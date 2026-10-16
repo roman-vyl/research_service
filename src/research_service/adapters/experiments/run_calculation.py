@@ -33,6 +33,7 @@ from research_service.adapters.experiments.filesystem import FilesystemExperimen
 from research_service.adapters.experiments.locks import experiment_lock
 from research_service.application.experiments.contracts import (
     BatchCandidateRequest,
+    BatchCandidateResult,
     BatchExperimentRequest,
     BatchExperimentResult,
     PersistedBatchArtifacts,
@@ -63,6 +64,7 @@ ABS_TOL = {
     "profit_factor": 1e-4,
     "cumulative_net_r": 0.01,
     "net_pnl": 1.0,
+    "blocked_share": 1e-4,
 }
 DEFAULT_ABS_TOL = 1e-9
 _ID_CHARS_RE = re.compile(r"[^A-Za-z0-9._-]")
@@ -100,6 +102,9 @@ class _Row:
     cells: dict[str, str] = field(default_factory=dict)
     spec: dict[str, Any] | None = None
     config_hash: str | None = None
+    #: The row's spec with no option item (`research-calculate-blocked-share-v1`); None without options.
+    base_spec: dict[str, Any] | None = None
+    base_key: str | None = None
     reason: str | None = None
     message: str | None = None
 
@@ -409,8 +414,19 @@ class FilesystemRunCalculation:
                 row.message = f"{binding.column}: {exc}"
                 return
             pointer_set(spec, binding.path, value)
+        base = copy.deepcopy(spec) if block.options else None
         if not self._insert_options(row, block, spec):
             return
+        if base is not None:
+            base_key = json.dumps(base["raw_spec"], sort_keys=True, separators=(",", ":"))
+            base_verdict = cache.get(base_key)
+            if base_verdict is None:
+                base_verdict = cache[base_key] = self._engine.validate_strategy(base["strategy_id"], base["raw_spec"])
+            if base_verdict.config_hash is None:
+                row.reason = "invalid_spec"
+                row.message = f"base spec (options off): {base_verdict.error}"
+                return
+            row.base_spec, row.base_key = base, base_key
         canonical = json.dumps(spec["raw_spec"], sort_keys=True, separators=(",", ":"))
         verdict = cache.get(canonical)
         if verdict is None:
@@ -421,6 +437,8 @@ class FilesystemRunCalculation:
             return
         row.spec = spec
         row.config_hash = verdict.config_hash
+        if row.base_key == canonical:   # every option off: the row is its own base
+            row.base_spec = row.base_key = None
 
     @staticmethod
     def _insert_options(row: _Row, block: MaterializeBlock, spec: dict[str, Any]) -> bool:
@@ -458,8 +476,7 @@ class FilesystemRunCalculation:
                 groups.setdefault(key, []).append(jr)
             call = 0
             for market_hash, members in groups.items():
-                for start in range(0, len(members), BATCH_SIZE):
-                    chunk = members[start:start + BATCH_SIZE]
+                for chunk in _chunks(members):
                     with job.lock:
                         cancelled = job.cancel_requested
                     if cancelled:
@@ -484,6 +501,23 @@ class FilesystemRunCalculation:
     def _run_chunk(self, job: _Job, chunk: list[_JobRow], market_hash: str | None, call: int) -> None:
         plan = job.plan
         policy = plan.block.research_policy
+        # one base candidate per distinct base spec of the chunk (`research-calculate-blocked-share-v1`)
+        bases: dict[str, dict[str, Any]] = {}
+        for jr in chunk:
+            if jr.row.base_key is not None and jr.row.base_spec is not None:
+                bases.setdefault(jr.row.base_key, jr.row.base_spec)
+        base_ids = {key: f"b{i}" for i, key in enumerate(bases)}
+        base_candidates = tuple(
+            BatchCandidateRequest(
+                candidate_id=base_ids[key],
+                strategy=DeployableStrategyInstance.model_validate(spec),
+                execution=policy.execution,
+                accounting=policy.accounting,
+                managed_policy_enabled=policy.managed_policy_enabled,
+                metadata={"experiment_id": plan.experiment_id, "base_of_blocked_share": True},
+            )
+            for key, spec in bases.items()
+        )
         request = BatchExperimentRequest(
             experiment_id=_batch_id(plan.experiment_id, job.job_id, call),
             strategy_id=plan.block.strategy_template.strategy_id,
@@ -499,7 +533,8 @@ class FilesystemRunCalculation:
                     metadata={"experiment_id": plan.experiment_id, "row_index": jr.row.row_index, "new_row": jr.row.is_new},
                 )
                 for jr in chunk
-            ),
+            )
+            + base_candidates,
             description=f"Calculate {plan.experiment_id} ({job.job_id})",
             period_split_ms=policy.period_split_ms,
         )
@@ -514,6 +549,8 @@ class FilesystemRunCalculation:
             pass
 
         by_candidate = {c.candidate_id: c for c in result.candidates}
+        base_runs = {key: by_candidate.get(cid) for key, cid in base_ids.items()}
+        self._journal_bases(job, base_runs)
         passed: list[tuple[_JobRow, dict[str, str]]] = []
         for jr in chunk:
             candidate = by_candidate.get(_candidate_id(jr.row))
@@ -522,6 +559,17 @@ class FilesystemRunCalculation:
                 self._settle(job, [jr], "engine_failed", message)
                 continue
             summary = candidate.model_dump(mode="python")
+            if jr.row.base_key is None:   # no option on: nothing is blocked
+                summary["blocked_share"] = Decimal("0")
+            else:
+                base = base_runs.get(jr.row.base_key)
+                if base is None or base.status != "completed" or base.entry_signal_count is None:
+                    message = base.error_message if base is not None else "no result for the base run"
+                    with job.lock:
+                        jr.run_id = candidate.run_id
+                    self._settle(job, [jr], "engine_failed", f"base run (options off): {message}")
+                    continue
+                summary["blocked_share"] = _blocked_share(candidate.entry_signal_count, base.entry_signal_count)
             values = {col: _lookup(summary, path) for col, path in plan.block.result_bindings.items()}
             # a new row has no stored result to compare with
             diffs = [] if jr.row.is_new else _parity(plan.schema, plan.block.result_bindings, jr.row.cells, values)
@@ -564,6 +612,29 @@ class FilesystemRunCalculation:
         self._settle(job, [updates[i][0] for i in sorted(published)] + appended, "published", None)
         self._settle(job, [updates[i][0] for i in sorted(stale)] + exists, "row_stale", "row changed since the plan")
 
+    def _journal_bases(self, job: _Job, base_runs: dict[str, BatchCandidateResult | None]) -> None:
+        """Base runs are ordinary runs linked to no row; the journal says which they are."""
+        if not base_runs:
+            return
+        stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        lines = [
+            json.dumps(
+                {
+                    "time_utc": stamp,
+                    "job_id": job.job_id,
+                    "outcome": "base_run",
+                    "run_id": base.run_id if base is not None else None,
+                    "entry_signal_count": base.entry_signal_count if base is not None else None,
+                    "message": None if base is not None and base.status == "completed" else (base.error_message if base is not None else "no result"),
+                },
+                sort_keys=True,
+                default=str,
+            )
+            for base in base_runs.values()
+        ]
+        with (job.plan.table.parent / JOURNAL_FILE).open("a", encoding="utf-8") as fh:
+            fh.write("\n".join(lines) + "\n")
+
     def _settle(self, job: _Job, rows: list[_JobRow], outcome: str, message: str | None) -> None:
         if not rows:
             return
@@ -596,6 +667,29 @@ class FilesystemRunCalculation:
 
 
 OFF = "off"  # key part of an empty cell of an optional dimension
+
+
+def _blocked_share(signals: int | None, base_signals: int) -> Decimal:
+    """1 - signals of the row / signals of its base (`research-calculate-blocked-share-v1`)."""
+    if not base_signals or signals is None:
+        return Decimal("0")
+    return 1 - Decimal(signals) / Decimal(base_signals)
+
+
+def _chunks(members: list[_JobRow]) -> Iterator[list[_JobRow]]:
+    """Cut rows into batch calls that hold at most BATCH_SIZE candidates, rows and their distinct bases together."""
+    chunk: list[_JobRow] = []
+    keys: set[str] = set()
+    for jr in members:
+        extra = 1 + (1 if jr.row.base_key is not None and jr.row.base_key not in keys else 0)
+        if chunk and len(chunk) + len(keys) + extra > BATCH_SIZE:
+            yield chunk
+            chunk, keys = [], set()
+        chunk.append(jr)
+        if jr.row.base_key is not None:
+            keys.add(jr.row.base_key)
+    if chunk:
+        yield chunk
 
 # --- coordinates -------------------------------------------------------------------
 

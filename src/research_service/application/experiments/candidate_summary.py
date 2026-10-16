@@ -125,6 +125,15 @@ def _trade_averages(trades: tuple[TradeRecord, ...]) -> tuple[Decimal | None, De
     return average_bp, mean_win / -mean_loss
 
 
+def _profit_factor_r(trades: tuple[TradeRecord, ...]) -> Decimal | None:
+    """Profit factor in R over R-eligible trades (`research-calculate-blocked-share-v1`, D6)."""
+    net = [trade.net_r_multiple for trade in trades if trade.net_r_multiple is not None]
+    losses = sum((r for r in net if r < 0), Decimal("0"))
+    if losses == 0:
+        return None
+    return sum((r for r in net if r > 0), Decimal("0")) / -losses
+
+
 def _side_summary(trades: tuple[TradeRecord, ...], initial_equity: Decimal) -> BatchSideSummary:
     net_pnl = sum((trade.net_pnl for trade in trades), Decimal("0"))
     cumulative_gross_r, cumulative_net_r, r_eligible_trade_count = _cumulative_r(trades)
@@ -191,6 +200,7 @@ def derive_period_fields(
         "worst_year": min(returns) if returns else None,
         "avg_trade_bp": average_bp,
         "payoff_ratio": payoff,
+        "profit_factor_r": _profit_factor_r(trades),
     }
 
 
