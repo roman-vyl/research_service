@@ -241,3 +241,12 @@ class MarketDataHashMismatch(ResearchServiceError):
             status_code=409,
             details={"expected": expected, "actual": actual},
         )
+
+
+class RuntimeExportError(ResearchServiceError):
+    """Export of a candidate to the Runtime catalog failed (`research-candidate-runtime-export-v1`)."""
+
+    def __init__(
+        self, code: str, message: str, status_code: int, details: dict[str, Any] | None = None
+    ) -> None:
+        super().__init__(code=code, message=message, status_code=status_code, details=details)

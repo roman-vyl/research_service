@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     market_data_url: str = "http://market-data-service:8080"
     artifacts_root: Path = Path("/data/runs")
     configs_root: Path = Path("/data/configs")
+    runtime_specs_path: Path | None = None
     cors_origins: tuple[str, ...] = (
         "http://127.0.0.1:5173",
         "http://localhost:5173",

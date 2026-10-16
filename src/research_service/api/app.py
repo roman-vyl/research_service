@@ -125,7 +125,7 @@ def _build_services(settings: Settings, container: Container) -> AppServices:
         experiments=experiments,
         run_deletion=FilesystemRunDeletion(experiments, settings.artifacts_root),
         experiment_storage=FilesystemExperimentStorage(experiments, settings.artifacts_root),
-        candidates=FilesystemCandidates(experiments, settings.artifacts_root),
+        candidates=FilesystemCandidates(experiments, settings.artifacts_root, settings.runtime_specs_path),
         run_calculation=FilesystemRunCalculation(
             experiments,
             settings.artifacts_root,
