@@ -65,6 +65,12 @@ ABS_TOL = {
     "cumulative_net_r": 0.01,
     "net_pnl": 1.0,
     "blocked_share": 1e-4,
+    # period and trade metrics (`research-run-period-metrics-v1`): the replay tables round them
+    # (year returns and worst year to 4 decimals, average trade to 3, payoff to 4, PF to 6)
+    "worst_year": 1e-4,
+    "avg_trade_bp": 1e-3,
+    "payoff_ratio": 1e-4,
+    "profit_factor_r": 1e-4,
 }
 DEFAULT_ABS_TOL = 1e-9
 _ID_CHARS_RE = re.compile(r"[^A-Za-z0-9._-]")

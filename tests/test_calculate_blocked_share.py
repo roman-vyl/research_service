@@ -121,3 +121,21 @@ def test_chunks_hold_rows_and_bases_within_the_batch_size():
     assert sum(len(c) for c in chunks) == len(members)
     for c in chunks:
         assert len(c) + len({m.row.base_key for m in c}) <= BATCH_SIZE
+
+
+def test_rounded_period_cells_pass_parity():
+    from research_service.adapters.experiments.run_calculation import _parity
+
+    schema = type("S", (), {"metrics": []})()
+    bindings = {
+        "worst_year": "worst_year",
+        "avg_trade_bp": "avg_trade_bp",
+        "payoff_ratio": "payoff_ratio",
+    }
+    cells = {"worst_year": "-0.0345", "avg_trade_bp": "35.123", "payoff_ratio": "3.2001"}
+    actual = {
+        "worst_year": Decimal("-0.03454101831"),
+        "avg_trade_bp": Decimal("35.1234"),
+        "payoff_ratio": Decimal("3.20014"),
+    }
+    assert _parity(schema, bindings, cells, actual) == []  # type: ignore[arg-type]

@@ -20,3 +20,7 @@ over the trades; Research already has `net_r_multiple` per trade, and cumulative
   the existing parity gate and publish path apply unchanged.
 - D6 `profit_factor_r` uses only R-eligible trades (`net_r_multiple` not null), like `cumulative_net_r`; null when
   no eligible trade has a negative net R.
+- D7 Parity tolerances follow the replay tables' rounding (Mac acceptance 2026-10-16: `worst_year` -0.0345 in the
+  table against -0.034541 of the run failed the default floor): absolute 1e-4 for `worst_year`, `payoff_ratio` and
+  `profit_factor_r`, 1e-3 for `avg_trade_bp`, next to 1e-4 for `blocked_share`; year returns already use the
+  `return_pct` floor 1e-4.
