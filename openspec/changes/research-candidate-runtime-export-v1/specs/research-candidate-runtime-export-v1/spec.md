@@ -147,10 +147,6 @@ The file name SHALL be `<slug>-<candidate_id>.json`, where `slug` is the record'
 `ticker` lowercased with each run of characters outside `[a-z0-9]` replaced by one
 `_`, trimmed of `_`, at most 40 characters, and `spec` when empty, and
 `candidate_id` is taken from the stored record and matches `^cand_[0-9a-f]{24}$`.
-The name SHALL contain no path separator, SHALL NOT start with ".", SHALL NOT
-exceed 255 bytes, and the resolved parent of the final path SHALL equal the
-resolved catalog directory; otherwise export SHALL be HTTP 500
-`runtime_invalid_name` with nothing written.
 
 #### Scenario: Hostile ticker
 
@@ -159,6 +155,18 @@ resolved catalog directory; otherwise export SHALL be HTTP 500
 - **THEN** the file is created inside the catalog directory with a name made only
   of `[a-z0-9_-]` and `.json`, or the export is refused, and nothing is written
   outside the directory.
+
+### Requirement: Name stays inside the catalog directory
+
+The name SHALL contain no path separator, SHALL NOT start with ".", SHALL NOT
+exceed 255 bytes, and the resolved parent of the final path SHALL equal the
+resolved catalog directory; otherwise export SHALL be HTTP 500
+`runtime_invalid_name` with nothing written.
+
+#### Scenario: Malformed stored id
+
+- **WHEN** a stored record's `candidate_id` does not match the pattern
+- **THEN** export is 500 `runtime_invalid_name` and nothing is written.
 
 ### Requirement: Never overwrite, never half-written
 
