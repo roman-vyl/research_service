@@ -19,22 +19,33 @@ Research does not check the spec beyond the shape Runtime needs.
 
 - New route `POST /api/research/candidates/{candidate_id}/runtime-export` writes
   the candidate's `strategy_spec_snapshot.spec` with `enabled: false` and a
-  `research_source` block into the Runtime catalog directory as a new file. It
-  never overwrites a file and refuses a spec whose Runtime identity is already in
-  the catalog (Runtime drops every file of a duplicated identity).
-- `GET /api/research/candidates` adds to `current` a `runtime` block: whether a
-  catalog file with the candidate's Runtime identity exists, its file name and
-  its `enabled` value, read from the directory at list time. Nothing about Runtime
-  is stored in the candidate record.
+  `research_source` block into the Runtime catalog directory as a new file. The
+  route is create-only: it takes no body, always writes `enabled: false`, never
+  overwrites a file and refuses a spec whose Runtime identity is already in the
+  catalog (Runtime drops every file of a duplicated identity). The check and the
+  publish run under one inter-process lock.
+- `GET /api/research/candidates` adds to `current` a `runtime` block that says only
+  whether a catalog file with the candidate's Runtime identity exists, its name and
+  its `enabled` value, read from the directory at list time. It does not say that
+  Runtime loaded or runs the strategy. Nothing about Runtime is stored in the
+  candidate record.
 - New setting `RESEARCH_RUNTIME_SPECS_PATH`; unset means export is unavailable
   (HTTP 503) and `current.runtime` is null.
 - bbb_stack (separate PR): research-service gets
   `${BBB_DATA_ROOT}/strategy-runtime/specs` mounted read-write and the setting.
 - research_frontend (separate OpenSpec): a "To Runtime" button on a candidate row.
 
+## Authority
+
+Research Service gains one power over the catalog: create a new file with
+`enabled: false`. It gets no API to change, enable, disable or delete a deployment,
+and Strategy Runtime stays a read-only consumer of the directory. The route sits
+under the existing Research API access model (no authentication of its own); the
+infrastructure protection of the route is verified before deployment (tasks 2.2).
+
 ## Out of scope
 
 Switching `enabled`, Runtime read API, live view, Engine validation of the spec,
 any check that the candidate is suitable for live trading, editing or deleting
 catalog files, cleaning the current `loadtest-*` files. No change to Strategy
-Engine or Strategy Runtime.
+Engine, Strategy Runtime or candidate storage.
