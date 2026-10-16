@@ -66,8 +66,10 @@ return the stored record unchanged.
 When the row has a `run_id`, a star SHALL copy the strategy spec from that run's
 `request.json` into `strategy_spec_snapshot`; when it has none, the field SHALL be
 null; when the file cannot be read, the star SHALL still succeed and record the
-reason. The snapshot SHALL be described and served as a historical record of what
-was picked and SHALL NOT be presented as a current or deployable specification.
+reason. The snapshot SHALL be served as a record of what was picked; it is not
+kept in sync with the current row. The owner MAY export it to the Strategy
+Runtime catalog (`research-candidate-runtime-export-v1`); whether it is fit for
+Runtime is the owner's decision, not Research's.
 
 #### Scenario: Replay point
 
