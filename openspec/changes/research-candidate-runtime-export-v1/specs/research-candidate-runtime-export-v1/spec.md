@@ -79,17 +79,21 @@ canonical JSON (sorted keys, compact separators, non-ASCII kept, NaN refused) of
 
 Research SHALL scan the catalog directory with Runtime's rules: direct entries
 that are files, name not starting with ".", suffix exactly `.json`, JSON parsed
-with NaN and Infinity rejected. A file SHALL count as a deployment only if Runtime
-would accept it (a JSON object without `strategy_instance_id`, `strategy_version`
-or `compatibility_profile`, with boolean `enabled`, non-empty string `ticker`,
-`base_timeframe` and `strategy_id`, and object `raw_spec`). Any other file SHALL
-be skipped and SHALL NOT block an export or count as a duplicate.
+with NaN and Infinity rejected. Any other entry SHALL be skipped.
 
 #### Scenario: Broken neighbour file
 
 - **WHEN** the directory has a file that is not valid JSON, a hidden file, a nested
   file, a file with suffix `.JSON` and a file Runtime would reject
 - **THEN** export of an unrelated candidate succeeds.
+
+### Requirement: Only accepted files count
+
+A file SHALL count as a deployment only if Runtime would accept it: a JSON object
+without `strategy_instance_id`, `strategy_version` or `compatibility_profile`, with
+boolean `enabled`, non-empty string `ticker`, `base_timeframe` and `strategy_id`,
+and object `raw_spec`. A file Runtime rejects SHALL NOT block an export or count as
+a duplicate.
 
 #### Scenario: Rejected file with the same strategy
 
