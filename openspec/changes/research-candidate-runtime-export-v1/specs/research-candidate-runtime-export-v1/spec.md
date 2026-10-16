@@ -120,7 +120,7 @@ written.
 
 ### Requirement: Serialized export
 
-Scan, duplicate check and publish SHALL run under one exclusive inter-process lock
+Scan, duplicate check, publish and the journal attempt SHALL run, in that order, under one exclusive inter-process lock
 held in Research's own storage, not in the catalog directory. A waiting export
 SHALL fail with HTTP 503 `runtime_export_busy` after 10 seconds. The guarantee
 SHALL be stated as covering Research processes sharing the lock file and SHALL NOT
@@ -197,9 +197,7 @@ When the temporary file cannot be created or written, the export SHALL be HTTP
 500 `runtime_write_failed`; when the final name cannot be created for a reason
 other than existing, HTTP 500 `runtime_publish_failed`, with no fallback to a
 non-atomic write. In both cases nothing SHALL be published and the temporary file
-SHALL be removed. A failure to remove the temporary file after publication SHALL
-NOT fail the export. Research SHALL NOT delete a published file to compensate for
-any later error.
+SHALL be removed.
 
 #### Scenario: Disk full while writing
 
@@ -212,6 +210,18 @@ any later error.
 - **WHEN** creating the final name fails with a permission error
 - **THEN** the answer is 500 `runtime_publish_failed`, no temporary file remains
   and no final file exists.
+
+### Requirement: Failures after publication do not fail the export
+
+Once the final name exists, a failure to remove the temporary file or to fsync the
+catalog directory SHALL be logged with the file name and SHALL NOT fail the
+export. Research SHALL NOT delete a published file to compensate for any later
+error.
+
+#### Scenario: Directory fsync fails after publish
+
+- **WHEN** the directory fsync raises after the final name was created
+- **THEN** the answer is 201, the file exists and a warning naming the file is logged.
 
 ### Requirement: Journal failure does not hide a published export
 

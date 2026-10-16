@@ -18,7 +18,7 @@ import re
 import secrets
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -164,7 +164,10 @@ class RuntimeCatalogExport:
 
     # --- export ------------------------------------------------------------------
 
-    def export(self, record: dict[str, Any]) -> dict[str, Any]:
+    def export(
+        self, record: dict[str, Any], after_publish: Callable[[dict[str, Any]], str] | None = None
+    ) -> dict[str, Any]:
+        """Publish one new file. ``after_publish`` runs inside the lock, after the file exists."""
         directory = self._directory()
         snapshot = record.get("strategy_spec_snapshot")
         spec = snapshot.get("spec") if isinstance(snapshot, dict) else None
@@ -199,7 +202,12 @@ class RuntimeCatalogExport:
                     {"files": same, "strategy_instance_id": identity},
                 )
             self._publish(directory, name, payload)
-        return {"candidate_id": record["candidate_id"], "file": name, "strategy_instance_id": identity, "enabled": False}
+            result = {
+                "candidate_id": record["candidate_id"], "file": name, "strategy_instance_id": identity, "enabled": False,
+            }
+            if after_publish is not None:
+                result["journal"] = after_publish(result)
+        return result
 
     def _directory(self) -> Path:
         if self._catalog is None:
@@ -262,12 +270,15 @@ class RuntimeCatalogExport:
                 ) from exc
             except OSError as exc:
                 raise RuntimeExportError("runtime_publish_failed", f"export file cannot be published: {exc}", 500) from exc
-            with contextlib.suppress(OSError):
+            # The file is published once the link exists; a failed directory fsync only weakens durability.
+            try:
                 dfd = os.open(directory, os.O_RDONLY)
                 try:
                     os.fsync(dfd)
                 finally:
                     os.close(dfd)
+            except OSError as exc:
+                LOG.warning("runtime export: %s was published but the catalog directory fsync failed: %s", name, exc)
         finally:
             if created:
                 try:

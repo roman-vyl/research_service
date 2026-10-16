@@ -79,14 +79,21 @@ class FilesystemCandidates:
         record = next((r for r in self._read() if r["candidate_id"] == candidate_id), None)
         if record is None:
             raise RuntimeExportError("candidate_not_found", f"no candidate {candidate_id}", 404)
-        result = self._runtime.export(record)
-        try:
-            self._append_journal("runtime_export", {**result, "experiment_id": record["experiment_id"]})
-            journal = "ok"
-        except OSError:
-            LOG.exception("runtime export of %s published %s but the journal line was not written", candidate_id, result["file"])
-            journal = "failed"
-        return {**result, "journal": journal}
+        experiment_id = record["experiment_id"]
+
+        def journal_line(result: dict[str, Any]) -> str:
+            # Runs inside the export lock; a failure never undoes the published file.
+            try:
+                self._append_journal("runtime_export", {**result, "experiment_id": experiment_id})
+            except OSError:
+                LOG.exception(
+                    "runtime export of %s published %s but the journal line was not written",
+                    candidate_id, result["file"],
+                )
+                return "failed"
+            return "ok"
+
+        return self._runtime.export(record, journal_line)
 
     def star(self, experiment_id: str, coords: dict[str, Any]) -> dict[str, Any]:
         manifest, schema, table_path = self._experiments.loaded(experiment_id)

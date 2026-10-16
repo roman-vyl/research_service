@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import errno
+import fcntl
 import json
+import logging
+import os
 import multiprocessing
 import threading
 from pathlib import Path
@@ -377,3 +380,81 @@ def test_malformed_stored_candidate_id_is_refused(tmp_path: Path) -> None:
     assert list(catalog.iterdir()) == []
     assert file_name("BTCUSDT.P", "cand_" + "a" * 24) == "btcusdt_p-cand_" + "a" * 24 + ".json"
     assert file_name("---", "cand_" + "a" * 24).startswith("spec-")
+
+
+def test_journal_attempt_runs_inside_the_export_lock(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    client, catalog, analysis = _env(tmp_path)
+    cid = _star(client, WITH_RUN)["candidate_id"]
+    real = candidates_module.FilesystemCandidates._append_journal
+    held: list[bool] = []
+
+    def probe(self: Any, action: str, record: dict[str, Any]) -> None:
+        if action == "runtime_export":
+            assert (catalog / record["file"]).exists()  # published before the journal attempt
+            fd = os.open(analysis / rx.LOCK_FILE, os.O_RDWR)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                held.append(False)
+                fcntl.flock(fd, fcntl.LOCK_UN)
+            except BlockingIOError:
+                held.append(True)
+            finally:
+                os.close(fd)
+        real(self, action, record)
+
+    monkeypatch.setattr(candidates_module.FilesystemCandidates, "_append_journal", probe)
+    assert _export(client, cid).status_code == 201
+    assert held == [True]
+    # and released afterwards
+    fd = os.open(analysis / rx.LOCK_FILE, os.O_RDWR)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    finally:
+        os.close(fd)
+
+
+def test_failing_journal_still_inside_lock_keeps_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    client, catalog, analysis = _env(tmp_path)
+    cid = _star(client, WITH_RUN)["candidate_id"]
+    order: list[str] = []
+    real = candidates_module.FilesystemCandidates._append_journal
+
+    def failing(self: Any, action: str, record: dict[str, Any]) -> None:
+        if action == "runtime_export":
+            fd = os.open(analysis / rx.LOCK_FILE, os.O_RDWR)
+            try:
+                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                order.append("lock free")
+            except BlockingIOError:
+                order.append("lock held")
+            finally:
+                os.close(fd)
+            raise OSError(errno.EIO, "io")
+        real(self, action, record)
+
+    monkeypatch.setattr(candidates_module.FilesystemCandidates, "_append_journal", failing)
+    resp = _export(client, cid)
+    assert order == ["lock held"] and resp.status_code == 201 and resp.json()["journal"] == "failed"
+    assert (catalog / resp.json()["file"]).exists()
+
+
+def test_directory_fsync_failure_is_logged_and_export_succeeds(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    client, catalog, _ = _env(tmp_path)
+    cid = _star(client, WITH_RUN)["candidate_id"]
+    real_fsync = os.fsync
+
+    def fsync(fd: int) -> None:
+        if os.path.isdir(f"/proc/self/fd/{fd}") or os.fstat(fd).st_mode & 0o170000 == 0o040000:
+            raise OSError(errno.EIO, "directory fsync failed")
+        real_fsync(fd)
+
+    monkeypatch.setattr(rx.os, "fsync", fsync)
+    with caplog.at_level(logging.WARNING, logger=rx.LOG.name):
+        resp = _export(client, cid)
+    assert resp.status_code == 201 and resp.json()["journal"] == "ok"
+    name = resp.json()["file"]
+    assert (catalog / name).exists() and _no_temp(catalog)
+    assert any(name in r.getMessage() and "fsync" in r.getMessage() for r in caplog.records)
+    assert _listed(client)[0]["current"]["runtime"] == {"present": True, "file": name, "enabled": False}

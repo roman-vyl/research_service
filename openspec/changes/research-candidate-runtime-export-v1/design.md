@@ -97,9 +97,9 @@ is appended to `candidates_journal.jsonl`.
 
 The sequence scan → duplicate check → publish runs under an exclusive
 `fcntl.flock` on `<analysis>/.runtime_export.lock` (Research's own storage, not the
-catalog directory), plus a process-local `threading.Lock`. The lock is taken
-before the scan and released after the final name is created and the journal
-write is attempted. A second export waits, then sees the first file in its scan.
+catalog directory), plus a process-local `threading.Lock`. The order is lock → scan →
+duplicate check → publish → journal attempt → unlock; the journal attempt runs
+inside the lock (a failure there follows D9). A second export waits, then sees the first file in its scan.
 Two candidates with the same Runtime identity therefore produce exactly one file
 and one `runtime_duplicate`. Waiting is bounded (10 s, then 503
 `runtime_export_busy`).
@@ -126,6 +126,8 @@ every path.
 - Final name exists: 409 `runtime_file_exists`, existing file untouched.
 - Link fails for another reason (including a filesystem without hard links): 500
   `runtime_publish_failed`, nothing published. No fallback to a non-atomic write.
+- Directory fsync fails after a successful `os.link`: the file counts as published; the
+  error is logged with the file name and the export still succeeds.
 - Unlink of the temporary file fails after a successful publish: the export still
   succeeds and the error is logged; a hidden leftover is ignored by Runtime and
   Research never deletes other files.
