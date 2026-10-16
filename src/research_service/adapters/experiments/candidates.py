@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import logging
 import math
 import os
 import threading
@@ -24,15 +25,18 @@ from research_service.adapters.experiments.filesystem import (
     _Out,
     _Table,
 )
+from research_service.adapters.experiments.runtime_export import RuntimeCatalogExport
 from research_service.domain.errors import (
     AmbiguousRow,
     InvalidCandidatesFile,
     InvalidCoords,
     ResearchServiceError,
     RowNotFound,
+    RuntimeExportError,
 )
 from research_service.domain.experiment_schema import GRID_ID, ResultSchema
 
+LOG = logging.getLogger(__name__)
 CANDIDATES_FILE = "candidates.json"
 JOURNAL_FILE = "candidates_journal.jsonl"
 CONTRACT_VERSION = "research_candidates.v1"
@@ -42,7 +46,10 @@ Coords = dict[str, str | None]
 
 
 class FilesystemCandidates:
-    def __init__(self, experiments: FilesystemExperiments, artifacts_root: Path) -> None:
+    def __init__(
+        self, experiments: FilesystemExperiments, artifacts_root: Path, runtime_specs_path: Path | None = None
+    ) -> None:
+        self._runtime = RuntimeCatalogExport(runtime_specs_path, experiments.root)
         self._experiments = experiments
         self._runs = artifacts_root
         self._path = experiments.root / CANDIDATES_FILE
@@ -53,7 +60,40 @@ class FilesystemCandidates:
 
     def list_all(self) -> dict[str, Any]:
         records = self._read()
-        return {"candidates": [{**r, "current": self._current(r)} for r in records]}
+        files = self._runtime.snapshot()
+        return {
+            "candidates": [
+                {
+                    **r,
+                    "current": {
+                        **self._current(r),
+                        "runtime": self._runtime.status(files, (r.get("strategy_spec_snapshot") or {}).get("spec")),
+                    },
+                }
+                for r in records
+            ]
+        }
+
+    def runtime_export(self, candidate_id: str) -> dict[str, Any]:
+        """Create-only export of the stored spec to the Runtime catalog, always ``enabled: false``."""
+        record = next((r for r in self._read() if r["candidate_id"] == candidate_id), None)
+        if record is None:
+            raise RuntimeExportError("candidate_not_found", f"no candidate {candidate_id}", 404)
+        experiment_id = record["experiment_id"]
+
+        def journal_line(result: dict[str, Any]) -> str:
+            # Runs inside the export lock; a failure never undoes the published file.
+            try:
+                self._append_journal("runtime_export", {**result, "experiment_id": experiment_id})
+            except OSError:
+                LOG.exception(
+                    "runtime export of %s published %s but the journal line was not written",
+                    candidate_id, result["file"],
+                )
+                return "failed"
+            return "ok"
+
+        return self._runtime.export(record, journal_line)
 
     def star(self, experiment_id: str, coords: dict[str, Any]) -> dict[str, Any]:
         manifest, schema, table_path = self._experiments.loaded(experiment_id)
@@ -184,6 +224,9 @@ class FilesystemCandidates:
         payload = {"contract_version": CONTRACT_VERSION, "candidates": records}
         tmp.write_text(json.dumps(payload, indent=1, sort_keys=True) + "\n")
         os.replace(tmp, self._path)
+        self._append_journal(action, record)
+
+    def _append_journal(self, action: str, record: dict[str, Any]) -> None:
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         with self._journal.open("a", encoding="utf-8") as fh:
             fh.write(json.dumps({"time_utc": stamp, "action": action, "record": record}, sort_keys=True) + "\n")

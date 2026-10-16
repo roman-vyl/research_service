@@ -27,7 +27,7 @@ def _write(path: Path, header: list[str], rows: list[list[object]]) -> None:
         w.writerows(rows)
 
 
-def _setup(tmp_path: Path) -> tuple[TestClient, list[str], Path]:
+def _setup(tmp_path: Path, runtime_specs: Path | None = None) -> tuple[TestClient, list[str], Path]:
     runs = tmp_path / "runs"
     runs.mkdir()
     ids = [_persist(runs, f"2026-01-0{i + 1}T00:00:00+00:00") for i in range(2)]
@@ -76,7 +76,7 @@ def _setup(tmp_path: Path) -> tuple[TestClient, list[str], Path]:
             }
         )
     )
-    settings = Settings(artifacts_root=runs, configs_root=tmp_path / "configs")
+    settings = Settings(artifacts_root=runs, configs_root=tmp_path / "configs", runtime_specs_path=runtime_specs)
     return TestClient(create_app(settings, _container(runs))), ids, ratio
 
 
