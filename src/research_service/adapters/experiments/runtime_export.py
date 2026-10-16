@@ -9,7 +9,6 @@ Runtime would reject or ignore is neither counted nor allowed to block an export
 from __future__ import annotations
 
 import contextlib
-import fcntl
 import hashlib
 import json
 import logging
@@ -17,7 +16,6 @@ import os
 import re
 import secrets
 import threading
-import time
 from collections.abc import Callable, Iterator
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -28,7 +26,6 @@ from research_service.domain.errors import RuntimeExportError
 
 LOG = logging.getLogger(__name__)
 
-LOCK_FILE = ".runtime_export.lock"
 LOCK_TIMEOUT_SECONDS = 10.0
 _FORBIDDEN_FIELDS = ("strategy_instance_id", "strategy_version", "compatibility_profile")
 _REQUIRED_STRINGS = ("ticker", "base_timeframe", "strategy_id")
@@ -129,9 +126,10 @@ def file_name(ticker: str, candidate_id: str) -> str:
 
 
 class RuntimeCatalogExport:
-    def __init__(self, catalog: Path | None, lock_dir: Path) -> None:
+    def __init__(self, catalog: Path | None) -> None:
         self._catalog = catalog
-        self._lock_path = lock_dir / LOCK_FILE
+        # One Research process per catalog: this lock serializes scan, duplicate check,
+        # publish and journal within the process. Overwrites are prevented by os.link.
         self._thread_lock = threading.Lock()
 
     @property
@@ -218,27 +216,11 @@ class RuntimeCatalogExport:
 
     @contextlib.contextmanager
     def _exclusive(self) -> Iterator[None]:
-        deadline = time.monotonic() + LOCK_TIMEOUT_SECONDS
         if not self._thread_lock.acquire(timeout=LOCK_TIMEOUT_SECONDS):
             raise RuntimeExportError("runtime_export_busy", "another export is running", 503)
-        fd = -1
         try:
-            try:
-                fd = os.open(self._lock_path, os.O_RDWR | os.O_CREAT, 0o644)
-            except OSError as exc:
-                raise RuntimeExportError("runtime_write_failed", f"export lock cannot be opened: {exc}", 500) from exc
-            while True:
-                try:
-                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    break
-                except BlockingIOError:
-                    if time.monotonic() >= deadline:
-                        raise RuntimeExportError("runtime_export_busy", "another export is running", 503) from None
-                    time.sleep(0.05)
             yield
         finally:
-            if fd >= 0:
-                os.close(fd)  # closing releases the flock
             self._thread_lock.release()
 
     @staticmethod

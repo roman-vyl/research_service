@@ -120,16 +120,16 @@ written.
 
 ### Requirement: Serialized export
 
-Scan, duplicate check, publish and the journal attempt SHALL run, in that order, under one exclusive inter-process lock
-held in Research's own storage, not in the catalog directory. A waiting export
-SHALL fail with HTTP 503 `runtime_export_busy` after 10 seconds. The guarantee
-SHALL be stated as covering Research processes sharing the lock file and SHALL NOT
-be claimed against writers outside Research.
+Scan, duplicate check, publish and the journal attempt SHALL run, in that order, under one exclusive
+in-process lock. A waiting export SHALL fail with HTTP 503 `runtime_export_busy` after 10 seconds.
+The guarantee SHALL be stated as covering one Research process per catalog directory and SHALL NOT
+be claimed across independent Research processes or against writers outside Research. Research
+SHALL NOT use a lock file or an inter-process lock for export.
 
 #### Scenario: Concurrent export with one identity
 
 - **WHEN** two exports of different candidates with the same Runtime identity run
-  at the same time in separate processes
+  at the same time in one Research process
 - **THEN** exactly one file exists, one request succeeds and the other is 409
   `runtime_duplicate`.
 
