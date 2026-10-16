@@ -16,13 +16,13 @@
 
 ## 2. Stack (bbb_stack, separate PR)
 
-- [ ] 2.1 research-service: bind `${BBB_DATA_ROOT}/strategy-runtime/specs` read-write at `/runtime-specs`, `RESEARCH_RUNTIME_SPECS_PATH=/runtime-specs`. Runtime's own mount stays read-only.
-- [ ] 2.2 Before deployment, check and record that the Research API (including this route) is reachable only through the existing protected path (port binding / proxy), and that hard links work on the bind-mounted directory on the Mac.
+- [x] 2.1 (bbb_stack #38.) research-service: bind `${BBB_DATA_ROOT}/strategy-runtime/specs` read-write at `/runtime-specs`, `RESEARCH_RUNTIME_SPECS_PATH=/runtime-specs`. Runtime's own mount stays read-only.
+- [x] 2.2 (Recorded in bbb_stack `docs/verification-research-runtime-export-v1.md`, 2026-10-16.) Before deployment, check and record that the Research API (including this route) is reachable only through the existing protected path (port binding / proxy), and that hard links work on the bind-mounted directory on the Mac.
 
 ## 3. Frontend (research_frontend, separate OpenSpec)
 
-- [ ] 3.1 "To Runtime" button on a candidate row (see `research-workbench-candidate-runtime-export-v1`); wording of the mark follows D6.
+- [x] 3.1 (research_frontend #14.) "To Runtime" button on a candidate row (see `research-workbench-candidate-runtime-export-v1`); wording of the mark follows D6.
 
 ## 4. Verification
 
-- [ ] 4.1 Owner check on the Mac: export one candidate; the file appears with `enabled: false`; Runtime's catalog accepts it (no `invalid_files`, not selected); second press says it is already there.
+- [x] 4.1 (Done 2026-10-16: exported from the Candidates tab, file `enabled: false`, accepted by Runtime's catalog loader with no `invalid_files` and not selected, the action then disabled as already in the catalog; the API repeat answers 409 `runtime_duplicate`. Test files removed.) Owner check on the Mac: export one candidate; the file appears with `enabled: false`; Runtime's catalog accepts it (no `invalid_files`, not selected); second press says it is already there.
