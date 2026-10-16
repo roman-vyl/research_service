@@ -38,7 +38,7 @@ _SUMMARY_FIELDS = (
     "return_pct", "win_rate", "profit_factor", "max_drawdown",
     "cumulative_gross_r", "cumulative_net_r", "r_eligible_trade_count", "long", "short",
     "period_split_ms", "is_net_pnl", "is_trades", "oos_net_pnl", "oos_trades", "years", "years_up",
-    "worst_year", "avg_trade_bp", "payoff_ratio",
+    "worst_year", "avg_trade_bp", "payoff_ratio", "profit_factor_r", "entry_signal_count",
 )
 
 
@@ -180,6 +180,9 @@ class BatchCandidateResult(BaseModel):
     worst_year: Decimal | None = None
     avg_trade_bp: Decimal | None = None
     payoff_ratio: Decimal | None = None
+    # `research-calculate-blocked-share-v1`: profit factor in R and the run's entry signal count.
+    profit_factor_r: Decimal | None = None
+    entry_signal_count: int | None = Field(default=None, ge=0)
     error_type: str | None = None
     error_message: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)
