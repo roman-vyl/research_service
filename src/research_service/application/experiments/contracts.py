@@ -37,6 +37,8 @@ _SUMMARY_FIELDS_REQUIRED_ON_COMPLETION = ("return_pct", "max_drawdown", "long", 
 _SUMMARY_FIELDS = (
     "return_pct", "win_rate", "profit_factor", "max_drawdown",
     "cumulative_gross_r", "cumulative_net_r", "r_eligible_trade_count", "long", "short",
+    "period_split_ms", "is_net_pnl", "is_trades", "oos_net_pnl", "oos_trades", "years", "years_up",
+    "worst_year", "avg_trade_bp", "payoff_ratio",
 )
 
 
@@ -65,6 +67,9 @@ class BatchExperimentRequest(BaseModel):
     range: ExplicitRange | None = None
     candidates: tuple[BatchCandidateRequest, ...] = Field(min_length=1)
     description: str | None = None
+    #: In-sample / out-of-sample split instant of the candidate summaries
+    #: (`research-run-period-metrics-v1`); None = 2023-07-01T00:00:00Z.
+    period_split_ms: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def validate_experiment_invariants(self) -> "BatchExperimentRequest":
@@ -119,6 +124,16 @@ class BatchSideSummary(BaseModel):
     r_eligible_trade_count: int = Field(default=0, ge=0)
 
 
+class BatchYearSummary(BaseModel):
+    """Return of one UTC exit year over the candidate's own equity chain and its
+    trade count (`research-run-period-metrics-v1`)."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    return_pct: Decimal
+    trades: int = Field(ge=1)
+
+
 class BatchCandidateResult(BaseModel):
     model_config = ConfigDict(extra="forbid", frozen=True)
 
@@ -153,6 +168,18 @@ class BatchCandidateResult(BaseModel):
     r_eligible_trade_count: int | None = Field(default=None, ge=0)
     long: BatchSideSummary | None = None
     short: BatchSideSummary | None = None
+    # Period, yearly and trade-average metrics (`research-run-period-metrics-v1`);
+    # optional so summaries persisted before them stay valid.
+    period_split_ms: int | None = Field(default=None, ge=0)
+    is_net_pnl: Decimal | None = None
+    is_trades: int | None = Field(default=None, ge=0)
+    oos_net_pnl: Decimal | None = None
+    oos_trades: int | None = Field(default=None, ge=0)
+    years: dict[str, BatchYearSummary] | None = None
+    years_up: int | None = Field(default=None, ge=0)
+    worst_year: Decimal | None = None
+    avg_trade_bp: Decimal | None = None
+    payoff_ratio: Decimal | None = None
     error_type: str | None = None
     error_message: str | None = None
     metadata: dict[str, Any] = Field(default_factory=dict)

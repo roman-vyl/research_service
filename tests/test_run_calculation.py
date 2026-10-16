@@ -553,3 +553,18 @@ def test_grid_and_arm_coordinates(tmp_path: Path) -> None:
     row = ["3", "R", "35", "7", "trail"]
     assert keys.row_key(header, row) == keys.request_key({"width": 3, "trigger": 7, "grid": "R", "arm": "trail"}, 0)
     assert keys.row_key(header, row) != keys.request_key({"width": 3, "trigger": 35, "grid": "R", "arm": "trail"}, 0)
+
+
+def test_research_policy_split_reaches_the_batch_request(tmp_path: Path) -> None:
+    """`research-run-period-metrics-v1`: `research_policy.period_split_ms` is passed to the batch."""
+    materialize = json.loads(json.dumps(MATERIALIZE))
+    materialize["research_policy"]["period_split_ms"] = 1704067200000
+    env = _setup(tmp_path, materialize=materialize)
+    _status(env, _calculate(env, [_coords(3)]))
+    assert env.runner.calls[0][0].period_split_ms == 1704067200000
+
+
+def test_batch_request_without_policy_split_uses_the_default(tmp_path: Path) -> None:
+    env = _setup(tmp_path)
+    _status(env, _calculate(env, [_coords(3)]))
+    assert env.runner.calls[0][0].period_split_ms is None
