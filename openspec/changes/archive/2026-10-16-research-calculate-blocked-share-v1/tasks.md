@@ -12,8 +12,11 @@
 
 ## 3. Acceptance (owner's Mac)
 
-- [ ] 3.1 Calculate a few rows of a filter surface on the local stack: `blocked_share`, `profit_factor` (bound to
+- [x] 3.1 Calculate a few rows of a filter surface on the local stack: `blocked_share`, `profit_factor` (bound to
       `profit_factor_r`) and the period metrics pass parity against the replay row; rows published.
+      Mac 2026-10-16, research e19a764 + Engine 7263ab2: 5 rows published with full parity (BTC iso C1.1 W7/LB20/SL7/TP5.5
+      C1.1 <= 0.45; BTC A2.1 >= 2.5; BTC weighted vote set 2 T 8; BTC iso B1 5m W8/LB120/SL6/TP7 >= 1.05; ETH A2.2
+      W11/LB20/SL8/TP5.5 <= 0.5). The first try of the vote row failed on `worst_year` at the default floor: D7, PR #38.
 
 ## 4. Gate
 
