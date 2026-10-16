@@ -849,3 +849,27 @@ def test_http_client_validate_strategy() -> None:
         "strategy_id": "ema_pullback",
         "raw_spec": {"anchor": {"period": 200}},
     }
+
+
+def test_completed_candidate_has_period_fields_with_the_default_split(tmp_path: Path) -> None:
+    """`research-run-period-metrics-v1`: periods, years and trade averages on a completed row."""
+    strategy = FakeStrategyEngine(strategy_projection())
+    use_case, _ = build_use_case(strategy, FakeMarketData(market_frame()), tmp_path)
+
+    item = use_case.execute(make_request(candidate("a"))).candidates[0]
+
+    assert item.period_split_ms == 1688169600000
+    assert item.is_trades is not None and item.oos_trades is not None
+    assert item.is_trades + item.oos_trades == item.realised_trade_count
+    assert item.years is not None and sum(y.trades for y in item.years.values()) == item.realised_trade_count
+    assert item.years_up is not None
+
+
+def test_request_split_reaches_the_summary(tmp_path: Path) -> None:
+    strategy = FakeStrategyEngine(strategy_projection())
+    use_case, _ = build_use_case(strategy, FakeMarketData(market_frame()), tmp_path)
+
+    item = use_case.execute(make_request(candidate("a"), period_split_ms=0)).candidates[0]
+
+    assert item.period_split_ms == 0
+    assert item.is_trades == 0 and item.oos_trades == item.realised_trade_count

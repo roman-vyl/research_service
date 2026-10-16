@@ -70,6 +70,8 @@ class ResearchPolicy(BaseModel):
     execution: ExecutionPolicy = ExecutionPolicy()
     accounting: AccountingPolicy = AccountingPolicy()
     managed_policy_enabled: bool = True
+    #: In-sample / out-of-sample split passed to the batch (`research-run-period-metrics-v1`).
+    period_split_ms: int | None = Field(default=None, ge=0)
 
     @model_validator(mode="after")
     def _range_matches_policy(self) -> ResearchPolicy:

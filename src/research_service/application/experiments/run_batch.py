@@ -32,6 +32,7 @@ from research_service.application.backtests.materialize_backtest_projection impo
 )
 from research_service.application.backtests.persist_run import PersistSingleInstanceRun
 from research_service.application.experiments.candidate_summary import (
+    DEFAULT_PERIOD_SPLIT_MS,
     derive_batch_candidate_summary,
 )
 from research_service.application.experiments.contracts import (
@@ -228,7 +229,12 @@ class RunBatchExperiment:
             )
 
         accounting = materialized.accounting
-        summary = derive_batch_candidate_summary(accounting)
+        summary = derive_batch_candidate_summary(
+            accounting,
+            request.period_split_ms
+            if request.period_split_ms is not None
+            else DEFAULT_PERIOD_SPLIT_MS,
+        )
         return BatchCandidateResult(
             candidate_id=candidate.candidate_id,
             run_id=materialized.run_id,
@@ -251,5 +257,6 @@ class RunBatchExperiment:
             r_eligible_trade_count=summary.r_eligible_trade_count,
             long=summary.long,
             short=summary.short,
+            **summary.period_fields,
             metadata=candidate.metadata,
         )

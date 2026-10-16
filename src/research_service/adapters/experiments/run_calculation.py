@@ -501,6 +501,7 @@ class FilesystemRunCalculation:
                 for jr in chunk
             ),
             description=f"Calculate {plan.experiment_id} ({job.job_id})",
+            period_split_ms=policy.period_split_ms,
         )
         try:
             result = self._run_batch.execute(request, expected_market_data_hash=market_hash)
