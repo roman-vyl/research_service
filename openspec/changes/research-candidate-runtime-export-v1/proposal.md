@@ -23,7 +23,7 @@ Research does not check the spec beyond the shape Runtime needs.
   route is create-only: it takes no body, always writes `enabled: false`, never
   overwrites a file and refuses a spec whose Runtime identity is already in the
   catalog (Runtime drops every file of a duplicated identity). The check and the
-  publish run under one inter-process lock.
+  publish run under one in-process lock; one Research process per catalog.
 - `GET /api/research/candidates` adds to `current` a `runtime` block that says only
   whether a catalog file with the candidate's Runtime identity exists, its name and
   its `enabled` value, read from the directory at list time. It does not say that

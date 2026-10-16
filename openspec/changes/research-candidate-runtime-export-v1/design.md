@@ -95,17 +95,19 @@ is appended to `candidates_journal.jsonl`.
 
 ### D8. Concurrency
 
-The sequence scan → duplicate check → publish runs under an exclusive
-`fcntl.flock` on `<analysis>/.runtime_export.lock` (Research's own storage, not the
-catalog directory), plus a process-local `threading.Lock`. The order is lock → scan →
+The sequence scan → duplicate check → publish runs under a process-local
+`threading.Lock`. There is no inter-process lock: the deployment runs one Research
+process per catalog directory (`flock` is also not enforced on Docker Desktop bind
+mounts on the Mac, so it would give no guarantee there). The order is lock → scan →
 duplicate check → publish → journal attempt → unlock; the journal attempt runs
 inside the lock (a failure there follows D9). A second export waits, then sees the first file in its scan.
 Two candidates with the same Runtime identity therefore produce exactly one file
 and one `runtime_duplicate`. Waiting is bounded (10 s, then 503
 `runtime_export_busy`).
 
-Boundary of the guarantee: it holds among Research processes that share the lock
-file's filesystem and kernel (workers of one service; one host). It does not cover
+Boundary of the guarantee: it holds within one Research process. Two independent
+Research processes sharing a catalog may both publish the same identity; that
+configuration is not supported. Nor does it cover
 a writer outside Research (a person, a script, another service) that creates a
 file with the same identity between the scan and the publish. In that case Runtime
 excludes both files, which is fail-closed (neither trades), and `current.runtime`

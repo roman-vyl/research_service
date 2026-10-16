@@ -49,7 +49,7 @@ class FilesystemCandidates:
     def __init__(
         self, experiments: FilesystemExperiments, artifacts_root: Path, runtime_specs_path: Path | None = None
     ) -> None:
-        self._runtime = RuntimeCatalogExport(runtime_specs_path, experiments.root)
+        self._runtime = RuntimeCatalogExport(runtime_specs_path)
         self._experiments = experiments
         self._runs = artifacts_root
         self._path = experiments.root / CANDIDATES_FILE

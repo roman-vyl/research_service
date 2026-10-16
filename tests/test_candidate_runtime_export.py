@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import errno
-import fcntl
 import json
 import logging
 import os
@@ -212,31 +211,19 @@ def test_existing_files_are_never_touched(tmp_path: Path) -> None:
 # --- concurrency ------------------------------------------------------------------
 
 
-def _export_in_process(args: tuple[str, str, str, dict[str, Any], str]) -> str:
-    catalog, lock_dir, ticker, spec_extra, cid = args
+def _export_in_process(args: tuple[str, str, dict[str, Any], str]) -> str:
+    catalog, ticker, spec_extra, cid = args
     try:
-        RuntimeCatalogExport(Path(catalog), Path(lock_dir)).export(_record(ticker, spec_extra, cid))
+        RuntimeCatalogExport(Path(catalog)).export(_record(ticker, spec_extra, cid))
         return "ok"
     except RuntimeExportError as exc:
         return exc.code
 
 
-def test_concurrent_processes_same_identity_publish_one_file(tmp_path: Path) -> None:
-    catalog, lock = tmp_path / "specs", tmp_path / "lock"
-    catalog.mkdir()
-    lock.mkdir()
-    jobs = [(str(catalog), str(lock), "BTCUSDT.P", {}, "cand_" + c * 24) for c in "abcdef"]
-    with multiprocessing.get_context("fork").Pool(6) as pool:
-        results = pool.map(_export_in_process, jobs)
-    assert sorted(results) == ["ok"] + ["runtime_duplicate"] * 5
-    assert len(list(catalog.glob("*.json"))) == 1 and not list(catalog.glob(".*"))
-
-
 def test_concurrent_processes_different_identities_all_publish(tmp_path: Path) -> None:
-    catalog, lock = tmp_path / "specs", tmp_path / "lock"
+    catalog = tmp_path / "specs"
     catalog.mkdir()
-    lock.mkdir()
-    jobs = [(str(catalog), str(lock), "BTCUSDT.P", {"n": i}, "cand_" + "0123456789ab"[i] * 24) for i in range(8)]
+    jobs = [(str(catalog), "BTCUSDT.P", {"n": i}, "cand_" + "0123456789ab"[i] * 24) for i in range(8)]
     with multiprocessing.get_context("fork").Pool(8) as pool:
         results = pool.map(_export_in_process, jobs)
     assert results == ["ok"] * 8
@@ -245,10 +232,9 @@ def test_concurrent_processes_different_identities_all_publish(tmp_path: Path) -
 
 
 def test_threads_same_identity_publish_one_file(tmp_path: Path) -> None:
-    catalog, lock = tmp_path / "specs", tmp_path / "lock"
+    catalog = tmp_path / "specs"
     catalog.mkdir()
-    lock.mkdir()
-    exporter = RuntimeCatalogExport(catalog, lock)
+    exporter = RuntimeCatalogExport(catalog)
     out: list[str] = []
 
     def run(i: int) -> None:
@@ -267,9 +253,8 @@ def test_threads_same_identity_publish_one_file(tmp_path: Path) -> None:
 def test_external_writer_after_scan_is_not_overwritten_and_listing_flags_duplicate(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    catalog, lock = tmp_path / "specs", tmp_path / "lock"
+    catalog = tmp_path / "specs"
     catalog.mkdir()
-    lock.mkdir()
     record = _record()
     spec = record["strategy_spec_snapshot"]["spec"]
     real_scan = rx.scan_catalog
@@ -280,7 +265,7 @@ def test_external_writer_after_scan_is_not_overwritten_and_listing_flags_duplica
         return found
 
     monkeypatch.setattr(rx, "scan_catalog", scan_then_external_write)
-    exporter = RuntimeCatalogExport(catalog, lock)
+    exporter = RuntimeCatalogExport(catalog)
     result = exporter.export(record)
     assert (catalog / "outsider.json").exists() and (catalog / result["file"]).exists()
     status = RuntimeCatalogExport.status(exporter.snapshot(), spec)
@@ -358,10 +343,9 @@ def test_journal_failure_after_publish_is_reported_as_exported(tmp_path: Path, m
     ["../../etc/X", "/abs/path", ".hidden", "BTC\x00\n\tUSDT", "биткоин", "A" * 300, "...", "a/../b", "C:\\x"],
 )
 def test_hostile_ticker_stays_inside_catalog(tmp_path: Path, ticker: str) -> None:
-    catalog, lock = tmp_path / "specs", tmp_path / "lock"
+    catalog = tmp_path / "specs"
     catalog.mkdir()
-    lock.mkdir()
-    result = RuntimeCatalogExport(catalog, lock).export(_record(ticker))
+    result = RuntimeCatalogExport(catalog).export(_record(ticker))
     name = result["file"]
     assert "/" not in name and "\\" not in name and not name.startswith(".") and len(name.encode()) <= 255
     assert set(name) <= set("abcdefghijklmnopqrstuvwxyz0123456789_-.")
@@ -370,12 +354,11 @@ def test_hostile_ticker_stays_inside_catalog(tmp_path: Path, ticker: str) -> Non
 
 
 def test_malformed_stored_candidate_id_is_refused(tmp_path: Path) -> None:
-    catalog, lock = tmp_path / "specs", tmp_path / "lock"
+    catalog = tmp_path / "specs"
     catalog.mkdir()
-    lock.mkdir()
     for bad in ("../x", "cand_zz", "cand_" + "A" * 24, "x" * 40):
         with pytest.raises(RuntimeExportError) as err:
-            RuntimeCatalogExport(catalog, lock).export(_record(cid=bad))
+            RuntimeCatalogExport(catalog).export(_record(cid=bad))
         assert err.value.code == "runtime_invalid_name"
     assert list(catalog.iterdir()) == []
     assert file_name("BTCUSDT.P", "cand_" + "a" * 24) == "btcusdt_p-cand_" + "a" * 24 + ".json"
@@ -391,26 +374,12 @@ def test_journal_attempt_runs_inside_the_export_lock(tmp_path: Path, monkeypatch
     def probe(self: Any, action: str, record: dict[str, Any]) -> None:
         if action == "runtime_export":
             assert (catalog / record["file"]).exists()  # published before the journal attempt
-            fd = os.open(analysis / rx.LOCK_FILE, os.O_RDWR)
-            try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                held.append(False)
-                fcntl.flock(fd, fcntl.LOCK_UN)
-            except BlockingIOError:
-                held.append(True)
-            finally:
-                os.close(fd)
+            held.append(self._runtime._thread_lock.locked())
         real(self, action, record)
 
     monkeypatch.setattr(candidates_module.FilesystemCandidates, "_append_journal", probe)
     assert _export(client, cid).status_code == 201
     assert held == [True]
-    # and released afterwards
-    fd = os.open(analysis / rx.LOCK_FILE, os.O_RDWR)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-    finally:
-        os.close(fd)
 
 
 def test_failing_journal_still_inside_lock_keeps_file(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -421,14 +390,7 @@ def test_failing_journal_still_inside_lock_keeps_file(tmp_path: Path, monkeypatc
 
     def failing(self: Any, action: str, record: dict[str, Any]) -> None:
         if action == "runtime_export":
-            fd = os.open(analysis / rx.LOCK_FILE, os.O_RDWR)
-            try:
-                fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                order.append("lock free")
-            except BlockingIOError:
-                order.append("lock held")
-            finally:
-                os.close(fd)
+            order.append("lock held" if self._runtime._thread_lock.locked() else "lock free")
             raise OSError(errno.EIO, "io")
         real(self, action, record)
 
