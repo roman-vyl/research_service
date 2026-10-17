@@ -31,6 +31,7 @@ from research_service.application.market import (
     GetChartBundle,
     GetEmaStackEpisodeHistory,
     GetEmaWindow,
+    GetMarketBounds,
     GetStrategyFeaturePlan,
 )
 from research_service.application.research import GetComponentCatalog, ValidateStrategyConfig
@@ -106,6 +107,7 @@ def _build_services(settings: Settings, container: Container) -> AppServices:
     persist_batch_experiment = PersistBatchExperiment(container.artifacts)
     return AppServices(
         candles_window=candles_window,
+        market_bounds=GetMarketBounds(container.market_data),
         ema_window=ema_window,
         chart_bundle=GetChartBundle(candles_window, ema_window),
         ema_stack_episode_history=GetEmaStackEpisodeHistory(container.strategy_engine),

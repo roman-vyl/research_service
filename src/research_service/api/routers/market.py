@@ -13,6 +13,7 @@ from research_service.api.contracts.chart import (
     ChartMarketBundle,
     EmaWindowBundle,
     IndicatorPoint,
+    MarketBoundsBundle,
 )
 from research_service.application.market import (
     CANONICAL_ORIGIN_POLICY,
@@ -80,6 +81,19 @@ def get_candles_window(
         from_ms=from_ms,
         to_ms=end_ms,
     )
+
+
+@router.get(
+    "/bounds",
+    response_model=MarketBoundsBundle,
+    summary="Committed stream bounds of a market",
+)
+def get_market_bounds(
+    request: Request,
+    symbol: str = Query(..., min_length=2, max_length=32),
+    timeframe: str = Query(..., min_length=2, max_length=8),
+) -> MarketBoundsBundle:
+    return services(request).market_bounds.execute(symbol=symbol, timeframe=timeframe)
 
 
 @router.get(

@@ -1,11 +1,12 @@
 """Market BFF use cases."""
 
-from research_service.application.market.chart_bundle import GetChartBundle
+from research_service.application.market.bounds import GetMarketBounds
 from research_service.application.market.candles_window import (
     GetCandlesWindow,
     canonical_ticker,
     resolve_exclusive_to_ms,
 )
+from research_service.application.market.chart_bundle import GetChartBundle
 from research_service.application.market.ema_stack_episodes import (
     GetEmaStackEpisodeHistory,
     GetStrategyFeaturePlan,
@@ -21,6 +22,7 @@ __all__ = [
     "GetChartBundle",
     "GetEmaStackEpisodeHistory",
     "GetEmaWindow",
+    "GetMarketBounds",
     "GetStrategyFeaturePlan",
     "canonical_ticker",
     "resolve_exclusive_to_ms",

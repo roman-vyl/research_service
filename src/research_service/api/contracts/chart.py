@@ -39,6 +39,18 @@ class CandlesWindowBundle(BaseModel):
     coverage: CandlesWindowCoverage
 
 
+class MarketBoundsBundle(BaseModel):
+    """Committed stream bounds of one market; times are open times of existing bars."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    symbol: str
+    timeframe: str
+    earliest_open_time_ms: int
+    latest_open_time_ms: int
+    stream_state: str
+
+
 class IndicatorPoint(BaseModel):
     """Indicator sample aligned to chart time."""
 
