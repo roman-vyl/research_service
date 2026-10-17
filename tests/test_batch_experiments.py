@@ -187,6 +187,22 @@ def test_n_candidates_share_one_window_resolution_one_frame_read_one_batch_call(
     assert strategy.range_requests == []  # evaluate_range_projection (single) never called
 
 
+def test_calls_sharing_a_frame_cache_read_the_window_once(tmp_path: Path) -> None:
+    strategy = FakeStrategyEngine(strategy_projection())
+    market = FakeMarketData(market_frame())
+    use_case, _ = build_use_case(strategy, market, tmp_path)
+    frames: dict = {}
+
+    first = use_case.execute(make_request(candidate("a"), candidate("b")), frames=frames)
+    second = use_case.execute(make_request(candidate("c"), candidate("d")), frames=frames)
+    use_case.execute(make_request(candidate("e")))
+
+    assert first.completed_count == 2 and second.completed_count == 2
+    assert len(frames) == 1
+    assert len(market.requests) == 2  # once for the shared cache, once without it
+    assert len(strategy.batch_requests) == 3
+
+
 def test_full_available_shared_window_uses_bounds_once(tmp_path: Path) -> None:
     strategy = FakeStrategyEngine(strategy_projection())
     market = FakeMarketData(market_frame())
