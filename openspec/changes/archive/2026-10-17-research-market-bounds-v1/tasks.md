@@ -13,4 +13,4 @@
 
 ## 3. Acceptance
 
-- [ ] 3.1 On the Mac stack (on the owner's word): `curl 'http://127.0.0.1:8095/api/market/bounds?symbol=ETHUSDT.P&timeframe=5m'` returns the MDS bounds and `latest_open_time_ms` works as `to_open_time_ms` of `candles-window`.
+- [x] 3.1 On the Mac stack (on the owner's word): `curl 'http://127.0.0.1:8095/api/market/bounds?symbol=ETHUSDT.P&timeframe=5m'` returns the MDS bounds and `latest_open_time_ms` works as `to_open_time_ms` of `candles-window`.
