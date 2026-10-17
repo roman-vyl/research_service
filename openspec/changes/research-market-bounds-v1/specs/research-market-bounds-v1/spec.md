@@ -9,7 +9,7 @@ Research Service SHALL expose `GET /api/market/bounds` with query parameters `sy
 - **THEN** the response is HTTP 200 with the committed bounds of that market
 
 ### Requirement: Bounds come from Market Data Service unchanged
-The route SHALL obtain the bounds through `MarketDataPort.get_bounds` using the canonical `.P`
+The route SHALL first validate the trimmed timeframe locally through the existing domain `timeframe_ms()` (no second list of timeframes), and only then obtain the bounds through `MarketDataPort.get_bounds` using the canonical `.P`
 ticker and the trimmed textual timeframe, and SHALL return `earliest_open_time_ms`,
 `latest_open_time_ms` and `stream_state` exactly as the port returned them. The route SHALL NOT
 compute, shift, round or cache them.
@@ -38,13 +38,17 @@ times of existing bars in milliseconds, so `latest_open_time_ms` is valid as `to
 - **THEN** the body has exactly those five fields and no others
 
 ### Requirement: Stable errors
-Invalid `symbol` or `timeframe` SHALL return HTTP 400 with the Research Service error envelope.
+Invalid `symbol` or an unsupported `timeframe` SHALL return HTTP 400 with the Research Service error envelope.
 Market Data Service unavailability SHALL return HTTP 503. Other Market Data Service failures SHALL
 be mapped through structured upstream errors keeping the upstream status.
 
 #### Scenario: Invalid symbol
 - **WHEN** `symbol` is not a valid ticker
 - **THEN** the route returns HTTP 400 with the error envelope and does not call the port
+
+#### Scenario: Unsupported timeframe
+- **WHEN** `timeframe` has a valid query length but is not supported by the domain `timeframe_ms()` (for example `7x`)
+- **THEN** the route returns HTTP 400 with the error envelope and `MarketDataPort.get_bounds` is not called (call count 0)
 
 #### Scenario: Market Data Service is unreachable
 - **WHEN** Market Data Service does not respond

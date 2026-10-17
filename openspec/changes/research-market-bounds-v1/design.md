@@ -21,9 +21,14 @@ validate `symbol` (2-32 chars) and `timeframe` (2-8 chars), canonicalize the tic
    both bars exist (inclusive). `latest_open_time_ms` can be passed as `to_open_time_ms` to
    `candles-window` as is; the route does not compute an exclusive end.
 3. **Use case.** `GetMarketBounds(market_data: MarketDataPort).execute(symbol, timeframe)`:
-   canonicalize, call `get_bounds`, copy fields. No caching and no state: the answer must follow the
+   canonicalize the symbol, validate the trimmed timeframe locally, call `get_bounds`, copy fields.
+   `canonical_ticker()` validates only the symbol, so the use case SHALL check the timeframe itself
+   through the existing domain `timeframe_ms()` (`domain/contracts.py`, the same mechanism the
+   `MarketRange` validator uses for `candles-window`) BEFORE the port call. No second timeframe list
+   is introduced. An unsupported timeframe raises `InvalidRequest` (HTTP 400) and the port is not
+   called. No caching and no state: the answer must follow the
    committed stream, and MDS serves it cheaply.
-4. **Errors.** Invalid `symbol`/`timeframe` → 400 envelope (`InvalidRequest`, same as siblings);
+4. **Errors.** Invalid `symbol` or unsupported `timeframe` (length violation or `timeframe_ms()` rejection) → 400 envelope (`InvalidRequest`, same as siblings);
    MDS unreachable or 5xx → 503; other MDS statuses pass through `UpstreamServiceError`
    (for example an unknown stream keeps MDS's own status). `stream_state` is reported, never
    interpreted: the route does not refuse a stream because of its state.
