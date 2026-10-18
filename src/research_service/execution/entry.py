@@ -15,6 +15,7 @@ from research_service.domain.execution import (
     PositionState,
 )
 from research_service.execution.protection import (
+    UnreachableTakeProfit,
     protection_ready_at,
     resolve_initial_protection,
 )
@@ -157,7 +158,10 @@ def try_open_position(
     if decision is None:
         return None
     fill = execute_entry(decision, policy, quantity=quantity)
-    protection = resolve_initial_protection(evaluation, fill)
+    try:
+        protection = resolve_initial_protection(evaluation, fill)
+    except UnreachableTakeProfit:
+        return None
     return PositionState(
         position_id=f"position:{evaluation.instance_id}:{decision.side}:{bar_index}",
         instance_id=evaluation.instance_id,

@@ -15,7 +15,7 @@ from research_service.domain.contracts import (
 from research_service.domain.errors import InvalidRequest
 from research_service.domain.execution import EntryFill
 from research_service.execution.projection_entry import resolve_initial_protection_from_opportunity
-from research_service.execution.protection import resolve_initial_protection
+from research_service.execution.protection import UnreachableTakeProfit, resolve_initial_protection
 
 
 def _evaluation(
@@ -210,3 +210,46 @@ def test_protection_without_legs_is_unchanged() -> None:
     assert protection.partial_takes == ()
     assert protection.stop_loss_price == Decimal("95.00")
     assert protection.take_profit_price == Decimal("108.00")
+
+
+def test_unreachable_short_take_is_a_distinct_rejection() -> None:
+    with pytest.raises(UnreachableTakeProfit):
+        resolve_initial_protection(_evaluation(tp_short="1.2"), _fill("short"))
+    with pytest.raises(UnreachableTakeProfit):
+        resolve_initial_protection_from_opportunity(
+            _opportunity("short", take=1.2), _q0_fill("short")
+        )
+
+
+def test_unreachable_stop_is_still_rejected_as_invalid() -> None:
+    with pytest.raises(InvalidRequest) as excinfo:
+        resolve_initial_protection(_evaluation(sl_long="1.2"), _fill("long"))
+    assert not isinstance(excinfo.value, UnreachableTakeProfit)
+
+
+def test_projection_entry_with_unreachable_take_is_not_opened(monkeypatch) -> None:
+    from research_service.domain.contracts import Candle, MarketFrame
+    from research_service.domain.execution import ExecutionPolicy
+    from research_service.execution import projection_entry
+
+    opportunity = _opportunity("short", take=1.2)
+    monkeypatch.setattr(
+        projection_entry, "entry_opportunity_at", lambda index, bar_index: ("short", opportunity)
+    )
+    market = MarketRange(ticker="BTCUSDT.P", timeframe="5m", from_ms=0, to_ms=300_000)
+    frame = MarketFrame(
+        market=market,
+        candles=(Candle(open_time_ms=0, open="100", high="101", low="99", close="100", volume="1"),),
+    )
+
+    position = projection_entry.try_open_projection_position(
+        object(),  # type: ignore[arg-type]
+        frame,
+        ExecutionPolicy(),
+        instance_id="i1",
+        bar_index=0,
+        current_position=None,
+        entry_quantity_provider=lambda decision, price: Decimal("1"),
+    )
+
+    assert position is None
