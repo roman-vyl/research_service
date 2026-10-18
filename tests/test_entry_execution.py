@@ -218,3 +218,19 @@ def test_zero_fee_baseline_is_point_two() -> None:
     assert calculate_full_equity_quantity(
         Decimal("10000"), Decimal("50000"), Decimal("0")
     ) == Decimal("0.2")
+
+
+def test_short_entry_with_unreachable_take_is_not_opened() -> None:
+    market = _market()
+    evaluation = _evaluation(long=(False, False, False), short=(False, True, False))
+    evaluation.exit_policy["take_profit_ratio"]["short"] = ["1.2"] * 3
+
+    position = try_open_position(
+        evaluation,
+        market,
+        ExecutionPolicy(),
+        bar_index=1,
+        current_position=None,
+    )
+
+    assert position is None

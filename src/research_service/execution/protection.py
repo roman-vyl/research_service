@@ -10,6 +10,14 @@ from research_service.domain.errors import InvalidRequest
 from research_service.domain.execution import EntryFill, InitialProtection
 
 
+class UnreachableTakeProfit(InvalidRequest):
+    """The take-profit ratio puts the take level at or below zero.
+
+    A take order at a non-positive price cannot be placed, so the entry is
+    not opened (`try_open_position*` return `None`) instead of failing the
+    run or holding a position that has no take."""
+
+
 def _side_series(
     evaluation: StrategyEvaluationResult,
     *,
@@ -109,7 +117,7 @@ def resolve_initial_protection(
     if stop_price is not None and stop_price <= 0:
         raise InvalidRequest("stop-loss ratio produces a non-positive price")
     if take_price is not None and take_price <= 0:
-        raise InvalidRequest("take-profit ratio produces a non-positive price")
+        raise UnreachableTakeProfit("take-profit ratio produces a non-positive price")
 
     return InitialProtection(
         side=entry_fill.side,

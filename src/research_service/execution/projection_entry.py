@@ -37,6 +37,7 @@ from research_service.domain.execution import (
     ResolvedPartialTake,
 )
 from research_service.execution.entry import execute_entry, resolve_entry_fill_price
+from research_service.execution.protection import UnreachableTakeProfit
 
 EntryQuantityProvider = Callable[[EntryDecision, Decimal], Decimal]
 
@@ -121,7 +122,7 @@ def resolve_initial_protection_from_opportunity(
     if stop_price is not None and stop_price <= 0:
         raise InvalidRequest("stop-loss ratio produces a non-positive price")
     if take_price is not None and take_price <= 0:
-        raise InvalidRequest("take-profit ratio produces a non-positive price")
+        raise UnreachableTakeProfit("take-profit ratio produces a non-positive price")
 
     partial_takes = []
     for leg in opportunity.partial_takes:
@@ -195,7 +196,10 @@ def try_open_projection_position(
     fill_price = resolve_entry_fill_price(decision, policy)
     quantity = entry_quantity_provider(decision, fill_price)
     fill = execute_entry(decision, policy, quantity=quantity)
-    protection = resolve_initial_protection_from_opportunity(opportunity, fill)
+    try:
+        protection = resolve_initial_protection_from_opportunity(opportunity, fill)
+    except UnreachableTakeProfit:
+        return None
     return PositionState(
         position_id=f"position:{instance_id}:{side}:{bar_index}",
         instance_id=instance_id,
