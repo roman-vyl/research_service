@@ -13,7 +13,7 @@
 - [x] 2.2 Normalization step (`prepare.py normalize`, dry-run by default, `--apply` renames with a rollback journal and refuses on STOP/missing/other volume) (rename with journal) for the runs referenced by the two EMA500 tables; not executed in this change.
 - [x] 2.3 Dataset preparation: manifest `result_schema` with `view` for both EMA500 experiments, `analysis/experiments.json`, nullable `run_id` column in the trailing table with a backup; trailing link algorithm (confirmed by recorded spec and metrics, row market hash only if present, one run per row, report of every other pair); not executed in this change.
 - [x] 2.4 Verification command (`prepare.py verify`): manifests carry `result_schema` and every non-null `run_id` has a canonical bundle. Table metrics unchanged (preparation only adds a column) and equality of ratio_4d with its existing HTML data (12 672 / 12 672 rows) were checked separately by hand, not by this command.
-- [ ] 2.5 Cleanup of identical duplicates and historical symlinks as a separate step after explicit approval.
+- [ ] 2.5 Cleanup of identical duplicates and historical symlinks as a separate step after explicit approval. Waived by the owner on 2026-10-21: not done, not needed.
 
 ## 3. Out of Scope (recorded)
 
@@ -24,5 +24,5 @@ findings API, catalog validation, run materialization for replay-only rows.
 
 ## 4. Verification
 
-- [ ] 4.1 After the approved one-time preparation: every non-null `run_id` of the two datasets reads through the existing run API.
+- [ ] 4.1 After the approved one-time preparation: every non-null `run_id` of the two datasets reads through the existing run API. Waived by the owner on 2026-10-21: the one-time preparation was never applied; not needed.
 - [x] 4.2 Confirm `/api/research/runs*` behaviour and tests are unchanged.
