@@ -6,9 +6,7 @@ Define the Research-owned Workbench strategy-config save/list/select
 surface: serialization, atomic filesystem persistence, listing, selection,
 and corrupt-file isolation. Strategy Engine remains the sole semantic
 validator for strategy instances (`research-config-validation-v1`).
-
 ## Requirements
-
 ### Requirement: Preserved routes
 
 The service SHALL expose `POST /api/research/config/serialize`,
@@ -47,22 +45,23 @@ format.
 ### Requirement: Atomic filesystem persistence
 
 `config/save` SHALL persist a valid draft under
-`<configs_root>/<family>/<experiment_id>.json` using a temporary file, an
-`fsync`, and an atomic rename. The selected `experiment_id` for the family
-SHALL be persisted the same way in a per-root selection file.
+`<configs_root>/<strategy_id>/<experiment_id>.json` using a temporary
+file, an `fsync`, and an atomic rename. The selected `experiment_id` for
+the `strategy_id` SHALL be persisted the same way in a per-root selection
+file.
 
 #### Scenario: Saving a valid draft
 
 - **WHEN** `POST /api/research/config/save` succeeds
 - **THEN** the file exists at
-  `<configs_root>/<family>/<experiment_id>.json` and that config becomes the
-  family's selected experiment.
+  `<configs_root>/<strategy_id>/<experiment_id>.json` and that config
+  becomes the strategy's selected experiment.
 
 ### Requirement: Unsafe identifier rejection
 
-`family` SHALL be rejected unless it is one of the supported families.
-`experiment_id` SHALL be rejected when it is empty, is `.` or `..`, or
-contains characters outside `[A-Za-z0-9._-]`.
+`strategy_id` SHALL be rejected unless it names a strategy registered in
+Strategy Engine's registry. `experiment_id` SHALL be rejected when it is
+empty, is `.` or `..`, or contains characters outside `[A-Za-z0-9._-]`.
 
 #### Scenario: Path-traversal experiment_id
 
@@ -72,18 +71,19 @@ contains characters outside `[A-Za-z0-9._-]`.
 
 ### Requirement: State listing and selection
 
-`GET /configs/state` SHALL list saved configs for a family, report the
-currently selected `experiment_id` and its path when one is selected, and
-include the selected draft when it can be loaded. `PUT /configs/selected`
-SHALL change the selection for a family to an existing saved config and
-SHALL then return the same state shape as `GET /configs/state`.
+`GET /configs/state` SHALL list saved configs for a `strategy_id`, report
+the currently selected `experiment_id` and its path when one is
+selected, and include the selected draft when it can be loaded.
+`PUT /configs/selected` SHALL change the selection for a `strategy_id` to
+an existing saved config and SHALL then return the same state shape as
+`GET /configs/state`.
 
 #### Scenario: Switching selection
 
 - **WHEN** `PUT /api/research/configs/selected` names an existing saved
-  config for the family
-- **THEN** the response's `selected_experiment_id` and `draft` reflect the
-  newly selected config.
+  config for the `strategy_id`
+- **THEN** the response's `selected_experiment_id` and `draft` reflect
+  the newly selected config.
 
 ### Requirement: Corrupt-file isolation
 
@@ -97,3 +97,4 @@ loaded draft, and SHALL NOT be executed.
   unparseable
 - **THEN** the entry still appears in the config list, but `draft` is
   absent rather than a partially loaded or guessed value.
+

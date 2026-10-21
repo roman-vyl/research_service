@@ -9,7 +9,10 @@ by `canonical-strategy-instance-v1`) plus backtest-specific concerns:
 range specification, execution policy, accounting policy, and the
 managed-policy toggle. The envelope SHALL NOT accept `family`, `variant`,
 `strategy_version`, or a caller-supplied `instance_id`/`run_id` as
-request fields.
+request fields. `AccountingPolicy.initial_equity` SHALL seed canonical
+historical sizing. The request's `ExecutionPolicy` SHALL carry execution
+assumptions such as entry slippage but SHALL NOT expose caller-selected
+fixed quantity or a parallel fixed/equity sizing mode.
 
 Research Service SHALL project the deployable instance to its identity
 subset internally (dropping `enabled`) before backtest evaluation begins
@@ -25,6 +28,12 @@ the same instance with `enabled=true`.
 - **WHEN** a well-formed request envelope wrapping one canonical
   deployable strategy instance is posted
 - **THEN** the endpoint accepts it and begins orchestration.
+
+#### Scenario: Fixed quantity is not a canonical request choice
+
+- **WHEN** a caller constructs a canonical historical backtest request
+- **THEN** it cannot select `quantity=1` or another fixed quantity as sizing semantics
+- **AND** sizing is derived from `AccountingPolicy.initial_equity` and the Research-owned lifecycle.
 
 #### Scenario: Legacy identity field rejected
 

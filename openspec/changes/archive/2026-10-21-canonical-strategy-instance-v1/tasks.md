@@ -108,7 +108,8 @@
 - [ ] 4.6 Decide and document a migration path for existing saved configs
       under the old `<family>/` layout (flagged as a deployment/cutover
       concern in design.md — a one-time rename since `family` values and
-      `strategy_id` values are identical today per the audit).
+      `strategy_id` values are identical today per the audit). Not done; left
+      open when the owner archived this change on 2026-10-21.
 - [x] 4.7 Enforce in `ValidateStrategyConfig.execute()` that every
       `draft.instances[i].strategy_id` equals `draft.strategy_id` — one
       experiment/config explores one strategy type. Fail closed with a
@@ -188,10 +189,11 @@
       editable `enabled` field per instance) and `runBacktest()` request
       construction against this contract; remove `variant`/`family`/
       editable `instance_id` from Composer UI; own change, own OpenSpec
-      tree (or equivalent), not authored here.
+      tree (or equivalent), not authored here. Not done; left open when the
+      owner archived this change on 2026-10-21.
 - [x] 8.2 Resolved: `strategy_engine` completed
       `strategy-evaluation-canonical-boundary-v1` — see §9.
-- [ ] 8.3 `strategy_runtime`: no change required; its existing
+- [x] 8.3 `strategy_runtime`: no change required; its existing
       `derive_strategy_instance_id` and deployment file shape are already
       the reference implementation this change points to.
 
