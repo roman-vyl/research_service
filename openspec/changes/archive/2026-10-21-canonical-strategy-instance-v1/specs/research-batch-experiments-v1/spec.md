@@ -14,6 +14,8 @@ until a candidate has run, since `run_id` is Research-generated per
   `candidate_id`
 - **THEN** the batch is rejected before any candidate executes.
 
+## ADDED Requirements
+
 ### Requirement: One candidate is one canonical strategy instance
 
 Each batch candidate SHALL wrap exactly one canonical deployable strategy
@@ -40,8 +42,6 @@ configurations, never its own range or its own market.
   standalone backtest request under a `backtest` field)
 - **THEN** it is rejected — no compatibility alias or dual-schema
   acceptance is provided.
-
-## ADDED Requirements
 
 ### Requirement: Experiment owns one range policy/window
 
