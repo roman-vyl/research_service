@@ -287,6 +287,27 @@ def test_non_stack_period_is_an_uncached_one_off_preview(tmp_path: Path) -> None
     assert strategy.multi_calls == []
 
 
+class EarliestMarketData(FakeMarketData):
+    def __init__(self, earliest_open_time_ms: int) -> None:
+        super().__init__()
+        self.earliest_open_time_ms = earliest_open_time_ms
+
+    def get_bounds(self, *, ticker: str, timeframe: str) -> StreamBounds:
+        bounds = super().get_bounds(ticker=ticker, timeframe=timeframe)
+        return bounds.model_copy(update={"earliest_open_time_ms": self.earliest_open_time_ms})
+
+
+def test_one_off_preview_warmup_does_not_start_before_the_first_stored_bar(tmp_path: Path) -> None:
+    strategy = FakeStrategyEngine()
+    earliest = REQUEST_FROM_MS - 3 * STEP_MS
+    client = make_client(tmp_path, strategy, EarliestMarketData(earliest))
+    response = client.get("/api/market/ema-window", params=request_params(100))
+    assert response.status_code == 200
+    (market, period), = strategy.single_calls
+    assert period == 100
+    assert market.from_ms == earliest  # 500 bars of warmup would have started earlier
+
+
 def test_ema_window_rejects_unsupported_origin_policy(tmp_path: Path) -> None:
     response = make_client(tmp_path, FakeStrategyEngine()).get(
         "/api/market/ema-window",

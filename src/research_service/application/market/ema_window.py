@@ -193,8 +193,26 @@ class GetEmaWindow:
                 self._building_full.discard(key)
                 self._condition.notify_all()
 
+    def _earliest_ms(self, requested: MarketRange) -> int:
+        """First stored bar of the market: the warmup must not reach before it (Market Data
+        refuses ranges outside its bounds). Unknown bounds keep the unclamped range."""
+
+        try:
+            bounds = self._market_data.get_bounds(
+                ticker=requested.ticker, timeframe=requested.timeframe
+            )
+        except Exception:
+            _LOGGER.warning(
+                "EMA warmup not clamped, bounds unavailable for %s %s",
+                requested.ticker,
+                requested.timeframe,
+                exc_info=True,
+            )
+            return 0
+        return bounds.earliest_open_time_ms
+
     def _one_off_preview(self, requested: MarketRange, period: int) -> EmaWindowBundle:
-        preview_range = _with_warmup(requested, 5 * period)
+        preview_range = _with_warmup(requested, 5 * period, self._earliest_ms(requested))
         result = self._strategy_engine.evaluate_ema(preview_range, period=period)
         multi_result = MultiIndicatorSeriesResult(
             time_ms=result.time_ms,
@@ -211,11 +229,11 @@ class GetEmaWindow:
         return _slice_entry(preview, requested, period, cache_hit=False)
 
 
-def _with_warmup(requested: MarketRange, bars: int) -> MarketRange:
+def _with_warmup(requested: MarketRange, bars: int, earliest_ms: int = 0) -> MarketRange:
     return MarketRange(
         ticker=requested.ticker,
         timeframe=requested.timeframe,
-        from_ms=max(0, requested.from_ms - bars * requested.step_ms),
+        from_ms=max(earliest_ms, requested.from_ms - bars * requested.step_ms),
         to_ms=requested.to_ms,
     )
 
