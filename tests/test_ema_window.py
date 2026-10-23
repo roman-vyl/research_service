@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 from research_service.api.app import create_app
 from research_service.application.market.ema_window import GetEmaWindow
 from research_service.domain.contracts import MarketRange, StreamBounds
+from research_service.domain.errors import UpstreamServiceError
 from research_service.ports.strategy_engine import (
     IndicatorSeriesResult,
     MultiIndicatorSeriesResult,
@@ -167,7 +168,8 @@ def test_cold_request_builds_one_three_ema_preview_with_warmup(tmp_path: Path) -
             PREVIEW_FROM_MS,
             REQUEST_TO_MS,
         )
-        assert market.bounds_calls == [("BTCUSDT.P", "5m")]
+        # one lower-bound read for the preview, one for the authoritative build
+        assert market.bounds_calls == [("BTCUSDT.P", "5m")] * 2
         assert response.json()["coverage"] == {
             "requested_from_ms": REQUEST_FROM_MS,
             "requested_to_ms": REQUEST_TO_MS,
@@ -285,6 +287,71 @@ def test_non_stack_period_is_an_uncached_one_off_preview(tmp_path: Path) -> None
     assert second.json()["coverage"]["cache_hit"] is False
     assert len(strategy.single_calls) == 2
     assert strategy.multi_calls == []
+
+
+class EarliestMarketData(FakeMarketData):
+    def __init__(self, earliest_open_time_ms: int) -> None:
+        super().__init__()
+        self.earliest_open_time_ms = earliest_open_time_ms
+
+    def get_bounds(self, *, ticker: str, timeframe: str) -> StreamBounds:
+        bounds = super().get_bounds(ticker=ticker, timeframe=timeframe)
+        return bounds.model_copy(update={"earliest_open_time_ms": self.earliest_open_time_ms})
+
+
+def test_one_off_preview_warmup_does_not_start_before_the_first_stored_bar(tmp_path: Path) -> None:
+    strategy = FakeStrategyEngine()
+    earliest = REQUEST_FROM_MS - 3 * STEP_MS
+    client = make_client(tmp_path, strategy, EarliestMarketData(earliest))
+    response = client.get("/api/market/ema-window", params=request_params(100))
+    assert response.status_code == 200
+    ((market, period),) = strategy.single_calls
+    assert period == 100
+    assert market.from_ms == earliest  # 500 bars of warmup would have started earlier
+
+
+def test_stack_preview_warmup_does_not_start_before_the_first_stored_bar(tmp_path: Path) -> None:
+    strategy = FakeStrategyEngine()
+    earliest = REQUEST_FROM_MS - 3 * STEP_MS
+    client = make_client(tmp_path, strategy, EarliestMarketData(earliest))
+    try:
+        response = client.get("/api/market/ema-window", params=request_params(200))
+        assert response.status_code == 200
+        assert strategy.multi_calls[0][0].from_ms == earliest
+        assert response.json()["coverage"]["calculation_origin_ms"] == earliest
+    finally:
+        strategy.release_full.set()
+
+
+class FailingBoundsMarketData(FakeMarketData):
+    def get_bounds(self, *, ticker: str, timeframe: str) -> StreamBounds:
+        raise UpstreamServiceError(
+            service="market_data", status_code=503, message="bounds unavailable"
+        )
+
+
+def test_failing_bounds_are_not_guessed_for_either_preview(tmp_path: Path) -> None:
+    strategy = FakeStrategyEngine()
+    client = make_client(tmp_path, strategy, FailingBoundsMarketData())
+    for period in (100, 200):
+        response = client.get("/api/market/ema-window", params=request_params(period))
+        assert response.status_code >= 500
+    assert strategy.single_calls == []
+    assert strategy.multi_calls == []
+    # the stack preview slot is released: a later request is not left waiting on it
+    assert client.get("/api/market/ema-window", params=request_params(200)).status_code >= 500
+
+
+def test_range_that_ends_before_the_first_stored_bar_is_a_client_error(tmp_path: Path) -> None:
+    strategy = FakeStrategyEngine()
+    client = make_client(tmp_path, strategy, EarliestMarketData(REQUEST_TO_MS + STEP_MS))
+    for period in (100, 200):
+        response = client.get("/api/market/ema-window", params=request_params(period))
+        assert response.status_code == 400
+    strategy.release_full.set()
+    # only the background authoritative build (to the end of history) may have run, no preview
+    assert strategy.single_calls == []
+    assert all(call[0].to_ms == FULL_TO_MS for call in strategy.multi_calls)
 
 
 def test_ema_window_rejects_unsupported_origin_policy(tmp_path: Path) -> None:
