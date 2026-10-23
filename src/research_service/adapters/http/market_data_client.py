@@ -3,12 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from typing import Any
 
 import httpx
 from pydantic import BaseModel, ConfigDict, Field
 
+from research_service.domain.candle_columns import CandleColumns
 from research_service.domain.contracts import (
-    Candle,
     ContinuityAudit,
     GapRange,
     MarketFrame,
@@ -52,7 +53,9 @@ class _CandleRangePayload(BaseModel):
     from_ms: int = Field(ge=0)
     to_ms: int = Field(gt=0)
     market_data_hash: str
-    candles: list[Candle]
+    # Kept as received; decoded column-wise by `CandleColumns.from_wire` instead of one
+    # `Candle` model per candle (`research-compact-market-frame-v1`).
+    candles: list[Any]
 
 
 class HttpMarketDataClient:
@@ -145,6 +148,15 @@ class HttpMarketDataClient:
         expected_hash: str | None,
     ) -> MarketFrame:
         payload = _CandleRangePayload.model_validate(response.json())
+        try:
+            candles = CandleColumns.from_wire(payload.candles)
+        except ValueError as exc:
+            raise UpstreamServiceError(
+                service="market_data_service",
+                status_code=502,
+                message=f"Market Data Service returned an invalid candle: {exc}",
+            ) from exc
+        payload.candles.clear()
         returned = MarketRange(
             ticker=payload.ticker,
             timeframe=payload.timeframe,
@@ -166,7 +178,7 @@ class HttpMarketDataClient:
             )
         return MarketFrame(
             market=market,
-            candles=tuple(payload.candles),
+            candles=candles,
             market_data_hash=payload.market_data_hash,
         )
 
