@@ -6,7 +6,7 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from research_service.api.app import create_app
-from research_service.domain.contracts import Candle, MarketFrame, MarketRange
+from research_service.domain.contracts import Candle, MarketFrame, MarketRange, StreamBounds
 from research_service.ports.strategy_engine import IndicatorSeriesResult
 from research_service.runtime.settings import Settings
 from research_service.runtime.wiring import Container
@@ -18,6 +18,15 @@ class FakeMarketData:
 
     def health(self) -> bool:
         return True
+
+    def get_bounds(self, *, ticker: str, timeframe: str) -> StreamBounds:
+        return StreamBounds(
+            ticker=ticker,
+            timeframe=timeframe,
+            earliest_open_time_ms=0,
+            latest_open_time_ms=600_000,
+            stream_state="ready",
+        )
 
     def read_range(self, market: MarketRange) -> MarketFrame:
         self.calls.append(market)
