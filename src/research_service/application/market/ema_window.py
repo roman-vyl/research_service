@@ -85,8 +85,10 @@ class GetEmaWindow:
         if entry is not None:
             return _slice_entry(entry, requested, period, cache_hit=True)
 
-        preview_range = _with_warmup(requested, PREVIEW_WARMUP_BARS)
         try:
+            preview_range = _with_warmup(
+                requested, PREVIEW_WARMUP_BARS, self._earliest_ms(requested)
+            )
             result = self._strategy_engine.evaluate_emas(
                 preview_range,
                 periods=EMA_STACK_PERIODS,
@@ -194,21 +196,12 @@ class GetEmaWindow:
                 self._condition.notify_all()
 
     def _earliest_ms(self, requested: MarketRange) -> int:
-        """First stored bar of the market: the warmup must not reach before it (Market Data
-        refuses ranges outside its bounds). Unknown bounds keep the unclamped range."""
+        """First stored bar of the market. A preview warmup never starts before it: Market Data
+        refuses ranges outside its bounds. Failing bounds are not guessed, the error propagates."""
 
-        try:
-            bounds = self._market_data.get_bounds(
-                ticker=requested.ticker, timeframe=requested.timeframe
-            )
-        except Exception:
-            _LOGGER.warning(
-                "EMA warmup not clamped, bounds unavailable for %s %s",
-                requested.ticker,
-                requested.timeframe,
-                exc_info=True,
-            )
-            return 0
+        bounds = self._market_data.get_bounds(
+            ticker=requested.ticker, timeframe=requested.timeframe
+        )
         return bounds.earliest_open_time_ms
 
     def _one_off_preview(self, requested: MarketRange, period: int) -> EmaWindowBundle:
@@ -229,7 +222,9 @@ class GetEmaWindow:
         return _slice_entry(preview, requested, period, cache_hit=False)
 
 
-def _with_warmup(requested: MarketRange, bars: int, earliest_ms: int = 0) -> MarketRange:
+def _with_warmup(requested: MarketRange, bars: int, earliest_ms: int) -> MarketRange:
+    if requested.to_ms <= earliest_ms:
+        raise InvalidRequest("requested range ends before the first stored bar")
     return MarketRange(
         ticker=requested.ticker,
         timeframe=requested.timeframe,
