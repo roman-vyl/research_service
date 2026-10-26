@@ -142,10 +142,18 @@ def run_projection_execution_loop(
     completed: list[PositionExecution] = []
     events: list[ExecutionEvent] = []
 
-    for bar_index, candle in enumerate(market_frame.candles):
+    # Candles are built from the columnar frame on access
+    # (research-compact-market-frame-v1), so a bar's candle is read only when a
+    # position is open on it or opens on it; open times come from their column.
+    candles = market_frame.candles
+    open_times = candles.open_times()
+    bar_total = len(candles)
+    for bar_index in range(bar_total):
         position_was_open_at_bar_start = current_position is not None
+        candle: Candle | None = None
 
         if current_position is not None:
+            candle = candles[bar_index]
             managed_state = (
                 current_managed_timeline.state_for_time(candle.open_time_ms)
                 if current_managed_timeline is not None
@@ -233,11 +241,9 @@ def run_projection_execution_loop(
         # this bar (state already discarded above).
         if current_position is not None and current_managed_trade_state is not None:
             assert managed_projection is not None and rule_set is not None
-            next_time_ms = (
-                market_frame.candles[bar_index + 1].open_time_ms
-                if bar_index + 1 < len(market_frame.candles)
-                else None
-            )
+            if candle is None:
+                candle = candles[bar_index]
+            next_time_ms = open_times[bar_index + 1] if bar_index + 1 < bar_total else None
             current_managed_trade_state, current_managed_effective = advance_managed_trade_state(
                 current_managed_trade_state,
                 managed_projection,

@@ -4,18 +4,20 @@ from __future__ import annotations
 
 import math
 from decimal import Decimal
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import (
     BaseModel,
     ConfigDict,
     Field,
     SerializerFunctionWrapHandler,
+    field_serializer,
     field_validator,
     model_serializer,
     model_validator,
 )
 
+from research_service.domain.candle_columns import CandleColumns
 from research_service.domain.errors import UpstreamServiceError
 
 
@@ -98,11 +100,27 @@ class Candle(BaseModel):
 
 
 class MarketFrame(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    """Candles of one window, held column-wise and losslessly (`CandleColumns`,
+    `research-compact-market-frame-v1`); `candles` reads like a sequence of `Candle`."""
+
+    model_config = ConfigDict(frozen=True, arbitrary_types_allowed=True)
 
     market: MarketRange
-    candles: tuple[Candle, ...]
+    candles: CandleColumns
     market_data_hash: str | None = None
+
+    @field_validator("candles", mode="before")
+    @classmethod
+    def _columns(cls, value: Any) -> CandleColumns:
+        if isinstance(value, CandleColumns):
+            return value
+        return CandleColumns.from_candles(
+            item if isinstance(item, Candle) else Candle.model_validate(item) for item in value
+        )
+
+    @field_serializer("candles")
+    def _dump_candles(self, candles: CandleColumns) -> list[dict[str, Any]]:
+        return [candle.model_dump() for candle in candles]
 
     @model_validator(mode="after")
     def validate_grid(self) -> "MarketFrame":
@@ -110,8 +128,8 @@ class MarketFrame(BaseModel):
         if len(self.candles) != expected_count:
             raise ValueError("market frame is incomplete")
         expected = self.market.from_ms
-        for candle in self.candles:
-            if candle.open_time_ms != expected:
+        for open_time_ms in self.candles.open_times():
+            if open_time_ms != expected:
                 raise ValueError("market frame is gapped or unordered")
             expected += self.market.step_ms
         return self
