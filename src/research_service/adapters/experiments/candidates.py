@@ -4,7 +4,10 @@ A record in ``analysis/candidates.json`` means one Surface point is picked; no r
 means it is not. The record keeps a snapshot of the picked row, a fingerprint of its
 content and, when the row has a run, that run's strategy as a historical snapshot.
 Listing compares the table's ``(mtime_ns, size)`` first and parses the table only when
-it changed. Nothing here lists the artifacts root or writes an Experiment or a run.
+it changed. The outcome of that check is kept in ``analysis/candidates_check.json`` under
+the table's ``(mtime_ns, size)``, so a changed table is parsed once, not on every listing
+or after every restart; the file is disposable and is rebuilt when missing or unreadable.
+Nothing here lists the artifacts root or writes an Experiment or a run.
 """
 
 from __future__ import annotations
@@ -39,6 +42,8 @@ from research_service.domain.experiment_schema import GRID_ID, ResultSchema
 LOG = logging.getLogger(__name__)
 CANDIDATES_FILE = "candidates.json"
 JOURNAL_FILE = "candidates_journal.jsonl"
+CHECK_FILE = "candidates_check.json"
+CHECK_VERSION = "research_candidates_check.v1"
 CONTRACT_VERSION = "research_candidates.v1"
 _EXCLUDED_FROM_FINGERPRINT = ("run_id", "provenance")
 
@@ -54,6 +59,7 @@ class FilesystemCandidates:
         self._runs = artifacts_root
         self._path = experiments.root / CANDIDATES_FILE
         self._journal = experiments.root / JOURNAL_FILE
+        self._check = experiments.root / CHECK_FILE
         self._lock = threading.Lock()
 
     # --- routes ----------------------------------------------------------------
@@ -61,18 +67,21 @@ class FilesystemCandidates:
     def list_all(self) -> dict[str, Any]:
         records = self._read()
         files = self._runtime.snapshot()
-        return {
-            "candidates": [
-                {
-                    **r,
-                    "current": {
-                        **self._current(r),
-                        "runtime": self._runtime.status(files, (r.get("strategy_spec_snapshot") or {}).get("spec")),
-                    },
-                }
-                for r in records
-            ]
-        }
+        checks = self._read_checks()
+        kept = {r["candidate_id"]: checks[r["candidate_id"]] for r in records if r["candidate_id"] in checks}
+        listed = [
+            {
+                **r,
+                "current": {
+                    **self._current(r, kept),
+                    "runtime": self._runtime.status(files, (r.get("strategy_spec_snapshot") or {}).get("spec")),
+                },
+            }
+            for r in records
+        ]
+        if kept != checks:
+            self._write_checks(kept)
+        return {"candidates": listed}
 
     def runtime_export(self, candidate_id: str) -> dict[str, Any]:
         """Create-only export of the stored spec to the Runtime catalog, always ``enabled: false``."""
@@ -146,7 +155,8 @@ class FilesystemCandidates:
 
     # --- current state ---------------------------------------------------------
 
-    def _current(self, record: dict[str, Any]) -> dict[str, Any]:
+    def _current(self, record: dict[str, Any], checks: dict[str, Any]) -> dict[str, Any]:
+        """The row as the table holds it now; ``checks`` keeps outcomes per table ``(mtime_ns, size)``."""
         experiment_id = record["experiment_id"]
         missing: dict[str, Any] = {
             "row_state": "missing", "run_id": None, "provenance": None, "metrics": None, "meaning": None,
@@ -166,27 +176,41 @@ class FilesystemCandidates:
                 "metrics": snapshot["metrics"],
                 "meaning": meaning,
             }
+        table_key = {"mtime_ns": st.st_mtime_ns, "size": st.st_size}
+        check = checks.get(record["candidate_id"])
+        if (
+            isinstance(check, dict)
+            and check.get("table_key") == table_key
+            and check.get("fingerprint") == record["fingerprint"]
+            and isinstance(check.get("current"), dict)
+        ):
+            return {**check["current"], "meaning": meaning}
         try:
             out = _Out(schema)
             _key, table = self._experiments.keyed_table(experiment_id)
             rows = _matching_rows(schema, out, table, record["coords"])
         except (ResearchServiceError, OSError):
             return {**missing, "meaning": meaning}
+        current: dict[str, Any]
         if not rows:
-            return {**missing, "meaning": meaning}
-        if len(rows) > 1:
-            return {**missing, "row_state": "ambiguous", "meaning": meaning}
-        i = rows[0]
-        fields = record["fingerprint_fields"]
-        same = all(f in out.source for f in fields) and _fingerprint(out, table, i, fields) == record["fingerprint"]
-        values = _served(out, table, i)
-        return {
-            "row_state": "same" if same else "changed",
-            "run_id": values.get("run_id"),
-            "provenance": _provenance(schema, values),
-            "metrics": {m.metric_id: values.get(m.metric_id) for m in schema.metrics},
-            "meaning": meaning,
+            current = {k: v for k, v in missing.items() if k != "meaning"}
+        elif len(rows) > 1:
+            current = {k: v for k, v in missing.items() if k != "meaning"} | {"row_state": "ambiguous"}
+        else:
+            i = rows[0]
+            fields = record["fingerprint_fields"]
+            same = all(f in out.source for f in fields) and _fingerprint(out, table, i, fields) == record["fingerprint"]
+            values = _served(out, table, i)
+            current = {
+                "row_state": "same" if same else "changed",
+                "run_id": values.get("run_id"),
+                "provenance": _provenance(schema, values),
+                "metrics": {m.metric_id: values.get(m.metric_id) for m in schema.metrics},
+            }
+        checks[record["candidate_id"]] = {
+            "table_key": table_key, "fingerprint": record["fingerprint"], "current": current,
         }
+        return {**current, "meaning": meaning}
 
     # --- strategy snapshot -----------------------------------------------------
 
@@ -225,6 +249,26 @@ class FilesystemCandidates:
         tmp.write_text(json.dumps(payload, indent=1, sort_keys=True) + "\n")
         os.replace(tmp, self._path)
         self._append_journal(action, record)
+
+    def _read_checks(self) -> dict[str, Any]:
+        """Kept check outcomes by candidate id; anything unreadable counts as none kept."""
+        try:
+            data = json.loads(self._check.read_text())
+            checks = data["checks"]
+            if data.get("contract_version") != CHECK_VERSION or not isinstance(checks, dict):
+                return {}
+        except (OSError, ValueError, KeyError, TypeError):
+            return {}
+        return checks
+
+    def _write_checks(self, checks: dict[str, Any]) -> None:
+        tmp = self._check.with_name(f"{self._check.name}.tmp-{os.getpid()}-{threading.get_ident()}")
+        payload = {"contract_version": CHECK_VERSION, "checks": checks}
+        try:
+            tmp.write_text(json.dumps(payload, sort_keys=True) + "\n")
+            os.replace(tmp, self._check)
+        except OSError:
+            LOG.exception("candidate check outcomes were not kept")
 
     def _append_journal(self, action: str, record: dict[str, Any]) -> None:
         stamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

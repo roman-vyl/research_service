@@ -316,3 +316,50 @@ def test_shortlist_never_lists_runs(tmp_path: Path) -> None:
         _star(client, {"width": 3, "lookback": 20, "sl": 6})
         _rewrite(ratio / "runs.csv", lambda rows: rows[1].__setitem__(4, "1.6"))
         assert _listed(client)[0]["current"]["row_state"] == "changed"
+
+
+def test_changed_table_is_parsed_once_and_the_outcome_survives_a_restart(tmp_path: Path) -> None:
+    client, _, ratio = _setup(tmp_path)
+    kept = _star(client, {"width": 4, "lookback": 20, "sl": 6})
+    gone = _star(client, {"width": 3, "lookback": 20, "sl": 6})
+    _rewrite(ratio / "runs.csv", lambda rows: rows[3].__setitem__(3, "0.55"))
+    first = _listed(client)
+    check = tmp_path / "analysis" / "candidates_check.json"
+    stored = json.loads(check.read_text())
+    assert stored["contract_version"] == "research_candidates_check.v1"
+    assert set(stored["checks"]) == {kept["candidate_id"], gone["candidate_id"]}
+
+    restarted, _, _ = _setup_again(tmp_path)
+    with mock.patch(
+        "research_service.adapters.experiments.filesystem._read_table", side_effect=AssertionError("parsed")
+    ):
+        assert _listed(restarted) == first
+    by_id = {c["candidate_id"]: c for c in first}
+    assert by_id[kept["candidate_id"]]["current"]["row_state"] == "changed"
+    assert by_id[kept["candidate_id"]]["current"]["metrics"]["return_pct"] == 0.55
+
+    restarted.delete(f"{URL}/{gone['candidate_id']}")
+    _listed(restarted)
+    assert set(json.loads(check.read_text())["checks"]) == {kept["candidate_id"]}
+
+    _rewrite(ratio / "runs.csv", lambda rows: rows[3].__setitem__(3, "0.5"))
+    [again] = _listed(restarted)
+    assert again["current"]["row_state"] == "same" and again["current"]["metrics"]["return_pct"] == 0.5
+
+
+def test_unreadable_check_file_is_rebuilt(tmp_path: Path) -> None:
+    client, _, ratio = _setup(tmp_path)
+    _star(client, {"width": 4, "lookback": 20, "sl": 6})
+    _rewrite(ratio / "runs.csv", lambda rows: rows[3].__setitem__(3, "0.55"))
+    check = tmp_path / "analysis" / "candidates_check.json"
+    check.write_text("garbage")
+    [listed] = _listed(client)
+    assert listed["current"]["row_state"] == "changed"
+    assert json.loads(check.read_text())["contract_version"] == "research_candidates_check.v1"
+
+
+def _setup_again(tmp_path: Path) -> tuple[TestClient, None, None]:
+    """A fresh app over the same folders, as after a service restart."""
+    runs = tmp_path / "runs"
+    settings = Settings(artifacts_root=runs, configs_root=tmp_path / "configs", runtime_specs_path=None)
+    return TestClient(create_app(settings, _container(runs))), None, None
