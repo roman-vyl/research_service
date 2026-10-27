@@ -1,0 +1,111 @@
+[
+ {
+  "id": "trail_rule",
+  "column": "trail",
+  "insert": {
+   "path": "/raw_spec/trade_management/exit_management/phase_rules",
+   "item": {
+    "condition": {
+     "component_id": "composite_phase_condition",
+     "params": {
+      "children": [
+       {
+        "child_id": "rise",
+        "condition": {
+         "component_id": "change_since_entry",
+         "params": {
+          "op": ">=",
+          "operand": {
+           "feature": {
+            "kind": "adx",
+            "params": {
+             "period": 14
+            },
+            "timeframe": "1h"
+           }
+          },
+          "value": 1.75
+         }
+        }
+       },
+       {
+        "child_id": "di",
+        "predicate": {
+         "kind": "compare",
+         "left": {
+          "feature": {
+           "kind": "di_plus",
+           "params": {
+            "period": 14
+           },
+           "timeframe": "1h"
+          }
+         },
+         "op": ">",
+         "right": {
+          "feature": {
+           "kind": "di_minus",
+           "params": {
+            "period": 14
+           },
+           "timeframe": "1h"
+          }
+         },
+         "short": {
+          "left": {
+           "feature": {
+            "kind": "di_minus",
+            "params": {
+             "period": 14
+            },
+            "timeframe": "1h"
+           }
+          },
+          "right": {
+           "feature": {
+            "kind": "di_plus",
+            "params": {
+             "period": 14
+            },
+            "timeframe": "1h"
+           }
+          }
+         }
+        }
+       }
+      ],
+      "paths": [
+       {
+        "path_id": "rise_di",
+        "require": [
+         "rise",
+         "di"
+        ]
+       }
+      ]
+     }
+    },
+    "rule_id": "rise-on",
+    "to_phase": "runner"
+   }
+  }
+ },
+ {
+  "id": "trail_stop",
+  "column": "trail",
+  "insert": {
+   "path": "/raw_spec/trade_management/exit_management/stop_management",
+   "item": {
+    "activate_when": {
+     "phase_at_least": "runner"
+    },
+    "component_id": "initial_r_trailing_stop",
+    "params": {
+     "trail_distance_r": 0.25,
+     "trigger_r": 0.25
+    },
+    "rule_id": "runner_trail"
+   }
+  }
+ }
+]
